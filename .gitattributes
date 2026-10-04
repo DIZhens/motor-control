@@ -1,0 +1,3 @@
+# Keep Keil project options stable across Windows Git checkouts.
+*.uvprojx text eol=lf
+*.uvoptx text eol=lf
