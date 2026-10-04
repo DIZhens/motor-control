@@ -23,6 +23,20 @@ dist/
 Objects/
 Listings/
 
+# Keil MDK generated files for the current board target
+/firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1/
+/firmware/targets/BLDC_G431/MDK-ARM/build*.log
+/firmware/targets/BLDC_G431/MDK-ARM/*.lst
+/firmware/targets/BLDC_G431/MDK-ARM/*.uvguix.*
+/firmware/targets/BLDC_G431/MDK-ARM/EventRecorderStub.scvd
+
+# Keil files regenerated from the device pack
+/firmware/targets/BLDC_G431/MDK-ARM/DebugConfig/
+/firmware/targets/BLDC_G431/MDK-ARM/RTE/
+
 # OS
 .DS_Store
 Thumbs.db
+*.tmp
+*.bak
+*~
