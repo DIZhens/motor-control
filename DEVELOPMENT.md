@@ -334,23 +334,111 @@ Codex 主导 Host 时遵守以下规则：
 
 ## 9. Firmware 第一方 C 代码风格
 
-Firmware 与 `control/` 第一方 C 代码沿用旧仓库已经形成的写作方式：
+Firmware 与 `control/` 第一方 C 代码采用紧凑、主流、便于审查的风格。注释规则继续沿用旧仓库已经形成的写作方式。
+
+### 9.1 基础格式
 
 - 4 空格缩进，不使用 Tab；
-- Allman 大括号；
+- 建议行宽不超过 100 列；超过时按语义拆分，不为了强行压到单行牺牲可读性；
 - 文件、函数和变量使用 `lower_snake_case`；
 - 项目类型使用 `PascalCase`；
 - 宏与枚举常量使用 `UPPER_SNAKE_CASE`；
-- 公共函数使用清晰的模块前缀，私有实现优先 `static`；
+- 公共函数使用清晰的模块前缀，私有实现优先 `static`。
+
+### 9.2 大括号与控制语句
+
+函数定义的左大括号单独一行：
+
+```c
+static void motor_update(void)
+{
+    ...
+}
+```
+
+函数内部的控制语句采用紧凑 K&R 风格，左大括号与条件同行：
+
+```c
+if (condition) {
+    ...
+} else {
+    ...
+}
+
+for (...) {
+    ...
+}
+
+while (...) {
+    ...
+}
+
+switch (state) {
+    ...
+}
+```
+
+`struct`、`enum` 等类型定义同样采用紧凑写法：
+
+```c
+typedef struct {
+    ...
+} MotorCommand;
+
+typedef enum {
+    MOTOR_STATE_IDLE,
+    MOTOR_STATE_RUN,
+    MOTOR_STATE_FAULT
+} MotorState;
+```
+
+所有 `if / else / for / while / do / switch` 分支即使只有一条语句也保留大括号，避免后续修改引入作用域错误。
+
+布尔条件遵循主流 C 写法，不强制写 `== true` / `== false`：
+
+```c
+if (current.valid) {
+    ...
+}
+
+if (!current.valid) {
+    ...
+}
+```
+
+变量命名应尽量避免双重否定，例如不写 `!no_fault`、`!not_ready`；优先使用可以直接正向阅读的 `fault_active`、`ready`、`valid` 等名称。
+
+位标志和数值比较应保持语义明确，例如：
+
+```c
+if ((faults & MOTOR_FAULT_OVERCURRENT) != 0U) {
+    ...
+}
+```
+
+### 9.3 空行与排版密度
+
+空行只用于表达真实逻辑段落，例如“声明 → 获取输入 → 校验 → 执行控制”，不因为大括号存在而机械插入空行。
+
+不在 `{` 后或 `}` 前自动增加空行，不为了视觉对齐制造大量无意义空格，也不对变量、赋值号或注释做容易产生大面积 diff 的强制列对齐。
+
+### 9.4 注释规则
+
+注释规则保持不变：
+
 - 注释以中文解释语义、原因和约束，代码标识符、API 和约定俗成的缩写保持英文；
 - 第一方 `struct`、`enum` 及其非显然成员必须有中文注释：说明用途，必要时注明单位、状态含义、有效条件或所有权；
-- 简单成员优先沿用成员行尾中文注释；复杂约束使用结构体或枚举上方的块注释；
+- 简单成员优先沿用成员行尾中文注释；复杂约束使用结构体、枚举或函数上方的块注释；
 - 不写“保存一个值”“当前状态”这类重复类型或变量名表面含义的空注释；
-- 第一方公共头文件不无必要泄漏 HAL、CMSIS、FreeRTOS 或具体板级 Peripheral Handle；
-- CubeMX 生成代码、CMSIS、HAL、ThirdParty 保持上游风格，不为了形式统一批量格式化；
-- 不为了风格统一额外制造 Manager、万能 HAL、通用 PlatformOps、RTOS wrapper 或其他没有真实职责的抽象。
+- 注释用于解释代码本身无法自然表达的工程语义，不用于逐行翻译代码。
 
-Firmware 写作原则不是追求“层数多”，而是让职责、所有权、单位、状态语义和硬件边界从代码本身可读。
+第一方公共头文件不无必要泄漏 HAL、CMSIS、FreeRTOS 或具体板级 Peripheral Handle。
+
+CubeMX 生成代码、CMSIS、HAL、ThirdParty 保持上游风格，不为了统一项目风格批量格式化。
+
+不为了风格统一额外制造 Manager、万能 HAL、通用 PlatformOps、RTOS wrapper 或其他没有真实职责的抽象。
+
+Firmware 写作原则不是追求“层数多”或“格式漂亮”，而是让职责、所有权、单位、状态语义和硬件边界从代码本身可读，同时避免无信息量的纵向空白。
 
 ## 10. 新模块与自动化产生规则
 
