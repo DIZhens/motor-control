@@ -1,0 +1,3843 @@
+{
+	"layerManagement": [
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ff0000",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f0000",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 1,
+				"layerName": "Top Layer",
+				"layerType": "TOP",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#999966",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4c33",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 15,
+				"layerName": "Inner1",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008000",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004000",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 16,
+				"layerName": "Inner2",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00ff00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#007f00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 17,
+				"layerName": "Inner3",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#bc8e00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#5e4700",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 18,
+				"layerName": "Inner4",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#70dbfa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#39503f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 19,
+				"layerName": "Inner5",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00cc66",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#006633",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 20,
+				"layerName": "Inner6",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9966ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c337f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 21,
+				"layerName": "Inner7",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#800080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#400040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 22,
+				"layerName": "Inner8",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 23,
+				"layerName": "Inner9",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#15935f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#0a492f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 24,
+				"layerName": "Inner10",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#000080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#000040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 25,
+				"layerName": "Inner11",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00b400",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#005a00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 26,
+				"layerName": "Inner12",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 27,
+				"layerName": "Inner13",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 28,
+				"layerName": "Inner14",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ffffaa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f7f55",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 29,
+				"layerName": "Inner15",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 30,
+				"layerName": "Inner16",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 31,
+				"layerName": "Inner17",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#3535ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1a1a7f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 32,
+				"layerName": "Inner18",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#8000bc",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#40005e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 33,
+				"layerName": "Inner19",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#43ae5f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#21572f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 34,
+				"layerName": "Inner20",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#c3ecce",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#617667",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 35,
+				"layerName": "Inner21",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#728978",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#39443c",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 36,
+				"layerName": "Inner22",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#39503f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1c281f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 37,
+				"layerName": "Inner23",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#0c715d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#06382e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 38,
+				"layerName": "Inner24",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#5a8a80",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#2d4540",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 39,
+				"layerName": "Inner25",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2b937e",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#15493f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 40,
+				"layerName": "Inner26",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#23999d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#114c4e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 41,
+				"layerName": "Inner27",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#45b4e3",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#225a71",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 42,
+				"layerName": "Inner28",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#215da1",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#102e50",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 43,
+				"layerName": "Inner29",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#4564d7",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#22326b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 44,
+				"layerName": "Inner30",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#6969e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#343474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 45,
+				"layerName": "Inner31",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9069e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#483474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 46,
+				"layerName": "Inner32",
+				"layerType": "SIGNAL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#0000ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#00007f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 2,
+				"layerName": "Bottom Layer",
+				"layerType": "BOTTOM",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ffcc00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f6600",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 3,
+				"layerName": "Top Silkscreen Layer",
+				"layerType": "TOP_SILK",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#66cc33",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#336619",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 4,
+				"layerName": "Bottom Silkscreen Layer",
+				"layerType": "BOT_SILK",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#800080",
+				"activeColorAlpha": 0.7,
+				"deactiveColor": "#400040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 5,
+				"layerName": "Top Solder Mask Layer",
+				"layerType": "TOP_SOLDER_MASK",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#aa00ff",
+				"activeColorAlpha": 0.7,
+				"deactiveColor": "#55007f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 6,
+				"layerName": "Bottom Solder Mask Layer",
+				"layerType": "BOT_SOLDER_MASK",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#808080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#404040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 7,
+				"layerName": "Top Paste Mask Layer",
+				"layerType": "TOP_PASTE_MASK",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#800000",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#400000",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 8,
+				"layerName": "Bottom Paste Mask Layer",
+				"layerType": "BOT_PASTE_MASK",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#33cc99",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#19664c",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 9,
+				"layerName": "Top Assembly Layer",
+				"layerType": "TOP_ASSEMBLY",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#5555ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#2a2a7f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 10,
+				"layerName": "Bottom Assembly Layer",
+				"layerType": "BOT_ASSEMBLY",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#eee666",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#777333",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 58,
+				"layerName": "Top Stiffener Layer",
+				"layerType": "TOP_STIFFENER",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ccff00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#667f00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 59,
+				"layerName": "Bottom Stiffener Layer",
+				"layerType": "BOTTOM_STIFFENER",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ff00ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f007f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 11,
+				"layerName": "Board Outline Layer",
+				"layerType": "OUTLINE",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#c0c0c0",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#606060",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 12,
+				"layerName": "Multi-Layer",
+				"layerType": "MULTI",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ffffff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f7f7f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 13,
+				"layerName": "Document Layer",
+				"layerType": "DOCUMENT",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#f022f0",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#781178",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 14,
+				"layerName": "Mechanical Layer",
+				"layerType": "MECHANICAL",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#222222",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#111111",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 47,
+				"layerName": "Hole Layer",
+				"layerType": "HOLE",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00cccc",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#006666",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 48,
+				"layerName": "Component Shape Layer",
+				"layerType": "COMPONENT_SHAPE",
+				"locked": false,
+				"status": 2
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#66ffcc",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#337f66",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 49,
+				"layerName": "Component Marking Layer",
+				"layerType": "COMPONENT_MARKING",
+				"locked": false,
+				"status": 2
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#cc9999",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#664c4c",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 50,
+				"layerName": "Pin Soldering Layer",
+				"layerType": "PIN_SOLDERING",
+				"locked": false,
+				"status": 2
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ff99ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f4c7f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 51,
+				"layerName": "Pin Floating Layer",
+				"layerType": "PIN_FLOATING",
+				"locked": false,
+				"status": 2
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ffffff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f7f7f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 52,
+				"layerName": "Component Model Layer",
+				"layerType": "COMPONENT_MODEL",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#66ff99",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#337f4c",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 53,
+				"layerName": "3D Shell Outline Layer",
+				"layerType": "3D_SHELL_OUTLINE",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ffccff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f667f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 54,
+				"layerName": "3D Shell Top Layer",
+				"layerType": "3D_SHELL_TOP",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#0066cc",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#003366",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 55,
+				"layerName": "3D Shell Bottom Layer",
+				"layerType": "3D_SHELL_BOTTOM",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 56,
+				"layerName": "Drill Drawing Layer",
+				"layerType": "DRILL_DRAWING",
+				"locked": false,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#6464ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#32327f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 57,
+				"layerName": "Ratline Layer",
+				"layerType": "OTHER",
+				"locked": true,
+				"status": 1
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9069e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#483474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 71,
+				"layerName": "Custom1",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#6969e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#343474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 72,
+				"layerName": "Custom2",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#4564d7",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#22326b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 73,
+				"layerName": "Custom3",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#215da1",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#102e50",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 74,
+				"layerName": "Custom4",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#45b4e3",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#225a71",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 75,
+				"layerName": "Custom5",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#23999d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#114c4e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 76,
+				"layerName": "Custom6",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2b937e",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#15493f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 77,
+				"layerName": "Custom7",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#5a8a80",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#2d4540",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 78,
+				"layerName": "Custom8",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#0c715d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#06382e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 79,
+				"layerName": "Custom9",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#39503f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1c281f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 80,
+				"layerName": "Custom10",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#728978",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#39443c",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 81,
+				"layerName": "Custom11",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#c3ecce",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#617667",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 82,
+				"layerName": "Custom12",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#43ae5f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#21572f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 83,
+				"layerName": "Custom13",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#8000bc",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#40005e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 84,
+				"layerName": "Custom14",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#3535ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1a1a7f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 85,
+				"layerName": "Custom15",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 86,
+				"layerName": "Custom16",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 87,
+				"layerName": "Custom17",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ffffaa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f7f55",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 88,
+				"layerName": "Custom18",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 89,
+				"layerName": "Custom19",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 90,
+				"layerName": "Custom20",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00b400",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#005a00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 91,
+				"layerName": "Custom21",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#000080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#000040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 92,
+				"layerName": "Custom22",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#15935f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#a.492f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 93,
+				"layerName": "Custom23",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 94,
+				"layerName": "Custom24",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#800080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#400040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 95,
+				"layerName": "Custom25",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9966ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c337f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 96,
+				"layerName": "Custom26",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00cc66",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#006633",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 97,
+				"layerName": "Custom27",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#70dbfa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#386d7d",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 98,
+				"layerName": "Custom28",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#bc8e00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#5e4700",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 99,
+				"layerName": "Custom29",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00ff00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#007f00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 100,
+				"layerName": "Custom30",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008000",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004000",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 101,
+				"layerName": "Custom31",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#999966",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4c33",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 102,
+				"layerName": "Custom32",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9069e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#483474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 103,
+				"layerName": "Custom33",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#6969e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#343474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 104,
+				"layerName": "Custom34",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#4564d7",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#22326b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 105,
+				"layerName": "Custom35",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#215da1",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#102e50",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 106,
+				"layerName": "Custom36",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#45b4e3",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#225a71",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 107,
+				"layerName": "Custom37",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#23999d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#114c4e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 108,
+				"layerName": "Custom38",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2b937e",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#15493f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 109,
+				"layerName": "Custom39",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#5a8a80",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#2d4540",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 110,
+				"layerName": "Custom40",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#0c715d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#06382e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 111,
+				"layerName": "Custom41",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#39503f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1c281f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 112,
+				"layerName": "Custom42",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#728978",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#39443c",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 113,
+				"layerName": "Custom43",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#c3ecce",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#617667",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 114,
+				"layerName": "Custom44",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#43ae5f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#21572f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 115,
+				"layerName": "Custom45",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#8000bc",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#40005e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 116,
+				"layerName": "Custom46",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#3535ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1a1a7f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 117,
+				"layerName": "Custom47",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 118,
+				"layerName": "Custom48",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 119,
+				"layerName": "Custom49",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ffffaa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f7f55",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 120,
+				"layerName": "Custom50",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 121,
+				"layerName": "Custom51",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 122,
+				"layerName": "Custom52",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00b400",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#005a00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 123,
+				"layerName": "Custom53",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#000080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#000040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 124,
+				"layerName": "Custom54",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#15935f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#a.492f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 125,
+				"layerName": "Custom55",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 126,
+				"layerName": "Custom56",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#800080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#400040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 127,
+				"layerName": "Custom57",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9966ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c337f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 128,
+				"layerName": "Custom58",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00cc66",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#006633",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 129,
+				"layerName": "Custom59",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#70dbfa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#386d7d",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 130,
+				"layerName": "Custom60",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#bc8e00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#5e4700",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 131,
+				"layerName": "Custom61",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00ff00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#007f00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 132,
+				"layerName": "Custom62",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008000",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004000",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 133,
+				"layerName": "Custom63",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#999966",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4c33",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 134,
+				"layerName": "Custom64",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9069e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#483474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 135,
+				"layerName": "Custom65",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#6969e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#343474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 136,
+				"layerName": "Custom66",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#4564d7",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#22326b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 137,
+				"layerName": "Custom67",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#215da1",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#102e50",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 138,
+				"layerName": "Custom68",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#45b4e3",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#225a71",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 139,
+				"layerName": "Custom69",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#23999d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#114c4e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 140,
+				"layerName": "Custom70",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2b937e",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#15493f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 141,
+				"layerName": "Custom71",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#5a8a80",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#2d4540",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 142,
+				"layerName": "Custom72",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#0c715d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#06382e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 143,
+				"layerName": "Custom73",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#39503f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1c281f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 144,
+				"layerName": "Custom74",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#728978",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#39443c",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 145,
+				"layerName": "Custom75",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#c3ecce",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#617667",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 146,
+				"layerName": "Custom76",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#43ae5f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#21572f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 147,
+				"layerName": "Custom77",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#8000bc",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#40005e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 148,
+				"layerName": "Custom78",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#3535ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1a1a7f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 149,
+				"layerName": "Custom79",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 150,
+				"layerName": "Custom80",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 151,
+				"layerName": "Custom81",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ffffaa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f7f55",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 152,
+				"layerName": "Custom82",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 153,
+				"layerName": "Custom83",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 154,
+				"layerName": "Custom84",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00b400",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#005a00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 155,
+				"layerName": "Custom85",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#000080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#000040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 156,
+				"layerName": "Custom86",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#15935f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#a.492f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 157,
+				"layerName": "Custom87",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 158,
+				"layerName": "Custom88",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#800080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#400040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 159,
+				"layerName": "Custom89",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9966ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c337f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 160,
+				"layerName": "Custom90",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00cc66",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#006633",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 161,
+				"layerName": "Custom91",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#70dbfa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#386d7d",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 162,
+				"layerName": "Custom92",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#bc8e00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#5e4700",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 163,
+				"layerName": "Custom93",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00ff00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#007f00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 164,
+				"layerName": "Custom94",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008000",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004000",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 165,
+				"layerName": "Custom95",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#999966",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4c33",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 166,
+				"layerName": "Custom96",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9069e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#483474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 167,
+				"layerName": "Custom97",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#6969e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#343474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 168,
+				"layerName": "Custom98",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#4564d7",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#22326b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 169,
+				"layerName": "Custom99",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#215da1",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#102e50",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 170,
+				"layerName": "Custom100",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#45b4e3",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#225a71",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 171,
+				"layerName": "Custom101",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#23999d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#114c4e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 172,
+				"layerName": "Custom102",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2b937e",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#15493f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 173,
+				"layerName": "Custom103",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#5a8a80",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#2d4540",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 174,
+				"layerName": "Custom104",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#0c715d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#06382e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 175,
+				"layerName": "Custom105",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#39503f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1c281f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 176,
+				"layerName": "Custom106",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#728978",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#39443c",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 177,
+				"layerName": "Custom107",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#c3ecce",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#617667",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 178,
+				"layerName": "Custom108",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#43ae5f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#21572f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 179,
+				"layerName": "Custom109",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#8000bc",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#40005e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 180,
+				"layerName": "Custom110",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#3535ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1a1a7f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 181,
+				"layerName": "Custom111",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 182,
+				"layerName": "Custom112",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 183,
+				"layerName": "Custom113",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ffffaa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f7f55",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 184,
+				"layerName": "Custom114",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 185,
+				"layerName": "Custom115",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 186,
+				"layerName": "Custom116",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00b400",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#005a00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 187,
+				"layerName": "Custom117",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#000080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#000040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 188,
+				"layerName": "Custom118",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#15935f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#a.492f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 189,
+				"layerName": "Custom119",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 190,
+				"layerName": "Custom120",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#800080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#400040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 191,
+				"layerName": "Custom121",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9966ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c337f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 192,
+				"layerName": "Custom122",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00cc66",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#006633",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 193,
+				"layerName": "Custom123",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#70dbfa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#386d7d",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 194,
+				"layerName": "Custom124",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#bc8e00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#5e4700",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 195,
+				"layerName": "Custom125",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00ff00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#007f00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 196,
+				"layerName": "Custom126",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008000",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004000",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 197,
+				"layerName": "Custom127",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#999966",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4c33",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 198,
+				"layerName": "Custom128",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9069e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#483474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 199,
+				"layerName": "Custom129",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#6969e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#343474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 200,
+				"layerName": "Custom130",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#4564d7",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#22326b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 201,
+				"layerName": "Custom131",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#215da1",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#102e50",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 202,
+				"layerName": "Custom132",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#45b4e3",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#225a71",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 203,
+				"layerName": "Custom133",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#23999d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#114c4e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 204,
+				"layerName": "Custom134",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2b937e",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#15493f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 205,
+				"layerName": "Custom135",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#5a8a80",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#2d4540",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 206,
+				"layerName": "Custom136",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#0c715d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#06382e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 207,
+				"layerName": "Custom137",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#39503f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1c281f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 208,
+				"layerName": "Custom138",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#728978",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#39443c",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 209,
+				"layerName": "Custom139",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#c3ecce",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#617667",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 210,
+				"layerName": "Custom140",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#43ae5f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#21572f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 211,
+				"layerName": "Custom141",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#8000bc",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#40005e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 212,
+				"layerName": "Custom142",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#3535ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1a1a7f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 213,
+				"layerName": "Custom143",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 214,
+				"layerName": "Custom144",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 215,
+				"layerName": "Custom145",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ffffaa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f7f55",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 216,
+				"layerName": "Custom146",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 217,
+				"layerName": "Custom147",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 218,
+				"layerName": "Custom148",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00b400",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#005a00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 219,
+				"layerName": "Custom149",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#000080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#000040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 220,
+				"layerName": "Custom150",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#15935f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#a.492f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 221,
+				"layerName": "Custom151",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 222,
+				"layerName": "Custom152",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#800080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#400040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 223,
+				"layerName": "Custom153",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9966ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c337f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 224,
+				"layerName": "Custom154",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00cc66",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#006633",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 225,
+				"layerName": "Custom155",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#70dbfa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#386d7d",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 226,
+				"layerName": "Custom156",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#bc8e00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#5e4700",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 227,
+				"layerName": "Custom157",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00ff00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#007f00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 228,
+				"layerName": "Custom158",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008000",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004000",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 229,
+				"layerName": "Custom159",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#999966",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4c33",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 230,
+				"layerName": "Custom160",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9069e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#483474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 231,
+				"layerName": "Custom161",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#6969e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#343474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 232,
+				"layerName": "Custom162",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#4564d7",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#22326b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 233,
+				"layerName": "Custom163",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#215da1",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#102e50",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 234,
+				"layerName": "Custom164",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#45b4e3",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#225a71",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 235,
+				"layerName": "Custom165",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#23999d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#114c4e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 236,
+				"layerName": "Custom166",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2b937e",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#15493f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 237,
+				"layerName": "Custom167",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#5a8a80",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#2d4540",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 238,
+				"layerName": "Custom168",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#0c715d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#06382e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 239,
+				"layerName": "Custom169",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#39503f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1c281f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 240,
+				"layerName": "Custom170",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#728978",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#39443c",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 241,
+				"layerName": "Custom171",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#c3ecce",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#617667",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 242,
+				"layerName": "Custom172",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#43ae5f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#21572f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 243,
+				"layerName": "Custom173",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#8000bc",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#40005e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 244,
+				"layerName": "Custom174",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#3535ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#1a1a7f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 245,
+				"layerName": "Custom175",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 246,
+				"layerName": "Custom176",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 247,
+				"layerName": "Custom177",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#ffffaa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#7f7f55",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 248,
+				"layerName": "Custom178",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#99842f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4217",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 249,
+				"layerName": "Custom179",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2e4756",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#17232b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 250,
+				"layerName": "Custom180",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00b400",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#005a00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 251,
+				"layerName": "Custom181",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#000080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#000040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 252,
+				"layerName": "Custom182",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#15935f",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#a.492f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 253,
+				"layerName": "Custom183",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 254,
+				"layerName": "Custom184",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#800080",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#400040",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 255,
+				"layerName": "Custom185",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9966ff",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c337f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 256,
+				"layerName": "Custom186",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00cc66",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#006633",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 257,
+				"layerName": "Custom187",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#70dbfa",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#386d7d",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 258,
+				"layerName": "Custom188",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#bc8e00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#5e4700",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 259,
+				"layerName": "Custom189",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#00ff00",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#007f00",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 260,
+				"layerName": "Custom190",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#008000",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#004000",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 261,
+				"layerName": "Custom191",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#999966",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#4c4c33",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 262,
+				"layerName": "Custom192",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#9069e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#483474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 263,
+				"layerName": "Custom193",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#6969e9",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#343474",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 264,
+				"layerName": "Custom194",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#4564d7",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#22326b",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 265,
+				"layerName": "Custom195",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#215da1",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#102e50",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 266,
+				"layerName": "Custom196",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#45b4e3",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#225a71",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 267,
+				"layerName": "Custom197",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#23999d",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#114c4e",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 268,
+				"layerName": "Custom198",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#2b937e",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#15493f",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 269,
+				"layerName": "Custom199",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#5a8a80",
+				"activeColorAlpha": 1,
+				"deactiveColor": "#2d4540",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 270,
+				"layerName": "Custom200",
+				"layerType": "CUSTOM",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#000000",
+				"activeColorAlpha": 0,
+				"deactiveColor": "#000000",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 361,
+				"layerName": "Dielectric1",
+				"layerType": "SUBSTRATE",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#000000",
+				"activeColorAlpha": 0,
+				"deactiveColor": "#000000",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 362,
+				"layerName": "Dielectric2",
+				"layerType": "SUBSTRATE",
+				"locked": false,
+				"status": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"activeColor": "#000000",
+				"activeColorAlpha": 0,
+				"deactiveColor": "#000000",
+				"deactiveColorAlpha": 0.5,
+				"layerId": 363,
+				"layerName": "Dielectric3",
+				"layerType": "SUBSTRATE",
+				"locked": false,
+				"status": 0
+			}
+		}
+	],
+	"physicalStacking": [
+		{
+			"selected": false,
+			"values": {
+				"Layer Id": 3,
+				"Layer": "Top Silkscreen Layer",
+				"Layer Type": "TOP_SILK",
+				"Type": "Silk Layer",
+				"Material": "",
+				"Thickness": 0,
+				"Permittivity": 0,
+				"Loss Tangent": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"Layer Id": 7,
+				"Layer": "Top Paste Mask Layer",
+				"Layer Type": "TOP_PASTE_MASK",
+				"Type": "PasteMask Layer",
+				"Material": "",
+				"Thickness": 0,
+				"Permittivity": 0,
+				"Loss Tangent": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"Layer Id": 5,
+				"Layer": "Top Solder Mask Layer",
+				"Layer Type": "TOP_SOLDER_MASK",
+				"Type": "SolderMask Layer",
+				"Material": "",
+				"Thickness": 0,
+				"Permittivity": 0,
+				"Loss Tangent": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"Layer Id": 1,
+				"Layer": "Top Layer",
+				"Layer Type": "TOP",
+				"Type": "Copper",
+				"Material": "Outer layer thickness 1oz",
+				"Thickness": 0.03500119999999999,
+				"Permittivity": 0,
+				"Loss Tangent": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"Layer Id": 361,
+				"Layer": "Dielectric1",
+				"Layer Type": "SUBSTRATE",
+				"Type": "Substrate",
+				"Material": "3313 RC57% 4.2mil",
+				"Thickness": 0.0993902,
+				"Permittivity": 0,
+				"Loss Tangent": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"Layer Id": 15,
+				"Layer": "Inner1",
+				"Layer Type": "SIGNAL",
+				"Type": "Copper",
+				"Material": "Inner layer thickness",
+				"Thickness": 0.015189199999999998,
+				"Permittivity": 0,
+				"Loss Tangent": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"Layer Id": 362,
+				"Layer": "Dielectric2",
+				"Layer Type": "SUBSTRATE",
+				"Type": "Substrate",
+				"Material": "1.3mm H/HOZ Copper",
+				"Thickness": 1.2649962000000001,
+				"Permittivity": 0,
+				"Loss Tangent": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"Layer Id": 16,
+				"Layer": "Inner2",
+				"Layer Type": "SIGNAL",
+				"Type": "Copper",
+				"Material": "Inner layer thickness",
+				"Thickness": 0.015189199999999998,
+				"Permittivity": 0,
+				"Loss Tangent": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"Layer Id": 363,
+				"Layer": "Dielectric3",
+				"Layer Type": "SUBSTRATE",
+				"Type": "Substrate",
+				"Material": "3313 RC57% 4.2mil",
+				"Thickness": 0.0993902,
+				"Permittivity": 0,
+				"Loss Tangent": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"Layer Id": 2,
+				"Layer": "Bottom Layer",
+				"Layer Type": "BOTTOM",
+				"Type": "Copper",
+				"Material": "Outer layer thickness 1oz",
+				"Thickness": 0.03500119999999999,
+				"Permittivity": 0,
+				"Loss Tangent": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"Layer Id": 6,
+				"Layer": "Bottom Solder Mask Layer",
+				"Layer Type": "BOT_SOLDER_MASK",
+				"Type": "SolderMask Layer",
+				"Material": "",
+				"Thickness": 0,
+				"Permittivity": 0,
+				"Loss Tangent": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"Layer Id": 8,
+				"Layer": "Bottom Paste Mask Layer",
+				"Layer Type": "BOT_PASTE_MASK",
+				"Type": "PasteMask Layer",
+				"Material": "",
+				"Thickness": 0,
+				"Permittivity": 0,
+				"Loss Tangent": 0
+			}
+		},
+		{
+			"selected": false,
+			"values": {
+				"Layer Id": 4,
+				"Layer": "Bottom Silkscreen Layer",
+				"Layer Type": "BOT_SILK",
+				"Type": "Silk Layer",
+				"Material": "",
+				"Thickness": 0,
+				"Permittivity": 0,
+				"Loss Tangent": 0
+			}
+		}
+	]
+}

@@ -1,0 +1,394 @@
+$PACKAGES
+,
+        C0603 ! 0603CG560J500NTC21https://item.szlcsc.com/datasheet/0603CG560J500NT/2028.html ! 56pF ,
+        ; C21 
+,
+        C0603 ! CC0603JRNPO9BN330C13https://item.szlcsc.com/datasheet/CC0603JRNPO9BN330/108263.html ! 33pF ,
+        ; C13 
+,
+        C0603 ! CC0603JRNPO9BN330C14https://item.szlcsc.com/datasheet/CC0603JRNPO9BN330/108263.html ! 33pF ,
+        ; C14 
+,
+        C0603 ! CGA0603X5R105K500JTC11https://item.szlcsc.com/datasheet/CGA0603X5R105K500JT/7062558.html ! 1uF ,
+        ; C11 
+,
+        C0603 ! CGA0603X5R105K500JTC15https://item.szlcsc.com/datasheet/CGA0603X5R105K500JT/7062558.html ! 1uF ,
+        ; C15 
+,
+        C0603 ! CGA0603X5R475K250JTC2https://item.szlcsc.com/datasheet/CGA0603X5R475K250JT/7062562.html ! '4.7uF' ,
+        ; C2 
+,
+        C0603 ! CGA0603X7R104K500JTC10https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C10 
+,
+        C0603 ! CGA0603X7R104K500JTC19https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C19 
+,
+        C0603 ! CGA0603X7R104K500JTC1https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C1 
+,
+        C0603 ! CGA0603X7R104K500JTC20https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C20 
+,
+        C0603 ! CGA0603X7R104K500JTC24https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C24 
+,
+        C0603 ! CGA0603X7R104K500JTC25https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C25 
+,
+        C0603 ! CGA0603X7R104K500JTC26https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C26 
+,
+        C0603 ! CGA0603X7R104K500JTC27https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C27 
+,
+        C0603 ! CGA0603X7R104K500JTC28https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C28 
+,
+        C0603 ! CGA0603X7R104K500JTC32https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C32 
+,
+        C0603 ! CGA0603X7R104K500JTC3https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C3 
+,
+        C0603 ! CGA0603X7R104K500JTC4https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C4 
+,
+        C0603 ! CGA0603X7R104K500JTC5https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C5 
+,
+        C0603 ! CGA0603X7R104K500JTC7https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C7 
+,
+        C0603 ! CGA0603X7R104K500JTC9https://item.szlcsc.com/datasheet/CGA0603X7R104K500JT/7062573.html ! 100nF ,
+        ; C9 
+,
+        C0603 ! CL10B102KB8NNNCC22https://item.szlcsc.com/datasheet/CL10B102KB8NNNC/1940.html ! 1nF ,
+        ; C22 
+,
+        C0603 ! CL10C560JB8NNNCC29https://item.szlcsc.com/datasheet/CL10C560JB8NNNC/40131.html ! 56pF ,
+        ; C29 
+,
+        C0603 ! CL10C560JB8NNNCC30https://item.szlcsc.com/datasheet/CL10C560JB8NNNC/40131.html ! 56pF ,
+        ; C30 
+,
+        C0603 ! CL10C560JB8NNNCC31https://item.szlcsc.com/datasheet/CL10C560JB8NNNC/40131.html ! 56pF ,
+        ; C31 
+,
+        C0603 ! FCC0603B103K500CTC12https://item.szlcsc.com/datasheet/FCC0603B103K500CT/5746979.html ! 10nF ,
+        ; C12 
+,
+        C0805 ! CL21A106KBYQNNEC17https://item.szlcsc.com/datasheet/CL21A106KBYQNNE/3277789.html ! 10uF ,
+        ; C17 
+,
+        C0805 ! CL21A106KBYQNNEC23https://item.szlcsc.com/datasheet/CL21A106KBYQNNE/3277789.html ! 10uF ,
+        ; C23 
+,
+        C0805 ! CL21A106KBYQNNEC8https://item.szlcsc.com/datasheet/CL21A106KBYQNNE/3277789.html ! 10uF ,
+        ; C8 
+,
+        C0805 ! CL21A226MAQNNNEC16https://item.szlcsc.com/datasheet/CL21A226MAQNNNE/46786.html ! 22uF ,
+        ; C16 
+,
+        C0805 ! CL21A226MAQNNNEC18https://item.szlcsc.com/datasheet/CL21A226MAQNNNE/46786.html ! 22uF ,
+        ; C18 
+,
+        CAP-SMD_BD6.3-L6.6-W6.6-FD ! 189RV0019C6https://item.szlcsc.com/datasheet/189RV0019/8528081.html ! 220uF ,
+        ; C6 
+,
+        CONN-TH_2P-P3.96_C9900035759 ! VH3.96-2P ZZCN1https://item.szlcsc.com/datasheet/VH3.96-2P%2520ZZ/6244976.html ! '{Value}' ,
+        ; CN1 
+,
+        CRYSTAL-SMD_L5.0-W3.2 ! X50328MSB2GIX1https://item.szlcsc.com/datasheet/X50328MSB2GI/117214.html ! 8MHz ,
+        ; X1 
+,
+        F1812 ! BSMD1812-200-30VF1https://item.szlcsc.com/datasheet/BSMD1812-200-30V/1039126.html ! '{Value}' ,
+        ; F1 
+,
+        HDR-TH_1P-P2.54-V-M ! PZ254V-11-01PH7https://item.szlcsc.com/datasheet/PZ254V-11-01P/502956.html ! '{Value}' ,
+        ; H7 
+,
+        HDR-TH_3P-P2.54-V-M_PZ254V-11-03P ! PZ254V-11-03PH2https://item.szlcsc.com/datasheet/PZ254V-11-03P/3293280.html ! '{Value}' ,
+        ; H2 
+,
+        HDR-TH_3P-P2.54-V-M_PZ254V-11-03P ! PZ254V-11-03PH4https://item.szlcsc.com/datasheet/PZ254V-11-03P/3293280.html ! '{Value}' ,
+        ; H4 
+,
+        HDR-TH_3P-P2.54-V-M_PZ254V-11-03P ! PZ254V-11-03PH5https://item.szlcsc.com/datasheet/PZ254V-11-03P/3293280.html ! '{Value}' ,
+        ; H5 
+,
+        HDR-TH_5P-P2.54-V-M ! PZ254V-11-05PH1https://item.szlcsc.com/datasheet/PZ254V-11-05P/502960.html ! '{Value}' ,
+        ; H1 
+,
+        HDR-TH_5P-P2.54-V-M ! PZ254V-11-05PH3https://item.szlcsc.com/datasheet/PZ254V-11-05P/502960.html ! '{Value}' ,
+        ; H3 
+,
+        IND-SMD_L7.3-W6.8 ! FXL0630-100-ML1https://item.szlcsc.com/datasheet/FXL0630-100-M/178606.html ! 10uH ,
+        ; L1 
+,
+        LED0805-R-RD_RED ! GL0805UR01LED1https://item.szlcsc.com/datasheet/GL0805UR01/54646003.html ! '{Value}' ,
+        ; LED1 
+,
+        LED0805-R-RD_RED ! GL0805UR01LED2https://item.szlcsc.com/datasheet/GL0805UR01/54646003.html ! '{Value}' ,
+        ; LED2 
+,
+        LQFP-48_L7.0-W7.0-P0.50-LS9.0-BL ! STM32G431CBT6U4https://item.szlcsc.com/datasheet/STM32G431CBT6/549633.html ! '{Value}' ,
+        ; U4 
+M2螺丝 ! M2螺丝SCREW1{Datasheet} ! '{Value}' ; SCREW1 
+M2螺丝 ! M2螺丝SCREW2{Datasheet} ! '{Value}' ; SCREW2 
+M2螺丝 ! M2螺丝SCREW3{Datasheet} ! '{Value}' ; SCREW3 
+M2螺丝 ! M2螺丝SCREW4{Datasheet} ! '{Value}' ; SCREW4 
+,
+        R0603 ! 0603WAF1002T5ER19https://item.szlcsc.com/datasheet/0603WAF1002T5E/26547.html ! '10kΩ' ,
+        ; R19 
+,
+        R0603 ! 0603WAF1002T5ER1https://item.szlcsc.com/datasheet/0603WAF1002T5E/26547.html ! '10kΩ' ,
+        ; R1 
+,
+        R0603 ! 0603WAF1002T5ER20https://item.szlcsc.com/datasheet/0603WAF1002T5E/26547.html ! '10kΩ' ,
+        ; R20 
+,
+        R0603 ! 0603WAF1002T5ER30https://item.szlcsc.com/datasheet/0603WAF1002T5E/26547.html ! '10kΩ' ,
+        ; R30 
+,
+        R0603 ! 0603WAF1002T5ER31https://item.szlcsc.com/datasheet/0603WAF1002T5E/26547.html ! '10kΩ' ,
+        ; R31 
+,
+        R0603 ! 0603WAF1002T5ER38https://item.szlcsc.com/datasheet/0603WAF1002T5E/26547.html ! '10kΩ' ,
+        ; R38 
+,
+        R0603 ! 0603WAF1002T5ER39https://item.szlcsc.com/datasheet/0603WAF1002T5E/26547.html ! '10kΩ' ,
+        ; R39 
+,
+        R0603 ! 0603WAF1002T5ER43https://item.szlcsc.com/datasheet/0603WAF1002T5E/26547.html ! '10kΩ' ,
+        ; R43 
+,
+        R0603 ! 0603WAF1002T5ER44https://item.szlcsc.com/datasheet/0603WAF1002T5E/26547.html ! '10kΩ' ,
+        ; R44 
+,
+        R0603 ! 0603WAF1002T5ER9https://item.szlcsc.com/datasheet/0603WAF1002T5E/26547.html ! '10kΩ' ,
+        ; R9 
+,
+        R0603 ! 0603WAF1003T5ER13https://item.szlcsc.com/datasheet/0603WAF1003T5E/26546.html ! '100kΩ' ,
+        ; R13 
+,
+        R0603 ! 0603WAF1003T5ER16https://item.szlcsc.com/datasheet/0603WAF1003T5E/26546.html ! '100kΩ' ,
+        ; R16 
+,
+        R0603 ! 0603WAF220JT5ER17https://atta.szlcsc.com/upload/public/pdf/source/20200306/C422600_1E6D84923E4A46A82E41ADD87F860B5C.pdf ! '22Ω' ,
+        ; R17 
+,
+        R0603 ! 0603WAF220JT5ER18https://atta.szlcsc.com/upload/public/pdf/source/20200306/C422600_1E6D84923E4A46A82E41ADD87F860B5C.pdf ! '22Ω' ,
+        ; R18 
+,
+        R0603 ! 0603WAF220JT5ER25https://atta.szlcsc.com/upload/public/pdf/source/20200306/C422600_1E6D84923E4A46A82E41ADD87F860B5C.pdf ! '22Ω' ,
+        ; R25 
+,
+        R0603 ! 0603WAF220JT5ER26https://atta.szlcsc.com/upload/public/pdf/source/20200306/C422600_1E6D84923E4A46A82E41ADD87F860B5C.pdf ! '22Ω' ,
+        ; R26 
+,
+        R0603 ! 0603WAF220JT5ER36https://atta.szlcsc.com/upload/public/pdf/source/20200306/C422600_1E6D84923E4A46A82E41ADD87F860B5C.pdf ! '22Ω' ,
+        ; R36 
+,
+        R0603 ! 0603WAF220JT5ER37https://atta.szlcsc.com/upload/public/pdf/source/20200306/C422600_1E6D84923E4A46A82E41ADD87F860B5C.pdf ! '22Ω' ,
+        ; R37 
+,
+        R0603 ! 0603WAF5113T5ER14https://item.szlcsc.com/datasheet/0603WAF5113T5E/23921.html ! '511kΩ' ,
+        ; R14 
+R0603 ! FRC0603F0000TSR5 ! '0Ω' ; R5 
+R0603 ! FRC0603F1501TSR21 ! '1.5kΩ' ; R21 
+R0603 ! FRC0603F1501TSR27 ! '1.5kΩ' ; R27 
+R0603 ! FRC0603F1501TSR33 ! '1.5kΩ' ; R33 
+R0603 ! FRC0603F1502TSR24 ! '15kΩ' ; R24 
+R0603 ! FRC0603F1502TSR29 ! '15kΩ' ; R29 
+R0603 ! FRC0603F1502TSR35 ! '15kΩ' ; R35 
+R0603 ! FRC0603F2212TSR15 ! '22.1kΩ' ; R15 
+R0603 ! FRC0603F3302TSR40 ! '33kΩ' ; R40 
+,
+        R0603 ! FRC0603F4302TSR23https://item.szlcsc.com/datasheet/FRC0603F4302TS/3180551.html ! '43kΩ' ,
+        ; R23 
+,
+        R0603 ! FRC0603F4302TSR28https://item.szlcsc.com/datasheet/FRC0603F4302TS/3180551.html ! '43kΩ' ,
+        ; R28 
+,
+        R0603 ! FRC0603F4302TSR34https://item.szlcsc.com/datasheet/FRC0603F4302TS/3180551.html ! '43kΩ' ,
+        ; R34 
+R0603 ! FRC0603F4702TSR11 ! '47kΩ' ; R11 
+R0603 ! FRC0603F5101TSR12 ! '5.1kΩ' ; R12 
+R0603 ! FRC0603F5101TSR2 ! '5.1kΩ' ; R2 
+R0603 ! FRC0603F5101TSR3 ! '5.1kΩ' ; R3 
+R0603 ! FRC0603F5101TSR8 ! '5.1kΩ' ; R8 
+,
+        R0603 ! NCP18XH103F03RBR41https://item.szlcsc.com/datasheet/NCP18XH103F03RB/14214.html ! '{Value}' ,
+        ; R41 
+,
+        R0603 ! RC0603FR-07100RLR10https://atta.szlcsc.com/upload/public/pdf/source/20180316/70C0E2BDAE7FCC62C531A5A58D202EE1.pdf ! '100Ω' ,
+        ; R10 
+,
+        R0603 ! RC0603FR-07120RLR4https://atta.szlcsc.com/upload/public/pdf/source/20180821/C275644_0D56F95EFF785E7D9A1FEF436B37DA78.pdf ! '120Ω' ,
+        ; R4 
+,
+        R0603 ! RC0603FR-071KLR6https://item.szlcsc.com/datasheet/RC0603FR-071KL/23274.html ! '1kΩ' ,
+        ; R6 
+,
+        R0603 ! RC0603FR-071KLR7https://item.szlcsc.com/datasheet/RC0603FR-071KL/23274.html ! '1kΩ' ,
+        ; R7 
+,
+        RES-SMD_L6.4-W3.2-R2512 ! HoJLR2512-3W-50mR-1%R22https://item.szlcsc.com/datasheet/HoJLR2512-3W-50mR-1%2525/3159229.html ! '50mΩ' ,
+        ; R22 
+,
+        RES-SMD_L6.4-W3.2-R2512 ! HoJLR2512-3W-50mR-1%R32https://item.szlcsc.com/datasheet/HoJLR2512-3W-50mR-1%2525/3159229.html ! '50mΩ' ,
+        ; R32 
+,
+        RES-SMD_L6.4-W3.2-R2512 ! HoJLR2512-3W-50mR-1%R42https://item.szlcsc.com/datasheet/HoJLR2512-3W-50mR-1%2525/3159229.html ! '50mΩ' ,
+        ; R42 
+,
+        SOD-123F_L2.7-W1.7-LS3.7-RD ! SMF16A_C207257D1https://item.szlcsc.com/datasheet/SMF16A/208376.html ! '{Value}' ,
+        ; D1 
+,
+        SOD-323_L1.8-W1.3-LS2.5-RD ! 1N4148WS_C2128D3https://item.szlcsc.com/datasheet/1N4148WS/2485.html ! '{Value}' ,
+        ; D3 
+,
+        SOD-323_L1.8-W1.3-LS2.5-RD ! 1N4148WS_C2128D4https://item.szlcsc.com/datasheet/1N4148WS/2485.html ! '{Value}' ,
+        ; D4 
+,
+        SOD-323_L1.8-W1.3-LS2.5-RD ! 1N4148WS_C2128D5https://item.szlcsc.com/datasheet/1N4148WS/2485.html ! '{Value}' ,
+        ; D5 
+,
+        SOD-323_L1.8-W1.3-LS2.5-RD ! 1N4148WS_C2128D6https://item.szlcsc.com/datasheet/1N4148WS/2485.html ! '{Value}' ,
+        ; D6 
+,
+        SOD-323_L1.8-W1.3-LS2.5-RD ! 1N4148WS_C2128D7https://item.szlcsc.com/datasheet/1N4148WS/2485.html ! '{Value}' ,
+        ; D7 
+,
+        SOD-323_L1.8-W1.3-LS2.5-RD ! 1N4148WS_C2128D8https://item.szlcsc.com/datasheet/1N4148WS/2485.html ! '{Value}' ,
+        ; D8 
+,
+        SOIC-8_L4.9-W3.9-P1.27-LS6.0-BL ! TCAN3414DRU6https://www.ti.com.cn/cn/lit/ds/symlink/tcan3414.pdf?ts=1739433186944&ref_url=https%253A%252F%252Fwww.ti.com.cn%252Fsitesearch%252Fzh-cn%252Fdocs%252Funiversalsearch.tsp%253FlangPref%253Dzh-CN%2526nr%253D9%2526searchTerm%253DTCAN3414DR ! '{Value}' ,
+        ; U6 
+,
+        SOT-23-6_L2.9-W1.6-P0.95-LS2.8-BL ! TPS54202DDCRU3https://www.ti.com/cn/lit/gpn/tps54202 ! '{Value}' ,
+        ; U3 
+,
+        SOT-23-6_L2.9-W1.6-P0.95-LS2.8-BL ! USBLC6-2SC6_C7519D2https://item.szlcsc.com/datasheet/USBLC6-2SC6/7996.html ! '{Value}' ,
+        ; D2 
+,
+        SW-SMD_4P-L6.0-W6.0-P4.50-LS9.0_H5.0 ! KH-6X6X5H-STMSW1https://item.szlcsc.com/datasheet/KH-6X6X5H-STM/3009601.html ! '{Value}' ,
+        ; SW1 
+,
+        SW-SMD_4P-L6.0-W6.0-P4.50-LS9.0_H5.0 ! KH-6X6X5H-STMSW2https://item.szlcsc.com/datasheet/KH-6X6X5H-STM/3009601.html ! '{Value}' ,
+        ; SW2 
+Test-Point-0.5mm ! Test-PointTP1{Datasheet} ! '{Value}' ; TP1 
+Test-Point-0.5mm ! Test-PointTP10{Datasheet} ! '{Value}' ; TP10 
+Test-Point-0.5mm ! Test-PointTP11{Datasheet} ! '{Value}' ; TP11 
+Test-Point-0.5mm ! Test-PointTP12{Datasheet} ! '{Value}' ; TP12 
+Test-Point-0.5mm ! Test-PointTP2{Datasheet} ! '{Value}' ; TP2 
+Test-Point-0.5mm ! Test-PointTP3{Datasheet} ! '{Value}' ; TP3 
+Test-Point-0.5mm ! Test-PointTP4{Datasheet} ! '{Value}' ; TP4 
+Test-Point-0.5mm ! Test-PointTP5{Datasheet} ! '{Value}' ; TP5 
+Test-Point-0.5mm ! Test-PointTP6{Datasheet} ! '{Value}' ; TP6 
+Test-Point-0.5mm ! Test-PointTP7{Datasheet} ! '{Value}' ; TP7 
+Test-Point-0.5mm ! Test-PointTP8{Datasheet} ! '{Value}' ; TP8 
+Test-Point-0.5mm ! Test-PointTP9{Datasheet} ! '{Value}' ; TP9 
+,
+        TO-252-2_L6.6-W6.1-P4.57-LS10.0-BR-CW ! MS50N06Q1https://item.szlcsc.com/datasheet/MS50N06/3157338.html ! '{Value}' ,
+        ; Q1 
+,
+        TO-252-2_L6.6-W6.1-P4.57-LS10.0-BR-CW ! MS50N06Q2https://item.szlcsc.com/datasheet/MS50N06/3157338.html ! '{Value}' ,
+        ; Q2 
+,
+        TO-252-2_L6.6-W6.1-P4.57-LS10.0-BR-CW ! MS50N06Q3https://item.szlcsc.com/datasheet/MS50N06/3157338.html ! '{Value}' ,
+        ; Q3 
+,
+        TO-252-2_L6.6-W6.1-P4.57-LS10.0-BR-CW ! MS50N06Q4https://item.szlcsc.com/datasheet/MS50N06/3157338.html ! '{Value}' ,
+        ; Q4 
+,
+        TO-252-2_L6.6-W6.1-P4.57-LS10.0-BR-CW ! MS50N06Q5https://item.szlcsc.com/datasheet/MS50N06/3157338.html ! '{Value}' ,
+        ; Q5 
+,
+        TO-252-2_L6.6-W6.1-P4.57-LS10.0-BR-CW ! MS50N06Q6https://item.szlcsc.com/datasheet/MS50N06/3157338.html ! '{Value}' ,
+        ; Q6 
+,
+        TSSOP-20_L6.5-W4.4-P0.65-LS6.4-BL ! DRV8300DPWRU5https://www.ti.com/cn/lit/gpn/drv8300 ! '{Value}' ,
+        ; U5 
+,
+        USB-C-SMD_TYPE-C16PIN ! TYPE-C16PINUSB1https://item.szlcsc.com/datasheet/TYPE-C16PIN/372551.html ! '{Value}' ,
+        ; USB1 
+$A_PROPERTIES
+$NETS
+'+5V' ; C32.1 D2.5 R8.2 USB1.A4B9 USB1.B4A9 
+'$1N161' ; C21.2 R13.2 R15.1 U3.4 
+'$1N162' ; C21.1 R10.1 R13.1 
+'$1N165' ; R14.1 R16.1 U3.5 
+'$1N166' ; C20.1 U3.6 
+'$1N167' ; C20.2 L1.2 U3.2 
+'$1N177' ; R3.2 USB1.A5 
+'$1N178' ; R2.2 USB1.B5 
+'$1N211' ; LED1.2 R6.2 
+'$1N214' ; LED2.2 R7.2 
+'$1N244' ; R44.1 U6.5 
+'A_SHUNT+' ; Q2.3 R20.2 R21.1 R22.2 
+'ADC_TP' ; C28.1 R40.1 R41.2 U4.12 
+'ADC_VM' ; C22.2 R11.1 R12.2 U4.8 
+'B_SHUNT+' ; Q4.3 R27.1 R31.2 R32.2 
+'C_SHUNT+' ; Q6.3 R33.1 R39.2 R42.2 
+'CAN_RX' ; U4.45 U6.4 
+'CAN_TX' ; U4.46 U6.1 
+'IA+' ; C29.1 R21.2 R23.1 R24.2 TP1.1 U4.16 
+'IB+' ; C30.1 R27.2 R28.1 R29.2 TP2.1 U4.15 
+'IC+' ; C31.1 R33.2 R34.1 R35.2 TP3.1 U4.9 
+'OSC_IN' ; C13.2 U4.5 X1.2 
+'OSC_OUT' ; C14.2 U4.6 X1.1 
+'SPI1_CSN' ; H3.2 R43.2 U4.39 
+'SPI1_MISO' ; H3.4 U4.41 
+'SPI1_SCK' ; H3.3 U4.40 
+'UART_RX' ; H2.2 U4.44 
+'UART_TX' ; H2.1 U4.43 
+'USB_D-' ; D2.3 D2.4 U4.33 USB1.A7 USB1.B7 
+'USB_D+' ; D2.1 D2.6 U4.34 USB1.A6 USB1.B6 
+'USB_DET' ; R8.1 R9.2 U4.25 
+'VREF+' ; C12.2 C15.1 R5.2 R23.2 R28.2 R34.2 R40.2 TP10.1 U4.20 
+3V3 ; C1.1 C2.2 C4.1 C5.1 C7.1 C9.1 C11.1 C16.1 C18.1 H1.1 H3.1 L1.1 LED1.1 ,
+        LED2.1 R1.2 R5.1 R10.2 R43.1 TP12.1 U4.1 U4.21 U4.24 U4.36 U4.48 U6.3 
+BSTA ; C25.2 U5.20 
+BSTB ; C26.2 U5.17 
+BSTC ; C27.2 U5.14 
+CANH ; H5.1 R4.2 U6.7 
+CANL ; H5.2 R4.1 U6.6 
+GHA ; D3.1 R17.1 U5.19 
+GHB ; D5.1 R25.1 U5.16 
+GHC ; D7.1 R36.1 U5.13 
+GLA ; D4.1 R18.1 U5.11 
+GLB ; D6.1 R26.1 U5.10 
+GLC ; D8.1 R37.1 U5.9 
+GND ; C1.2 C2.1 C3.2 C4.2 C5.2 C6.2 C7.2 C8.1 C9.2 C10.1 C11.2 C12.1 C13.1 ,
+        C14.1 C15.2 C16.2 C17.1 C18.2 C19.1 C22.1 C23.1 C24.1 C28.2 C29.2 ,
+        C30.2 C31.2 C32.2 CN1.2 D1.2 D2.2 H1.3 H2.3 H3.5 H5.3 H7.1 R2.1 R3.1 ,
+        R6.1 R9.1 R12.1 R15.2 R16.2 R22.1 R24.1 R29.1 R32.1 R35.1 R41.1 R42.1 ,
+        R44.2 SW1.1 SW1.2 SW2.1 SW2.2 U3.1 U4.11 U4.13 U4.18 U4.19 U4.23 U4.35 ,
+        U4.47 U5.8 U6.2 U6.8 USB1.1 USB1.2 USB1.3 USB1.4 USB1.A1B12 USB1.B1A12 
+HA ; D3.2 Q1.1 R17.2 R19.1 TP4.1 
+HB ; D5.2 Q3.1 R25.2 R30.1 TP6.1 
+HC ; D7.2 Q5.1 R36.2 R38.1 TP8.1 
+INHA ; U4.32 U5.1 
+INHB ; U4.31 U5.2 
+INHC ; U4.30 U5.3 
+INLA ; U4.29 U5.4 
+INLB ; U4.28 U5.5 
+INLC ; U4.27 U5.6 
+KEY ; SW2.3 SW2.4 U4.2 
+LA ; D4.2 Q2.1 R18.2 R20.1 TP5.1 
+LB ; D6.2 Q4.1 R26.2 R31.1 TP7.1 
+LC ; D8.2 Q6.1 R37.2 R39.1 TP9.1 
+LED ; R7.1 U4.42 
+MA ; C25.1 H4.1 Q1.3 Q2.2 R19.2 U5.18 
+MB ; C26.1 H4.2 Q3.3 Q4.2 R30.2 U5.15 
+MC ; C27.1 H4.3 Q5.3 Q6.2 R38.2 U5.12 
+NRST ; C3.1 H1.5 R1.1 SW1.3 SW1.4 U4.7 
+SWCLK ; H1.2 U4.38 
+SWDIO ; H1.4 U4.37 
+VBUS ; C6.1 C8.2 C10.2 C17.2 C19.2 C23.2 C24.2 D1.1 F1.2 Q1.2 Q3.2 Q5.2 R11.2 ,
+        R14.2 TP11.1 U3.3 U5.7 
+VIN ; CN1.1 F1.1 
+$SCHEDULE
+$END
