@@ -265,6 +265,54 @@ Keil 工程文件的版本控制边界沿用旧工程已验证规则：
 
 未来只有当当前工具链明显阻碍开发效率，或进入适合集中做基础设施升级的阶段时，再单独重新评估 VS Code / CMake 迁移。
 
+### 5.1 Keil 生成物与 Git 边界
+
+Keil / ARMCC 的编译产物和可由工程重新生成的设备包辅助目录不进入 Git。原因不仅是减少仓库噪声，也避免 Git、索引器或其他后台工具扫描这些正在被编译器覆盖写入的文件，干扰本地构建。
+
+默认忽略并保持不跟踪：
+
+```text
+Objects/
+Listings/
+MDK-ARM/<target build output>/
+MDK-ARM/build*.log
+MDK-ARM/*.lst
+MDK-ARM/*.uvguix.*
+MDK-ARM/EventRecorderStub.scvd
+MDK-ARM/DebugConfig/
+MDK-ARM/RTE/
+```
+
+继续跟踪正式源码和构建配置，包括：
+
+```text
+Core/
+Drivers/
+*.ioc
+*.uvprojx
+*.uvoptx
+startup_*.s
+```
+
+如果历史提交已经跟踪了后来应忽略的生成物，应使用“取消 Git 跟踪但保留本地文件”的方式清理，而不是删除用户本地仍被 Keil 使用的文件。
+
+### 5.2 ST-Link 独占访问
+
+同一时刻只允许一个工具进程占用同一只 ST-Link。
+
+在运行以下任一操作前：
+
+```text
+STM32CubeProgrammer GUI
+STM32_Programmer_CLI
+Keil Download / Debug
+其他 ST-Link CLI / debugger
+```
+
+先确保其他可能持有该探针的程序已经断开或关闭。若 CLI 出现连接失败，应先排查探针是否被 CubeProgrammer GUI、Keil Debug Session 或其他后台工具占用，再判断 SWD 硬件故障。
+
+该规则只约束探针资源占用，不改变日常烧录仍由用户熟练操作白名单负责的分工。
+
 ## 6. Host 工具链与开发规则
 
 当前首选技术基线：
