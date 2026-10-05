@@ -287,7 +287,7 @@ STM32CubeCLT 保留为命令行检查、自动化和后续 verify 能力的辅�
 每块 Target 保留完整、正常的 CubeMX / Keil 工程：
 
 ```text
-firmware/targets/<board>/
+firmware/targets/<target>/
 ├── *.ioc
 ├── Core/
 ├── Drivers/
