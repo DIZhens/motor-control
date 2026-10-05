@@ -4,23 +4,51 @@
 
 ## 1. 项目定位
 
-本仓库实现一套可跨电机控制板复用的 BLDC/PMSM 控制系统。
+本仓库实现一套可跨电机控制硬件复用的 BLDC/PMSM 控制系统。
 
-“通用”不表示提前支持所有硬件和协议，而表示**替换成本局部化**。
+“通用”不表示提前支持所有硬件和协议，而表示**在明确 Control Profile 内把替换成本局部化**。第一版目标收敛为：
+
+```text
+Single-Motor Encoder Phase-Current FOC Profile V1
+
+one MCU runtime
+    =
+one Firmware Node
+    =
+one Motor
+```
+
+V1 面向能够运行本项目 Firmware 的单电机三相 BLDC/PMSM 控制节点。多电机系统通过多个 Controller Node 与通信层协调，不在一个 MCU Runtime 内预建多轴控制框架。
+
+Target 不等同于某一块 PCB，而是一个确定的 **Target Configuration**：
+
+```text
+MCU
++ three-phase power stage
++ selected phase-current sensing configuration
++ selected encoder source
++ static timing / protection configuration
+```
+
+同一块物理板可以因采样拓扑、位置源或静态配置不同而形成不同 Target Configuration；核心板、功率板和传感器的组合也可以共同构成一个 Target。
 
 当前明确保护两个变化轴：
 
 ```text
-控制板：
+Motor-control Target：
 Custom STM32G431
       ↕
-ODrive 等可运行我们固件的控制板
+ODrive-compatible / other suitable controller hardware
       ↕
-未来其他 STM32 电机控制板
+future compatible Target Configuration
 
-通信：
+Communication：
 UART ↔ USB ↔ CAN ↔ TCP
 ```
+
+Hardware Capability Contract 本身不绑定 MCU 厂商，但当前实现与实机验证以 STM32 为主；“接口未阻止其他 MCU”不等价于项目已承诺支持其他 MCU。
+
+V1 的通用边界遵守一条长期判断规则：如果新硬件差异只改变 Platform 如何兑现既有物理语义，而不改变 FOC 主实时数据流，则属于同一 Profile；如果差异迫使采样、调制、估计结构或一个 Node 的控制对象数量发生根本变化，则新增 Profile 或系统层，而不是继续扩宽 V1。
 
 项目不以某个第三方生态为中心。成熟方案用于提供已经验证过的工程经验；通用成熟组件优先复用，核心设备语义由本项目拥有。
 
@@ -99,7 +127,7 @@ HAL 对象
 板卡名称
 ```
 
-硬件采样的物理通道映射、定时器和 ADC 实例属于 Platform；电流 offset、比例换算、相电流重构、估计器和调制算法属于可移植控制算法。Platform 不为了“方便”提前把板级采样拓扑伪装成某个固定控制算法结果。
+硬件采样的物理通道映射、定时器和 ADC 实例属于 Platform。ADC / OPAMP / Shunt / 传感器硬件的名义传递关系以及 raw value → 物理相电流 [A] 的换算也属于 Platform；零电流 offset、每相增益误差等实验校准修正、缺相重构、估计器和调制算法属于可移植控制算法。Platform 不为了“方便”提前把板级采样拓扑伪装成已经完整重构的控制算法结果。
 
 ## 4. Firmware
 
@@ -172,43 +200,84 @@ Reference / Feedback 实时真值
 
 ### 4.3 Platform 与 Hardware Capability Contract
 
-跨板复用的核心不是统一 ADC/TIM/SPI API，而是统一当前 FOC Runtime 真正需要的**硬件能力语义**。
+跨 Target 复用的核心不是统一 ADC/TIM/SPI API，而是统一 V1 FOC Runtime 真正依赖的**硬件能力语义**。分析时可以讨论很多硬件能力概念，但公共 Platform API 不按概念数量机械拆分。
 
-典型能力：
+V1 的最小能力集合收敛为：
 
 ```text
-Drive Timing
-    确定 PWM / sample / control 的时间关系
+Mandatory
+    Realtime Motor I/O
+        deterministic drive timing
+        three-phase duty actuation
+        synchronized / deterministic phase-current acquisition
+        Power Enable
+        software safe-off
 
-Synchronized Feedback
-    在规定时刻提供一组一致的同步硬件观测
+    Position Observation
+        encoder-derived mechanical position observation
 
-Position Observation
-    提供带时序语义的位置观测
+    Bus Observation
+        physical DC-bus voltage observation
 
-Bus Observation
-    提供母线等必要物理量观测
-
-Power Stage Actuation
-    在规定边界应用三相桥命令，并支持 software safe-off
-
-Hardware Trip
-    提供不依赖 CPU 的快速硬件保护能力及可观测故障事实
+Optional
+    Hardware Trip
+        CPU-independent hardware protection and safe-off
 ```
 
 关系：
 
 ```text
-               ControlRuntime
-                     │
-          Hardware Capability Contract
-             ┌───────┼────────┐
-             ▼       ▼        ▼
-        Custom G431 ODrive  Future Board
-          Platform Platform   Platform
+                   Motor / ControlRuntime
+                           │
+              Hardware Capability Contract
+             ┌─────────────┼─────────────┐
+             ▼             ▼             ▼
+      Realtime Motor I/O  Position       Bus
+             │
+             └──── optional Hardware Trip
+                           │
+             ┌─────────────┼─────────────┐
+             ▼             ▼             ▼
+        Custom G431   ODrive target   Future Target
 ```
 
-如果只是 MCU、PCB、Gate Driver、ADC/TIM 实例或编码器器件变化，而上述能力语义仍一致，变化应限制在 Target / Platform。
+V1 Target 至少需要满足：
+
+```text
+3-phase BLDC/PMSM inverter
+one MCU/Firmware Node controls exactly one Motor
+independent A/B/C phase-duty semantics
+at least two independent phase-current observations
+deterministic current-sampling / control timing
+absolute or incremental encoder position source
+DC-bus voltage observation
+deterministic software safe-off
+```
+
+允许被 Platform 吸收而不改变 Profile 的典型差异包括：
+
+```text
+3PWM / 6PWM
+2 / 3 phase-current sensing channels
+low-side / inline / isolated phase-current sensing
+internal / external current amplifier
+absolute / incremental encoder
+不同 MCU / Timer / ADC / DMA / Gate Driver 实现
+```
+
+V1 明确不以以下能力为准入目标：
+
+```text
+single DC-link shunt
+Hall-only rotor feedback
+pure sensorless FOC
+single-MCU multi-motor runtime
+sampling-aware overmodulation 作为必要工作模式
+six-step / ACIM / stepper
+black-box smart servo drive
+```
+
+这些能力未来如果形成真实需求，应建立新的 Control Profile 或系统层，而不是通过扩大现有接口语义强行兼容。
 
 禁止在控制核心中用大量：
 
@@ -216,13 +285,30 @@ Hardware Trip
 #ifdef BOARD_X
 ```
 
-传播板级差异。
+传播 Target 差异。
 
-若采样拓扑、功率拓扑或安全能力确实改变了控制语义，可以形成明确的 capability 差异，而不是伪造统一接口。
+#### 4.3.1 Realtime Motor I/O
 
-#### 4.3.1 Power Stage 与 Drive Timing
+Realtime Motor I/O 是 V1 最核心的硬实时硬件边界。它把共享同一确定时序事务的 Drive Timing、Power Stage Actuation、同步相电流采集、Power Enable 和 software safe-off 收拢在一起；这不表示建立巨大 Platform 模块，而是承认这些能力必须共同满足同一个 PWM / sample / control 一致性边界。
 
-`control/` 负责 FOC、逆 Park 和 SVPWM，并向 Platform 提交归一化三相 `PhaseDuty`。Platform 负责最终 finite/range 检查、硬件安全 clamp、最小脉宽、CCR 换算、互补输出极性、preload 和确定边界同步生效；Control 不直接看到 CCR 或 TIM。
+`control/` 负责 FOC、逆 Park 和 SVPWM，并向 Platform 提交归一化三相 `PhaseDutyRequest`。该请求表达“控制算法希望下一 PWM 周期实现的三相平均 duty”，不是 CCR、Timer count 或最终硬件波形。
+
+Platform 负责：
+
+```text
+finite / range 检查
+Target actuation constraints
+3PWM / 6PWM 与具体 Timer realization
+complementary polarity
+hardware dead-time
+minimum physically valid pulse
+preload / update boundary
+current sampling-window / trigger planning
+Power Enable
+software safe-off
+```
+
+Hardware dead-time 属于 Platform；为了补偿 dead-time 电压误差的 dead-time compensation 属于可移植控制算法。
 
 第一版长期不变量：
 
@@ -232,31 +318,51 @@ Drive Timing Start != Power Enable
 
 Drive Timing 在系统装配完成后启动一次，并在 IDLE / RUN / FAULT 中持续运行；正常 Motor Stop / Fault 不通过停止实时基准实现安全关断。第一版不因为接口对称而要求提供正常运行期 `drive_timing_stop()`。
 
-对于低边 Shunt 等会让 PWM 命令影响下一周期可测窗口的 Target，具体 Platform 允许联合形成：
+对于 low-side Shunt 等 PWM 命令会影响下一周期可测窗口的 Target，Platform 可以联合形成：
 
 ```text
-PhaseDuty
-    ├─ Power-stage update
-    └─ Current-acquisition plan
+PhaseDutyRequest
+      ↓
+Actuation + Acquisition Plan
+    ├─ power-stage update
+    └─ current-sample plan
 ```
 
-两者必须一起 stage，并在同一 PWM update boundary 对应生效。Hardware Capability Contract 不把固定采样点或固定 B/C 两相采样写成长期假设。
+两者必须一起 stage，并在同一 PWM update boundary 对应生效。Hardware Capability Contract 不把固定采样点、固定 B/C 两相或某个 Timer compare channel 写成长期假设。
 
-#### 4.3.2 Synchronized Feedback 与普通 Observation
+V1 通过 Target 声明的有效 modulation envelope 保证可靠相电流采样，不要求为获取极限母线利用率而进行 sampling-aware PWM distortion。Single DC-link shunt 以及依赖采样窗口重塑的 overmodulation 不属于 V1。
 
-同步电流路径只承诺“这一组硬件观测在同一规定采样事件中真实取得”。Platform 应使用相位等硬件语义，而不是暴露 `ADC1/ADC2` 这类 MCU 实例；同时不把 offset、比例换算和三相重构偷偷固化进板级实现。
+正常 control saturation 应发生在 portable control / modulator 内。Platform 的 safety clamp 只是硬件最后保护，不应成为正常工作时持续修改控制请求的机制；如果 Platform 经常修改请求，视为控制配置或 Target envelope 不匹配。
+
+#### 4.3.2 Phase Current、Position 与 Bus Observation
+
+同步电流路径向上提供的是**已经换算到物理单位的真实相电流观测**，而不是 MCU raw ADC count：
 
 ```text
 Hardware trigger
       ↓
-Platform coherent raw observation
+Platform
+    ADC / OPAMP / shunt / sensor hardware
+    channel → phase mapping
+    nominal raw → Amp conversion
+    acquisition timing / hardware validity
+      ↓
+PhaseCurrentObservation
+    measured phase value(s) [A]
+    measured-phase information
+    observation time
+    acquisition validity
       ↓
 sample-ready
       ↓
 ControlRuntime
       ↓
-control/measurement
-    offset / scale / reconstruction / usability
+portable Measurement
+    zero / gain calibration correction
+    missing-phase reconstruction
+    plausibility / usability
+      ↓
+usable Ia / Ib / Ic
 ```
 
 必须保持：
@@ -265,27 +371,52 @@ control/measurement
 sample-ready != sample-usable
 ```
 
-Platform 可以提供采样窗口、实际相位对等硬件事实；最终控制可用性由可移植 measurement / Runtime 根据算法约束判断。
+Platform 只能声明这一拍实际测得的相位及其物理值，不用虚假的 0 A 表示“该相未测”，也不为了接口整齐把两相采样偷偷伪装成三路独立实测。
 
-Position、Bus、Thermal 等不要求成为 fast tick 的观测按独立 capability 发布“最新值 + timing/freshness 所需信息 + validity”。它们不因为也是 ADC/SPI 数据就并入一个万能 Sensor API，也不主动触发完整 FOC 周期。
+Position Observation 与 Realtime Motor I/O 分离，因为其采集机制和节拍可以独立。Platform 屏蔽 SSI/SPI/I2C、ABZ counter、CPR、raw code 等硬件细节，只发布 encoder-derived mechanical position observation 及其 timing / validity / reference 所需语义。
 
-Position acquisition 不得要求在 fast-control ISR 中阻塞等待 SPI。具体 Target 可以选择接近 fast tick 的采样频率，也可以较低频采样；采样频率不是 Hardware Capability Contract。可移植 estimator 负责 unwrap、速度估计和角度预测。
+Platform Position 不负责：
+
+```text
+velocity estimate
+electrical angle
+pole pairs
+motor direction semantics
+electrical offset
+```
+
+可移植 estimator 负责 unwrap、速度估计、滤波和预测到当前控制时刻；Motor / commissioning 参数再把机械 Rotor State 转换为 electrical rotor state。Sensorless 如果未来加入，应在 RotorStateEstimate 层与 encoder path 汇合，不伪装成 Hardware PositionObservation。
+
+Position acquisition 不得要求在 fast-control ISR 中阻塞等待 SPI。Position 可以异步发布最新 observation，但不得异步修改 estimator 状态；ControlRuntime 在 fast tick 边界统一消费。
+
+Bus Observation 单独发布物理母线电压及 timing / validity。VBUS 是 V1 必选物理量，不因为它和 NTC 等都可能来自 regular ADC 就建立万能 Analog/Sensor API。Thermal、Gate Driver diagnostic、Brake 等在出现真实需求前不进入 V1 公共合同。
 
 #### 4.3.3 Capability 绑定方式
 
-当前每个 Firmware image 只对应一个确定 Target，因此第一版采用链接期静态实现，不建立万能 `PlatformOps`。
+当前一个 Firmware image 对应一个确定 Target Configuration，并且一个 MCU Runtime 只控制一个 Motor。第一版采用链接期静态实现，不建立万能 `PlatformOps`、Capability Registry、axis array 或运行时硬件发现机制。
 
 ```text
 ControlRuntime → Platform
     通过稳定 capability API 提交动作
 
 Platform → ControlRuntime
-    对真正的硬实时事件使用 callback + context 反向通知
+    仅对真正硬实时事件使用 callback + context
 ```
 
-只有出现真实的运行时替换、多实例或测试注入需求时，才把对应小能力升级成 `xxx_ops_t` 接口对象；不因为使用 DIP / IoC 就预先给所有能力制造函数指针表。
+V1 中真正需要反向硬实时通知的事件主要是：
+
+```text
+PhaseCurrentObservation ready
+Hardware Trip event（仅支持该能力的 Target）
+```
+
+Position / Bus 优先发布 latest observation，由 ControlRuntime 在 fast tick 消费，不让 Runtime 退化成大量异步 callback 的事件处理器。
+
+只有出现真实的运行时替换、多实例或测试注入需求时，才把对应小能力升级成 `xxx_ops_t` 接口对象；不因为使用 DIP / IoC 就预先给所有能力制造函数指针表。可选 Hardware Trip 不通过空 stub 假装存在，也不要求 Runtime 到处动态查询 capability。
 
 ### 4.4 Hardware Trip 语义
+
+Hardware Trip 是 V1 的**可选安全增强能力**，不是 Base Target 的准入条件。所有 V1 Target 都必须实现并验证 software safe-off；只有明确声明支持 Hardware Trip 的 Target，才必须满足本节 CPU-independent 保护合同。
 
 Hardware Trip 的第一职责是**先切断危险功率输出**，软件观察和故障归因发生在其后。
 
@@ -319,12 +450,16 @@ Protection Re-arm != Power Enable
 
 re-arm 只恢复保护链可再次工作的条件，并保持功率输出 disabled；重新进入 RUN 必须经过新的显式 Start。
 
+Motor 对外仍只有统一的 `Clear Fault` 业务语义。对于支持 Hardware Trip 的 Target，condition inactive 与 protection re-arm 是 Clear 成功前的内部恢复条件；不把 STM32 Break、Comparator 或其他 Target 专用保护动作暴露成所有设备都必须具有的公共业务命令。
+
 ### 4.5 Target
 
-每块 MCU 控制板拥有一套完整目标工程：
+Target 是一个确定的 MCU、功率级、相电流采样、位置源和静态时序/保护配置组合，不要求所有能力物理位于同一块 PCB。
+
+当前 STM32 Target 保留一套完整目标工程：
 
 ```text
-firmware/targets/<board>/
+firmware/targets/<target>/
     platform/
     *.ioc
     Core/
@@ -332,11 +467,25 @@ firmware/targets/<board>/
     MDK-ARM/
 ```
 
-CubeMX / Keil 工程按正常 STM32 工程保存，不为了目录整齐拆散。
+CubeMX / Keil 工程按正常 STM32 工程保存，不为了目录整齐拆散。共享源码位于 Target 外，由具体 Keil 工程引用。
 
-共享源码位于 Target 外，由具体 Keil 工程引用。
+V1 固定：
 
-具体 Target 必须把 software safe-off 和 Hardware Trip 的最终输出状态落实到真实 Gate Driver / 功率桥的“全关断”语义，并通过对应板卡的实机验证确认，不能只把 `MOE=0`、某个 GPIO 电平或某个 HAL 返回值当作安全证明。
+```text
+one MCU runtime
+    =
+one Firmware Node
+    =
+one Motor
+```
+
+即使一块物理控制板具有多个功率轴，本项目的一个 Target Configuration 也只选择其中一个电机通道参与当前 Runtime；第一版不加入 `axis_id`、axis array、multi-axis context 或 shared-resource manager。多电机系统由多个 Controller Node 通过通信层协调。
+
+`control/` 中 PI、Estimator、FOC 等算法模块仍按正常方式保持可实例化，但 Firmware V1 不承诺在同一 MCU Runtime 同时运行多个 Motor。
+
+所有 Target 都必须把 software safe-off 最终落实到真实 Gate Driver / 功率桥的已定义安全状态，并通过对应硬件验证确认，不能只把 `MOE=0`、某个 GPIO 电平或某个 HAL 返回值当作安全证明。
+
+只有声明支持 Hardware Trip 的 Target，还必须验证其 CPU-independent 保护路径、最终功率级 safe-off 行为以及受控恢复语义。
 
 ## 5. 硬实时、启动与安全
 
@@ -357,7 +506,7 @@ Bind
   ↓
 保持 power disabled
   ↓
-Arm feedback / protection / events
+Arm required feedback / available protection / events
   ↓
 Start drive timing
 ```
@@ -382,7 +531,7 @@ IDLE 表示系统处于安全空闲且可以接受配置、诊断和 commissioni
 Fault 至少区分：
 
 ```text
-Hardware Trip
+Hardware Trip（仅支持该能力的 Target）
     CPU-independent 最快保护
 
 Fast Runtime Fault
