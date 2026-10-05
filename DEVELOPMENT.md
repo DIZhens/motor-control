@@ -62,7 +62,21 @@ interface/
         ChatGPT 主责               Codex 主责
 ```
 
-共享契约包含设备公共语义、线协议合同以及会同时影响 Firmware / Host 的长期接口约束。共享契约由 ChatGPT 负责冻结和维护；两端在契约稳定后独立实现。
+共享契约包含设备公共语义、线协议合同以及会同时影响 Firmware / Host 的长期接口约束。共享契约由 ChatGPT 负责最终冻结和维护，但不要求由 ChatGPT 单方面闭门设计；涉及 Host 实现可行性、事务模型、异步 Telemetry、重连、mock/test 等问题时，应主动让 Codex 从 Host 侧参与评审并提出修改建议。
+
+Device Contract / Protocol Contract 不属于 Motor 内部实现，也不属于 Host 私有实现。它们位于 Firmware ↔ Host 的共享边界：
+
+```text
+Motor business semantics
+        ↓
+Device Contract
+        ↓
+Protocol Contract
+        ↓
+Firmware Communication / Host Protocol Client
+```
+
+两端不需要等整个共享契约一次性全部冻结后才开始实现。当前采用按功能纵向切片（vertical slice）推进：某个 Host 功能所依赖的 Device / Protocol Contract 已经明确到足以实现后，该切片即可由 Codex 主导 Host 侧实现；后续切片继续按相同方式冻结和推进。
 
 固件与 Host 内部如何继续拆分，以各自最自然、最容易维护为准，不为了并行开发人为制造接口。
 
@@ -73,7 +87,8 @@ ChatGPT 主要负责：
 - 需求澄清、外部调研、方案判断和总体架构；
 - `control/` 第一方源码；
 - `firmware/` 第一方源码与 Firmware 架构，包括 Motor、ControlRuntime、Communication 固件端、SystemRuntime、Platform contract 与 Target 集成设计；
-- `interface/` 中跨 Firmware / Host 的 Device / Protocol Contract；
+- `interface/` 中跨 Firmware / Host 的 Device / Protocol Contract，并负责最终冻结；
+- 在 Protocol Contract 冻结前主动吸收 Codex 的 Host 侧实现评审，不把“最终冻结权”理解为单方面设计；
 - 根目录正式文档；
 - GitHub 远端分支、文件、PR、Issue 等仓库操作；
 - Firmware 与共享接口的代码审查；
@@ -90,7 +105,7 @@ ChatGPT 不因为能够编写 GUI 就默认接管 `host/` 的日常实现；当�
 
 Codex 当前有两个职责。
 
-第一，**主责 `host/` 的设计、实现和本地验证**。在共享契约已经明确的前提下，Codex 可以直接推进：
+第一，**主责 `host/` 的设计、实现和本地验证**。这里的“开始主导”按功能切片判断，而不是等待整个 Host / Protocol 全部设计完成：只要某个 Host 功能依赖的 Device / Protocol Contract 已经冻结到足以实现，该切片之后的 Host 内部架构、代码、测试和本地闭环就由 Codex 主导。Codex 可以直接推进：
 
 - Python / PySide6 / Qt6 工程组织；
 - Qt Widgets GUI；
@@ -104,6 +119,20 @@ Codex 当前有两个职责。
 - Host 内部必要的重构和实现细节。
 
 Host 内部实现不需要等待 ChatGPT 逐文件编写。Codex 应主动利用本地源码、解释器、测试框架、CLI/API 等能力形成“修改 → 测试 → 修正”的闭环，而不是退化成只执行 ChatGPT 给出的机械步骤。
+
+在 Protocol Contract 尚未冻结时，Codex 不是被动等待者。ChatGPT 可以把 Device / Protocol 草案交给 Codex 做 Host-side design review；Codex 应从 Host 实现角度主动检查：
+
+```text
+codec 是否自然
+request / response / error transaction 是否清楚
+async telemetry 是否与同步事务冲突
+timeout / reconnect 语义是否有歧义
+stream framing 是否容易 resync
+mock / fake / pytest 是否容易建立
+是否存在只为 Firmware 方便而给 Host 增加的不必要复杂度
+```
+
+Codex 可以提出共享合同修改建议，但不能把这些建议直接作为 Host 私有事实落地。如果建议会改变 Firmware 与 Host 都必须遵守的业务语义、消息、单位、状态、事务或 framing，应停止扩大实现并交回 ChatGPT 决策；合同冻结后再同步两端。
 
 第二，Codex 继续作为本地执行代理。凡是任务必须依赖用户本地环境、又不属于用户熟练操作白名单，并且可以通过可靠机器接口完成，默认交给 Codex。可用入口包括但不限于：
 
@@ -123,6 +152,18 @@ Codex 不单方面改变：
 - Firmware 公共业务语义；
 - Hardware Capability Contract；
 - `interface/` 的 Device / Protocol Contract。
+
+判断边界时使用一个简单规则：
+
+```text
+如果一个决定改变后 Firmware 与 Host 都必须一起修改
+    → Shared Contract，由 ChatGPT 最终冻结
+
+如果一个决定只改变 Host 内部实现
+    → Host internal，由 Codex 自主决定
+```
+
+例如 message ID、packet header、CRC、transaction ID、error code、Telemetry message layout、公共单位和枚举属于 Shared Contract；Python class 划分、Qt Signal 组织、reader thread / asyncio 选择、Host buffer、重连实现细节属于 Host internal。
 
 如果 Host 实现发现共享合同不足、存在歧义或必须改变，先形成最小问题描述并交回 ChatGPT 决策；合同确定后再同步两端实现。
 
