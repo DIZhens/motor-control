@@ -57,7 +57,7 @@ V1 的通用边界遵守一条长期判断规则：如果新硬件差异只改�
 ```text
 hardware
     ↓
-firmware/targets/<board>/platform
+firmware/targets/<target>/platform
     ↓
 Hardware Capability Contract
     ↓
