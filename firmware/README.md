@@ -18,7 +18,7 @@ firmware/
 
 `platform/` 保存当前 Control Profile 对硬件提出的 Hardware Capability Contract。
 
-`targets/<board>/` 保存某块具体控制板的完整 CubeMX / Keil 工程和 Platform 实现，例如：
+`targets/<target>/` 保存某个确定 Target Configuration 的完整 CubeMX / Keil 工程和 Platform 实现。Target Configuration 由 MCU、功率级、相电流采样、位置源及静态时序/保护配置共同定义，不要求所有硬件位于同一块 PCB。例如：
 
 ```text
 targets/custom_g431/
