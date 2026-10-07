@@ -339,7 +339,7 @@ V1 通过 Target 声明的有效 modulation envelope 保证可靠相电流采样
 
 同步电流路径向上提供的是**已经换算到物理单位的真实相电流观测**，而不是 MCU raw ADC count：
 
-\`\`\`text
+```text
 Hardware trigger
       ↓
 Platform
@@ -364,13 +364,13 @@ portable Measurement
     plausibility / usability
       ↓
 usable Ia / Ib / Ic
-\`\`\`
+```
 
 必须保持：
 
-\`\`\`text
+```text
 sample-ready != sample-usable
-\`\`\`
+```
 
 Platform 只能声明这一拍实际测得的相位及其物理值，不用虚假的 0 A 表示“该相未测”，也不为了接口整齐把两相采样偷偷伪装成三路独立实测。
 
@@ -380,25 +380,25 @@ Position Observation 与 Realtime Motor I/O 分离，因为其采集机制和节
 
 Position 使用机械圈数（turn）作为公共单位，并区分两种 bind-time immutable topology：
 
-\`\`\`text
+```text
 PERIODIC
     一圈内的规范化周期坐标，范围 [0, 1)
 
 CONTINUOUS
     位置源真实提供的累计机械位置
-\`\`\`
+```
 
 Platform 不把单圈绝对编码器自行 unwrap 后伪装成 CONTINUOUS；需要 unwrap、速度估计、滤波和预测时，由 portable estimator 完成。referenced 是动态状态，与 topology 正交，不等于 pole pairs、motor direction 或 electrical offset。
 
 Platform Position 不负责：
 
-\`\`\`text
+```text
 velocity estimate
 electrical angle
 pole pairs
 motor direction semantics
 electrical offset
-\`\`\`
+```
 
 Motor / commissioning 参数把机械 Rotor State 转换为 electrical rotor state。Sensorless 如果未来加入，应在 RotorStateEstimate 层与 encoder path 汇合，不伪装成 Hardware PositionObservation。
 
@@ -408,12 +408,12 @@ Bus Observation 单独发布物理母线电压 [V] 及 timing / validity。VBUS 
 
 Position / Bus 的 latest publication 必须满足：
 
-\`\`\`text
+```text
 coherent
 non-blocking
 bounded-time
 whole-observation copy
-\`\`\`
+```
 
 成功读取表示得到一份完整快照；读取失败只表示“当前没有可交付的 coherent publication”，不能伪造为 acquisition invalid。真正的采集失败由 Observation 自身的 acquisition_valid = false 表达。ControlRuntime 不保留指向 Platform 可变 publication 的指针，而是复制所需 observation 后在自身单写者边界处理 freshness 和 estimator 状态。
 
@@ -422,20 +422,20 @@ whole-observation copy
 
 当前一个 Firmware image 对应一个确定 Target Configuration，并且一个 MCU Runtime 只控制一个 Motor。第一版采用链接期静态实现，不建立万能 PlatformOps、Capability Registry、axis array 或运行时硬件发现机制。
 
-\`\`\`text
+```text
 ControlRuntime → Platform
     通过稳定 capability API 提交动作
 
 Platform → ControlRuntime
     仅对真正硬实时事件使用 callback + context
-\`\`\`
+```
 
 V1 中真正需要反向硬实时通知的事件主要是：
 
-\`\`\`text
+```text
 PhaseCurrentObservation ready
 Hardware Trip urgent rescan（仅支持该能力的 Target）
-\`\`\`
+```
 
 Phase Current sample-ready callback 是同步硬实时路径：必须 bounded、non-blocking、non-reentrant；Observation 指针只保证在 callback 调用期间有效，ControlRuntime 不得保留该指针。
 
@@ -454,7 +454,7 @@ Hardware Trip 是 V1 的**可选安全增强能力**，不是 Base Target 的准
 
 Hardware Trip 的第一职责是**先切断危险功率输出**，软件观察和故障归因发生在其后：
 
-\`\`\`text
+```text
 physical protection condition
         ↓
 hardware trip
@@ -466,26 +466,26 @@ Platform sticky observable protection episode
 urgent rescan notification
         ↓
 Motor Fault Policy
-\`\`\`
+```
 
 公共合同描述的是 **observable protection episode**，不是无损物理事件流。Target 硬件无法区分的同类重复 Trip 可以合并在同一 episode 中；公共接口不承诺记录每一次物理边沿、事件次数或严格 generation。只有 Target 确实能可靠提供的故障类别才进入公共 cause；无法可靠归因时允许 UNKNOWN，更细的相位、比较器等来源只作为诊断 evidence。
 
 Hardware Trip authoritative snapshot 至少包含：
 
-\`\`\`text
+```text
 condition_active
     当前受该保护能力覆盖的物理保护条件是否仍 active
 
 causes
     当前尚未被受控恢复的 observable protection episode 的 sticky cause evidence
-\`\`\`
+```
 
 两者必须 coherent。允许：
 
-\`\`\`text
+```text
 condition_active = false
 causes != NONE
-\`\`\`
+```
 
 表示物理条件已经消失，但旧 protection episode 尚未完成显式恢复。
 
@@ -493,26 +493,26 @@ Hardware Trip callback 不是 evidence authority，只用于 urgent rescan。旧
 
 显式 Protection Re-arm 的成功语义必须同时满足：
 
-\`\`\`text
+```text
 当前 protection condition 允许恢复
 旧 observable protection episode 已被受控退休
 硬件保护路径已经重新 armed
 功率输出仍保持 disabled
 建立了新的 observable protection episode boundary
-\`\`\`
+```
 
 该 boundary 之后形成的新 observable protection episode 不得被本次 re-arm 清除。如果 Target 在恢复过程中无法证明这些后置条件，应 fail-closed 并报告 re-arm 失败，而不是猜测成功。
 
 必须保持：
 
-\`\`\`text
+```text
 Protection condition gone
         != Observable episode retired
         != Protection Re-arm
         != Motor Clear Fault
         != Power Enable
         != Restart
-\`\`\`
+```
 
 Motor 对外仍只有统一的 Clear Fault 业务语义。Hardware protection re-arm 成功只说明保护链恢复完成，并不等价于整次 Motor Clear 成功；Runtime 私有 Fault 退休、最终 Fault 检查和 Motor 生命周期提交仍必须完成。允许 protection 已重新 armed、power disabled，而 Motor 继续保持 FAULT。
 
@@ -520,10 +520,10 @@ Motor Clear 有自己的业务提交边界。若新的 authoritative Fault evide
 
 对于支持 Hardware Trip 的 Target，Motor 只需要一个窄的 optional recovery dependency：
 
-\`\`\`text
+```text
 coherent trip snapshot
 explicit protection re-arm
-\`\`\`
+```
 
 该依赖在 SystemRuntime 组合阶段绑定；不建立 FaultManager、Capability Registry 或通用 fault-source 表。
 
@@ -567,15 +567,15 @@ one Motor
 
 长期不变量：
 
-\`\`\`text
+```text
 Drive Timing Start != Power Enable
-\`\`\`
+```
 
 控制时基可以持续运行，而功率输出由 Motor 状态与保护策略独立门控。
 
 系统基础启动顺序遵守：
 
-\`\`\`text
+```text
 Configure
   ↓
 Bind
@@ -585,11 +585,11 @@ Bind
 Arm required feedback / available protection / events
   ↓
 Start drive timing
-\`\`\`
+```
 
 FOC 相关校准分成三个生命周期：
 
-\`\`\`text
+```text
 每次上电的无功率自动校准
     例如 ADC 自校准、电流零偏、传感器健康检查
 
@@ -600,13 +600,13 @@ FOC 相关校准分成三个生命周期：
 每次 Start 的实时安全启动
     例如 Runtime reset、反馈同步、安全 duty staging、
     跨确定 PWM boundary 后再 power enable
-\`\`\`
+```
 
 IDLE 表示系统处于安全空闲且可以接受配置、诊断和 commissioning，不等价于“已经满足所有 RUN 条件”。IDLE → RUN 必须通过 Run Prerequisites 门控；缺少标定或必要反馈时保持 IDLE，而不是把“尚未准备好”伪装成硬件 Fault。
 
 Fault 至少区分：
 
-\`\`\`text
+```text
 Hardware Trip（仅支持该能力的 Target）
     CPU-independent 最快保护
 
@@ -615,7 +615,7 @@ Fast Runtime Fault
 
 Motor Fault Policy
     active / latched / Clear / Restart 生命周期
-\`\`\`
+```
 
 ControlRuntime 是 Runtime 私有 Fault 状态的单写者。Clear 期间对 Runtime private fault 的退休 / reset 必须在其确定性单写者边界执行；Motor、SystemRuntime 或 ISR 不得通过异步普通清零覆盖刚产生的新 Runtime Fault。新的 Runtime Fault 与 reset 必须被排序为“reset 之前”或“reset 之后”的确定顺序。
 
@@ -623,12 +623,12 @@ Motor Clear 只在所有所需恢复步骤和最终 Fault 检查通过后提交 
 
 必须保持：
 
-\`\`\`text
+```text
 Fault condition gone
         != Clear Fault
         != Protection Re-arm
         != Restart
-\`\`\`
+```
 
 通信恢复也不得自动等价于电机 Restart。
 
