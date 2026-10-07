@@ -470,6 +470,11 @@
               <FileType>1</FileType>
               <FilePath>../platform/realtime_motor_io.c</FilePath>
             </File>
+            <File>
+              <FileName>position_observation.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../platform/position_observation.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

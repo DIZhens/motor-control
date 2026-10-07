@@ -7,6 +7,7 @@
 #include "tim.h"
 
 #include "control_time_source.h"
+#include "position_observation_internal.h"
 
 #define CURRENT_ADC_FULL_SCALE_COUNTS (4095.0f)
 #define CURRENT_ADC_VREF_NOMINAL_V (3.3f)
@@ -204,4 +205,5 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     }
 
     s_sample_ready_handler(s_sample_ready_context, &observation);
+    position_observation_fast_tick(observation_time);
 }
