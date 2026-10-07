@@ -61,25 +61,25 @@ void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  sBreakInputConfig.Source = TIM_BREAKINPUTSOURCE_COMP1;
+  sBreakInputConfig.Source = TIM_BREAKINPUTSOURCE_COMP3;
   sBreakInputConfig.Enable = TIM_BREAKINPUTSOURCE_ENABLE;
   sBreakInputConfig.Polarity = TIM_BREAKINPUTSOURCE_POLARITY_HIGH;
   if (HAL_TIMEx_ConfigBreakInput(&htim1, TIM_BREAKINPUT_BRK, &sBreakInputConfig) != HAL_OK)
   {
     Error_Handler();
   }
-  sBreakInputConfig.Source = TIM_BREAKINPUTSOURCE_COMP2;
-  if (HAL_TIMEx_ConfigBreakInput(&htim1, TIM_BREAKINPUT_BRK, &sBreakInputConfig) != HAL_OK)
+  sBreakInputConfig.Source = TIM_BREAKINPUTSOURCE_COMP1;
+  if (HAL_TIMEx_ConfigBreakInput(&htim1, TIM_BREAKINPUT_BRK2, &sBreakInputConfig) != HAL_OK)
   {
     Error_Handler();
   }
-  sBreakInputConfig.Source = TIM_BREAKINPUTSOURCE_COMP3;
-  if (HAL_TIMEx_ConfigBreakInput(&htim1, TIM_BREAKINPUT_BRK, &sBreakInputConfig) != HAL_OK)
+  sBreakInputConfig.Source = TIM_BREAKINPUTSOURCE_COMP2;
+  if (HAL_TIMEx_ConfigBreakInput(&htim1, TIM_BREAKINPUT_BRK2, &sBreakInputConfig) != HAL_OK)
   {
     Error_Handler();
   }
   sBreakInputConfig.Source = TIM_BREAKINPUTSOURCE_COMP4;
-  if (HAL_TIMEx_ConfigBreakInput(&htim1, TIM_BREAKINPUT_BRK, &sBreakInputConfig) != HAL_OK)
+  if (HAL_TIMEx_ConfigBreakInput(&htim1, TIM_BREAKINPUT_BRK2, &sBreakInputConfig) != HAL_OK)
   {
     Error_Handler();
   }
@@ -116,7 +116,7 @@ void MX_TIM1_Init(void)
   sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
   sBreakDeadTimeConfig.BreakFilter = 0;
   sBreakDeadTimeConfig.BreakAFMode = TIM_BREAK_AFMODE_INPUT;
-  sBreakDeadTimeConfig.Break2State = TIM_BREAK2_DISABLE;
+  sBreakDeadTimeConfig.Break2State = TIM_BREAK2_ENABLE;
   sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
   sBreakDeadTimeConfig.Break2Filter = 0;
   sBreakDeadTimeConfig.Break2AFMode = TIM_BREAK_AFMODE_INPUT;

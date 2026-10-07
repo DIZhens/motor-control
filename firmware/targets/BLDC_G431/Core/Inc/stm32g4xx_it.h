@@ -59,8 +59,6 @@ void ADC1_2_IRQHandler(void);
 void TIM1_BRK_TIM15_IRQHandler(void);
 void SPI1_IRQHandler(void);
 void TIM6_DAC_IRQHandler(void);
-void COMP1_2_3_IRQHandler(void);
-void COMP4_IRQHandler(void);
 /* USER CODE BEGIN EFP */
 
 /* USER CODE END EFP */

@@ -57,10 +57,6 @@
 /* External variables --------------------------------------------------------*/
 extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
-extern COMP_HandleTypeDef hcomp1;
-extern COMP_HandleTypeDef hcomp2;
-extern COMP_HandleTypeDef hcomp3;
-extern COMP_HandleTypeDef hcomp4;
 extern DAC_HandleTypeDef hdac1;
 extern DAC_HandleTypeDef hdac3;
 extern SPI_HandleTypeDef hspi1;
@@ -265,36 +261,6 @@ void TIM6_DAC_IRQHandler(void)
   /* USER CODE BEGIN TIM6_DAC_IRQn 1 */
 
   /* USER CODE END TIM6_DAC_IRQn 1 */
-}
-
-/**
-  * @brief This function handles COMP1, COMP2 and COMP3 interrupts through EXTI lines 21, 22 and 29.
-  */
-void COMP1_2_3_IRQHandler(void)
-{
-  /* USER CODE BEGIN COMP1_2_3_IRQn 0 */
-
-  /* USER CODE END COMP1_2_3_IRQn 0 */
-  HAL_COMP_IRQHandler(&hcomp1);
-  HAL_COMP_IRQHandler(&hcomp2);
-  HAL_COMP_IRQHandler(&hcomp3);
-  /* USER CODE BEGIN COMP1_2_3_IRQn 1 */
-
-  /* USER CODE END COMP1_2_3_IRQn 1 */
-}
-
-/**
-  * @brief This function handles COMP4 interrupt through EXTI line 30.
-  */
-void COMP4_IRQHandler(void)
-{
-  /* USER CODE BEGIN COMP4_IRQn 0 */
-
-  /* USER CODE END COMP4_IRQn 0 */
-  HAL_COMP_IRQHandler(&hcomp4);
-  /* USER CODE BEGIN COMP4_IRQn 1 */
-
-  /* USER CODE END COMP4_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */
