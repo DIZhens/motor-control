@@ -202,6 +202,18 @@ Reference / Feedback 实时真值
 
 跨 Target 复用的核心不是统一 ADC/TIM/SPI API，而是统一 V1 FOC Runtime 真正依赖的**硬件能力语义**。分析时可以讨论很多硬件能力概念，但公共 Platform API 不按概念数量机械拆分。
 
+目录命名固定为：
+
+```text
+firmware/platform_contract/
+    Hardware Capability Contract 的公共头文件，只定义跨 Target 稳定语义
+
+firmware/targets/<target>/platform/
+    当前 Target 对上述合同的具体实现，可以依赖 MCU / HAL / Timer / ADC / SPI 等细节
+```
+
+两者都属于 Platform 边界，但前者是 contract，后者是 implementation；不再使用同名顶层 `firmware/platform/` 目录，避免把公共合同与某个 Target 的实现混淆。
+
 V1 的最小能力集合收敛为：
 
 ```text
