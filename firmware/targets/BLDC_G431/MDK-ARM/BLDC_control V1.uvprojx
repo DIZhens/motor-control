@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G431xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -454,6 +454,21 @@
               <FileName>stm32g4xx_hal_msp.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32g4xx_hal_msp.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Application/User/Platform</GroupName>
+          <Files>
+            <File>
+              <FileName>control_time_source.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../platform/control_time_source.c</FilePath>
+            </File>
+            <File>
+              <FileName>realtime_motor_io.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../platform/realtime_motor_io.c</FilePath>
             </File>
           </Files>
         </Group>
