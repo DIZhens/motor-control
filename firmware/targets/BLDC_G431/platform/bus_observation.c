@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "adc.h"
+#include "stm32g4xx_ll_adc.h"
 
 #include "bus_observation_internal.h"
 
@@ -11,11 +12,12 @@
 #define BUS_ACQUISITION_DIVIDER (20U)
 
 #define ADC_FULL_SCALE_COUNTS (4095.0f)
-#define ADC_VREF_NOMINAL_V (3.3f)
+#define MILLIVOLTS_PER_VOLT (1000.0f)
 #define VBUS_DIVIDER_SCALE ((47.0f + 5.1f) / 5.1f)
 
 #define ADC1_REGULAR_SEQUENCE_LENGTH (3U)
 #define ADC1_VBUS_RANK_INDEX (0U)
+#define ADC1_VREFINT_RANK_INDEX (1U)
 
 static BusObservation s_publications[2];
 
@@ -28,13 +30,26 @@ static volatile ControlTime s_sequence_observation_time;
 static uint32_t s_acquisition_divider_count;
 static uint32_t s_regular_rank_index;
 static uint32_t s_vbus_raw;
+static uint32_t s_vrefint_raw;
 
-static float adc_raw_to_vbus_v(uint32_t raw)
+static bool convert_vbus(float *out_voltage_v)
 {
+    uint32_t vdda_mv;
     float adc_voltage_v;
 
-    adc_voltage_v = ((float)raw * ADC_VREF_NOMINAL_V) / ADC_FULL_SCALE_COUNTS;
-    return adc_voltage_v * VBUS_DIVIDER_SCALE;
+    if ((out_voltage_v == NULL) || (s_vrefint_raw == 0U)) {
+        return false;
+    }
+
+    vdda_mv = __LL_ADC_CALC_VREFANALOG_VOLTAGE(
+        s_vrefint_raw,
+        LL_ADC_RESOLUTION_12B);
+
+    adc_voltage_v = ((float)s_vbus_raw * (float)vdda_mv)
+        / (ADC_FULL_SCALE_COUNTS * MILLIVOLTS_PER_VOLT);
+
+    *out_voltage_v = adc_voltage_v * VBUS_DIVIDER_SCALE;
+    return true;
 }
 
 /*
@@ -76,6 +91,7 @@ bool bus_observation_arm(void)
     s_acquisition_divider_count = 0U;
     s_regular_rank_index = 0U;
     s_vbus_raw = 0U;
+    s_vrefint_raw = 0U;
     s_armed = true;
 
     return true;
@@ -158,6 +174,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 
     if (s_regular_rank_index == ADC1_VBUS_RANK_INDEX) {
         s_vbus_raw = raw;
+    } else if (s_regular_rank_index == ADC1_VREFINT_RANK_INDEX) {
+        s_vrefint_raw = raw;
     }
 
     s_regular_rank_index++;
@@ -171,9 +189,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
         return;
     }
 
-    observation.voltage_v = adc_raw_to_vbus_v(s_vbus_raw);
     observation.observation_time = s_sequence_observation_time;
-    observation.acquisition_valid = true;
+    observation.acquisition_valid = convert_vbus(&observation.voltage_v);
 
     s_sequence_active = false;
     publish_observation(&observation);
