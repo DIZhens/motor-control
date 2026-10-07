@@ -480,6 +480,11 @@
               <FileType>1</FileType>
               <FilePath>../platform/bus_observation.c</FilePath>
             </File>
+            <File>
+              <FileName>hardware_trip.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../platform/hardware_trip.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
