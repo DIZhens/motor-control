@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* 当前未恢复 observable protection episode 的粗粒度原因位图。 */
 typedef uint32_t HardwareTripCauseFlags;
 
 enum
@@ -29,8 +30,8 @@ enum
  */
 typedef struct
 {
-    bool condition_active;
-    HardwareTripCauseFlags causes;
+    bool condition_active;          /* 当前受保护的物理故障条件是否仍 active。 */
+    HardwareTripCauseFlags causes;  /* 当前未恢复 episode 的 sticky 原因集合。 */
 } HardwareTripSnapshot;
 
 /*

@@ -5,10 +5,11 @@
 
 #include "control_time.h"
 
+/* 位置源对机械圈坐标的拓扑语义；该事实由当前 Target/source 在绑定期固定。 */
 typedef enum
 {
-    POSITION_TOPOLOGY_PERIODIC = 0,
-    POSITION_TOPOLOGY_CONTINUOUS
+    POSITION_TOPOLOGY_PERIODIC = 0, /* 单圈规范化周期坐标，[0, 1)。 */
+    POSITION_TOPOLOGY_CONTINUOUS    /* 位置源真实提供的累计机械圈坐标。 */
 } PositionTopology;
 
 /*
@@ -23,10 +24,10 @@ typedef enum
  */
 typedef struct
 {
-    float mechanical_position_turns;
-    ControlTime observation_time;
-    bool referenced;
-    bool acquisition_valid;
+    float mechanical_position_turns; /* 编码器机械位置，单位 turn。 */
+    ControlTime observation_time;     /* 该位置观测对应的 Control Time。 */
+    bool referenced;                  /* 当前机械坐标是否具有有效 reference。 */
+    bool acquisition_valid;           /* 本次硬件采集结果是否可信。 */
 } PositionObservation;
 
 /* 返回当前 Target/source 的 bind-time immutable position topology。 */

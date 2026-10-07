@@ -6,6 +6,7 @@
 
 #include "control_time.h"
 
+/* 相位位图，只表示一次采集事务中由硬件独立观测到的物理相。 */
 typedef uint8_t PhaseMask;
 
 enum
@@ -22,9 +23,9 @@ enum
  */
 typedef struct
 {
-    float phase_a_duty;
-    float phase_b_duty;
-    float phase_c_duty;
+    float phase_a_duty; /* A 相归一化平均 duty，[0, 1]。 */
+    float phase_b_duty; /* B 相归一化平均 duty，[0, 1]。 */
+    float phase_c_duty; /* C 相归一化平均 duty，[0, 1]。 */
 } PhaseDutyRequest;
 
 /*
@@ -35,12 +36,12 @@ typedef struct
  */
 typedef struct
 {
-    float phase_a_a;
-    float phase_b_a;
-    float phase_c_a;
-    PhaseMask measured_phases;
-    ControlTime observation_time;
-    bool acquisition_valid;
+    float phase_a_a;                /* A 相物理电流，单位 A；仅在对应 mask 有效时使用。 */
+    float phase_b_a;                /* B 相物理电流，单位 A；仅在对应 mask 有效时使用。 */
+    float phase_c_a;                /* C 相物理电流，单位 A；仅在对应 mask 有效时使用。 */
+    PhaseMask measured_phases;      /* 本次由硬件独立测得的相位集合。 */
+    ControlTime observation_time;   /* 本次同步采集所属的 Control Time。 */
+    bool acquisition_valid;         /* 本次硬件采集事务是否完整可信。 */
 } PhaseCurrentObservation;
 
 /*
@@ -53,9 +54,9 @@ typedef struct
  */
 typedef struct
 {
-    float normal_voltage_utilization;
-    uint32_t control_time_ticks_per_second;
-    ControlTime fast_tick_period_ticks;
+    float normal_voltage_utilization;        /* V1 正常调制包络的保守母线利用因子。 */
+    uint32_t control_time_ticks_per_second;  /* Control Time 每秒 tick 数。 */
+    ControlTime fast_tick_period_ticks;      /* 相电流 fast tick 周期，单位 ControlTime tick。 */
 } RealtimeMotorIoFacts;
 
 /*

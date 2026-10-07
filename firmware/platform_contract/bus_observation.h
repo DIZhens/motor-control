@@ -11,9 +11,9 @@
  */
 typedef struct
 {
-    float voltage_v;
-    ControlTime observation_time;
-    bool acquisition_valid;
+    float voltage_v;                /* DC Bus 物理电压，单位 V。 */
+    ControlTime observation_time;   /* 该电压观测对应的 Control Time。 */
+    bool acquisition_valid;         /* 本次硬件采集结果是否可信。 */
 } BusObservation;
 
 /* 准备 Bus acquisition / publication，同时保持 power disabled。 */

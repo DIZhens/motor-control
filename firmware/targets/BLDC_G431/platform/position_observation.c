@@ -8,6 +8,7 @@
 
 #include "position_observation_internal.h"
 
+/* 当前 20 kHz fast tick 每 20 tick 发起一次 SSI 采集，即 1 kHz。 */
 #define POSITION_ACQUISITION_DIVIDER (20U)
 
 #define MT6701_FRAME_SIZE_BYTES (3U)
@@ -33,6 +34,10 @@ static volatile ControlTime s_transfer_observation_time;
 
 static uint32_t s_acquisition_divider_count;
 
+/*
+ * MT6701 SSI CRC 覆盖 angle + status 共 18 bit，按 MSB first 输入。
+ * 生成多项式为 x^6 + x + 1；宽度固定为 6 bit。
+ */
 static uint8_t mt6701_crc6(uint32_t data)
 {
     uint8_t crc = 0U;
@@ -52,6 +57,10 @@ static uint8_t mt6701_crc6(uint32_t data)
     return crc;
 }
 
+/*
+ * SPI IRQ 只写 inactive slot，最后用单个 index 切换 publication。
+ * fast ISR 即使抢占 writer，也只会读取 writer 尚未触碰的 active slot。
+ */
 static void publish_observation(const PositionObservation *observation)
 {
     uint32_t next_index = s_active_publication_index ^ 1U;
@@ -131,6 +140,10 @@ bool position_observation_arm(void)
     return true;
 }
 
+/*
+ * 后台读取时用极短临界区阻止 SPI writer 抢占；fast ISR 本身优先级高于 SPI IRQ。
+ * 与双缓冲配合后，读取不需要自旋或等待 writer 完成。
+ */
 bool position_observation_get_latest(PositionObservation *out_observation)
 {
     uint32_t primask;
