@@ -249,7 +249,7 @@ bool realtime_motor_io_power_enable(void)
         return false;
     }
 
-    if (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_BREAK | TIM_FLAG_BREAK2) != RESET) {
+    if ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) != 0U) {
         return false;
     }
 
