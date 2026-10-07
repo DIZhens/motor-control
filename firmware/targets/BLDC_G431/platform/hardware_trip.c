@@ -3,15 +3,62 @@
 #include <stddef.h>
 
 #include "comp.h"
+#include "dac.h"
 #include "tim.h"
 
+#include "hardware_trip_config.h"
 #include "realtime_motor_io.h"
+
+#define DAC_FULL_SCALE_CODE (4095.0f)
+#define DAC_VREF_NOMINAL_V (3.3f)
+
+#define CURRENT_FRONTEND_BIAS_V (0.1014f)
+#define CURRENT_FRONTEND_SHUNT_GAIN (0.8811f)
+#define CURRENT_SHUNT_RESISTANCE_OHM (0.05f)
+
+#define VBUS_DIVIDER_RATIO (5.1f / (47.0f + 5.1f))
 
 static HardwareTripHandler s_handler;
 static void *s_handler_context;
 static bool s_handler_bound;
 static volatile bool s_armed;
 static volatile HardwareTripCauseFlags s_latched_causes;
+
+static uint32_t voltage_to_dac_code(float voltage_v)
+{
+    float code = voltage_v * DAC_FULL_SCALE_CODE / DAC_VREF_NOMINAL_V;
+
+    if (code <= 0.0f) {
+        return 0U;
+    }
+
+    if (code >= DAC_FULL_SCALE_CODE) {
+        return (uint32_t)DAC_FULL_SCALE_CODE;
+    }
+
+    return (uint32_t)(code + 0.5f);
+}
+
+static uint32_t ocp_dac_code(void)
+{
+    float shunt_voltage_v;
+    float comparator_threshold_v;
+
+    shunt_voltage_v =
+        HARDWARE_TRIP_OCP_THRESHOLD_A * CURRENT_SHUNT_RESISTANCE_OHM;
+    comparator_threshold_v = CURRENT_FRONTEND_BIAS_V
+        + CURRENT_FRONTEND_SHUNT_GAIN * shunt_voltage_v;
+
+    return voltage_to_dac_code(comparator_threshold_v);
+}
+
+static uint32_t ovp_dac_code(void)
+{
+    float comparator_threshold_v =
+        HARDWARE_TRIP_OVP_THRESHOLD_V * VBUS_DIVIDER_RATIO;
+
+    return voltage_to_dac_code(comparator_threshold_v);
+}
 
 static HardwareTripCauseFlags pending_timer_causes(void)
 {
@@ -28,29 +75,104 @@ static HardwareTripCauseFlags pending_timer_causes(void)
     return causes;
 }
 
-static bool protection_condition_active(void)
+static HardwareTripCauseFlags current_condition_causes(void)
 {
-    bool overcurrent_active;
-    bool overvoltage_active;
+    HardwareTripCauseFlags causes = HARDWARE_TRIP_CAUSE_NONE;
 
-    overcurrent_active =
-        (HAL_COMP_GetOutputLevel(&hcomp1) == COMP_OUTPUT_LEVEL_HIGH)
+    if ((HAL_COMP_GetOutputLevel(&hcomp1) == COMP_OUTPUT_LEVEL_HIGH)
         || (HAL_COMP_GetOutputLevel(&hcomp2) == COMP_OUTPUT_LEVEL_HIGH)
-        || (HAL_COMP_GetOutputLevel(&hcomp4) == COMP_OUTPUT_LEVEL_HIGH);
+        || (HAL_COMP_GetOutputLevel(&hcomp4) == COMP_OUTPUT_LEVEL_HIGH)) {
+        causes |= HARDWARE_TRIP_CAUSE_OVERCURRENT;
+    }
 
-    overvoltage_active =
-        (HAL_COMP_GetOutputLevel(&hcomp3) == COMP_OUTPUT_LEVEL_HIGH);
+    if (HAL_COMP_GetOutputLevel(&hcomp3) == COMP_OUTPUT_LEVEL_HIGH) {
+        causes |= HARDWARE_TRIP_CAUSE_BUS_OVERVOLTAGE;
+    }
 
-    return overcurrent_active || overvoltage_active;
+    return causes;
 }
 
-/*
- * TIM HAL 会在 Break callback 之前清 BIF / B2IF。
- * 因此 Platform 必须把尚未被 HAL 消费的硬件 flag 合并进自己的 sticky episode。
- */
-static void latch_pending_timer_causes(void)
+static void latch_authoritative_evidence(void)
 {
     s_latched_causes |= pending_timer_causes();
+    s_latched_causes |= current_condition_causes();
+}
+
+static void stop_protection_sources(void)
+{
+    (void)HAL_COMP_Stop(&hcomp4);
+    (void)HAL_COMP_Stop(&hcomp3);
+    (void)HAL_COMP_Stop(&hcomp2);
+    (void)HAL_COMP_Stop(&hcomp1);
+
+    (void)HAL_DAC_Stop(&hdac3, DAC_CHANNEL_2);
+    (void)HAL_DAC_Stop(&hdac3, DAC_CHANNEL_1);
+    (void)HAL_DAC_Stop(&hdac1, DAC_CHANNEL_1);
+}
+
+static bool configure_and_start_dac_thresholds(void)
+{
+    uint32_t ocp_code = ocp_dac_code();
+    uint32_t ovp_code = ovp_dac_code();
+
+    if (HAL_DAC_SetValue(
+            &hdac3,
+            DAC_CHANNEL_1,
+            DAC_ALIGN_12B_R,
+            ocp_code) != HAL_OK) {
+        return false;
+    }
+
+    if (HAL_DAC_SetValue(
+            &hdac3,
+            DAC_CHANNEL_2,
+            DAC_ALIGN_12B_R,
+            ocp_code) != HAL_OK) {
+        return false;
+    }
+
+    if (HAL_DAC_SetValue(
+            &hdac1,
+            DAC_CHANNEL_1,
+            DAC_ALIGN_12B_R,
+            ovp_code) != HAL_OK) {
+        return false;
+    }
+
+    if (HAL_DAC_Start(&hdac3, DAC_CHANNEL_1) != HAL_OK) {
+        return false;
+    }
+
+    if (HAL_DAC_Start(&hdac3, DAC_CHANNEL_2) != HAL_OK) {
+        return false;
+    }
+
+    if (HAL_DAC_Start(&hdac1, DAC_CHANNEL_1) != HAL_OK) {
+        return false;
+    }
+
+    return true;
+}
+
+static bool start_comparators(void)
+{
+    if (HAL_COMP_Start(&hcomp1) != HAL_OK) {
+        return false;
+    }
+
+    if (HAL_COMP_Start(&hcomp2) != HAL_OK) {
+        return false;
+    }
+
+    if (HAL_COMP_Start(&hcomp3) != HAL_OK) {
+        return false;
+    }
+
+    if (HAL_COMP_Start(&hcomp4) != HAL_OK) {
+        return false;
+    }
+
+    return true;
 }
 
 static void notify_urgent_rescan(void)
@@ -77,17 +199,46 @@ bool hardware_trip_bind(
 
 bool hardware_trip_arm(void)
 {
-    /*
-     * G431 的 OCP / OVP DAC threshold 仍属于未冻结、未实机资格化的 Target 参数。
-     * 在阈值明确之前不能启动 COMP protection path，否则无法声称该能力满足
-     * Hardware Trip Contract。保持 fail-closed，避免把任意 DAC code 当成安全事实。
-     */
+    if (!s_handler_bound || s_armed) {
+        return false;
+    }
+
     realtime_motor_io_safe_off();
-    return false;
+
+    /*
+     * Break hardware 本身不依赖 BIE 即可清 MOE。
+     * Arm 期间先关闭软件 Break interrupt source，防止 comparator 逐个启动时
+     * 产生半配置状态 callback；硬件 safe-off 始终有效。
+     */
+    __HAL_TIM_DISABLE_IT(&htim1, TIM_IT_BREAK);
+    __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_BREAK | TIM_FLAG_BREAK2);
+    s_latched_causes = HARDWARE_TRIP_CAUSE_NONE;
+
+    if (!configure_and_start_dac_thresholds()) {
+        stop_protection_sources();
+        return false;
+    }
+
+    if (!start_comparators()) {
+        stop_protection_sources();
+        __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_BREAK | TIM_FLAG_BREAK2);
+        return false;
+    }
+
+    /*
+     * Comparator 全部 active 后才建立正式 episode boundary。
+     * 若 arm 当下就存在保护条件，当前 condition / Break flag 会成为第一份 evidence。
+     */
+    s_armed = true;
+    latch_authoritative_evidence();
+    __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_BREAK);
+
+    return true;
 }
 
 bool hardware_trip_get_snapshot(HardwareTripSnapshot *out_snapshot)
 {
+    HardwareTripCauseFlags active_causes;
     uint32_t primask;
 
     if ((out_snapshot == NULL) || !s_armed) {
@@ -97,8 +248,12 @@ bool hardware_trip_get_snapshot(HardwareTripSnapshot *out_snapshot)
     primask = __get_PRIMASK();
     __disable_irq();
 
-    latch_pending_timer_causes();
-    out_snapshot->condition_active = protection_condition_active();
+    active_causes = current_condition_causes();
+    s_latched_causes |= pending_timer_causes();
+    s_latched_causes |= active_causes;
+
+    out_snapshot->condition_active =
+        (active_causes != HARDWARE_TRIP_CAUSE_NONE);
     out_snapshot->causes = s_latched_causes;
 
     if (primask == 0U) {
@@ -110,6 +265,7 @@ bool hardware_trip_get_snapshot(HardwareTripSnapshot *out_snapshot)
 
 bool hardware_trip_rearm(void)
 {
+    HardwareTripCauseFlags active_causes;
     uint32_t primask;
     bool success;
 
@@ -122,22 +278,24 @@ bool hardware_trip_rearm(void)
     primask = __get_PRIMASK();
     __disable_irq();
 
-    latch_pending_timer_causes();
-    if (protection_condition_active()) {
+    latch_authoritative_evidence();
+    active_causes = current_condition_causes();
+
+    if (active_causes != HARDWARE_TRIP_CAUSE_NONE) {
         success = false;
     } else {
         /*
-         * 这里是旧 observable protection episode 的退休边界。
-         * 清硬件 flag 后先清旧软件 latch；随后只要产生新的可观测 Trip，
-         * BIF/B2IF 或 COMP 当前状态就会使本次 re-arm fail-closed。
+         * 旧 episode 的 retirement boundary：
+         * 只清 boundary 之前已经观察到的 timer flag 和 sticky cause。
+         * boundary 之后出现的新 Break 会重新设置 BIF/B2IF，且不会被再次清除。
          */
         __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_BREAK | TIM_FLAG_BREAK2);
         s_latched_causes = HARDWARE_TRIP_CAUSE_NONE;
         __DSB();
 
-        latch_pending_timer_causes();
+        latch_authoritative_evidence();
         success = (s_latched_causes == HARDWARE_TRIP_CAUSE_NONE)
-            && !protection_condition_active();
+            && (current_condition_causes() == HARDWARE_TRIP_CAUSE_NONE);
     }
 
     if (primask == 0U) {
@@ -154,9 +312,8 @@ void HAL_TIMEx_BreakCallback(TIM_HandleTypeDef *htim)
     }
 
     /*
-     * HAL 在进入 callback 前已清 BIF；BRK1 的来源在当前 Target 中只有 COMP3。
-     * hardware trip 已先于本 ISR 清除 MOE，这里再执行 software safe-off，
-     * 使 Firmware 的 actuation epoch 同步失效。
+     * HAL 在进入 callback 前已清 BIF；当前 BRK1 唯一外部来源为 COMP3。
+     * 硬件 Break 已先于本 ISR 清 MOE，这里同步失效 Firmware actuation epoch。
      */
     realtime_motor_io_safe_off();
     s_latched_causes |= HARDWARE_TRIP_CAUSE_BUS_OVERVOLTAGE;
@@ -170,8 +327,8 @@ void HAL_TIMEx_Break2Callback(TIM_HandleTypeDef *htim)
     }
 
     /*
-     * BRK2 只汇聚 COMP1 / COMP2 / COMP4，因此公共 cause 只记录 OVERCURRENT，
-     * 不把具体 comparator / phase 泄漏到 Hardware Capability Contract。
+     * BRK2 汇聚 COMP1 / COMP2 / COMP4。
+     * 公共 cause 只记录 OVERCURRENT，不暴露具体 comparator / phase。
      */
     realtime_motor_io_safe_off();
     s_latched_causes |= HARDWARE_TRIP_CAUSE_OVERCURRENT;
