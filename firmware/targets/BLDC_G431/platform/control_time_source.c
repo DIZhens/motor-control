@@ -11,8 +11,7 @@ void control_time_source_reset(void)
     __disable_irq();
     s_control_time = 0U;
 
-    if (primask == 0U)
-    {
+    if (primask == 0U) {
         __enable_irq();
     }
 }
@@ -31,8 +30,7 @@ ControlTime control_time_source_now(void)
     __disable_irq();
     value = s_control_time;
 
-    if (primask == 0U)
-    {
+    if (primask == 0U) {
         __enable_irq();
     }
 

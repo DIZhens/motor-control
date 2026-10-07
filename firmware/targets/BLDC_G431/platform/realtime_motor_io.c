@@ -8,10 +8,10 @@
 
 #include "control_time_source.h"
 
-#define CURRENT_ADC_FULL_SCALE_COUNTS        (4095.0f)
-#define CURRENT_ADC_VREF_NOMINAL_V           (3.3f)
-#define CURRENT_SENSE_BIAS_NOMINAL_V         (1.623f)
-#define CURRENT_SENSE_GAIN_NOMINAL_V_PER_A   (0.7049f)
+#define CURRENT_ADC_FULL_SCALE_COUNTS (4095.0f)
+#define CURRENT_ADC_VREF_NOMINAL_V (3.3f)
+#define CURRENT_SENSE_BIAS_NOMINAL_V (1.623f)
+#define CURRENT_SENSE_GAIN_NOMINAL_V_PER_A (0.7049f)
 
 static PhaseCurrentSampleReadyHandler s_sample_ready_handler;
 static void *s_sample_ready_context;
@@ -53,8 +53,7 @@ bool realtime_motor_io_bind_sample_ready(
     PhaseCurrentSampleReadyHandler handler,
     void *context)
 {
-    if ((handler == NULL) || s_sample_ready_bound || s_armed || s_timing_started)
-    {
+    if ((handler == NULL) || s_sample_ready_bound || s_armed || s_timing_started) {
         return false;
     }
 
@@ -67,28 +66,23 @@ bool realtime_motor_io_bind_sample_ready(
 
 bool realtime_motor_io_arm(void)
 {
-    if (!s_sample_ready_bound || s_armed || s_timing_started)
-    {
+    if (!s_sample_ready_bound || s_armed || s_timing_started) {
         return false;
     }
 
-    if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK)
-    {
+    if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK) {
         return false;
     }
 
-    if (HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED) != HAL_OK)
-    {
+    if (HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED) != HAL_OK) {
         return false;
     }
 
-    if (HAL_OPAMP_Start(&hopamp1) != HAL_OK)
-    {
+    if (HAL_OPAMP_Start(&hopamp1) != HAL_OK) {
         return false;
     }
 
-    if (HAL_OPAMP_Start(&hopamp2) != HAL_OK)
-    {
+    if (HAL_OPAMP_Start(&hopamp2) != HAL_OK) {
         (void)HAL_OPAMP_Stop(&hopamp1);
         return false;
     }
@@ -97,14 +91,12 @@ bool realtime_motor_io_arm(void)
      * ADC2 先进入 external-trigger ready，ADC1 作为唯一 injected IRQ authority。
      * 两路均由同一个 TIM1 TRGO2 触发、单 rank、相同 sampling time。
      */
-    if (HAL_ADCEx_InjectedStart(&hadc2) != HAL_OK)
-    {
+    if (HAL_ADCEx_InjectedStart(&hadc2) != HAL_OK) {
         stop_current_acquisition();
         return false;
     }
 
-    if (HAL_ADCEx_InjectedStart_IT(&hadc1) != HAL_OK)
-    {
+    if (HAL_ADCEx_InjectedStart_IT(&hadc1) != HAL_OK) {
         stop_current_acquisition();
         return false;
     }
@@ -119,13 +111,11 @@ bool realtime_motor_io_start_drive_timing(void)
 {
     uint32_t output_enable_mask;
 
-    if (!s_armed || s_timing_started)
-    {
+    if (!s_armed || s_timing_started) {
         return false;
     }
 
-    if ((htim1.Instance->CR1 & TIM_CR1_CEN) != 0U)
-    {
+    if ((htim1.Instance->CR1 & TIM_CR1_CEN) != 0U) {
         return false;
     }
 
@@ -185,8 +175,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     uint32_t raw_c;
     bool adc2_complete;
 
-    if ((hadc != &hadc1) || !s_armed || !s_timing_started)
-    {
+    if ((hadc != &hadc1) || !s_armed || !s_timing_started) {
         return;
     }
 
@@ -194,8 +183,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     raw_c = HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_1);
 
     adc2_complete = (__HAL_ADC_GET_FLAG(&hadc2, ADC_FLAG_JEOS) != 0U);
-    if (!adc2_complete)
-    {
+    if (!adc2_complete) {
         s_current_pair_synchronized = false;
     }
 
@@ -206,8 +194,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     observation.observation_time = observation_time;
     observation.acquisition_valid = false;
 
-    if (adc2_complete && s_current_pair_synchronized)
-    {
+    if (adc2_complete && s_current_pair_synchronized) {
         raw_b = HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_1);
         __HAL_ADC_CLEAR_FLAG(&hadc2, ADC_FLAG_JEOC | ADC_FLAG_JEOS);
 
