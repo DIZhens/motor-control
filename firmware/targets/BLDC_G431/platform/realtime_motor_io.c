@@ -249,15 +249,23 @@ bool realtime_motor_io_power_enable(void)
         return false;
     }
 
-    if ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) != 0U) {
-        return false;
-    }
-
     primask = __get_PRIMASK();
     __disable_irq();
 
-    SET_BIT(htim1.Instance->BDTR, TIM_BDTR_MOE);
-    enabled = ((htim1.Instance->BDTR & TIM_BDTR_MOE) != 0U);
+    if ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) != 0U) {
+        enabled = false;
+    } else {
+        SET_BIT(htim1.Instance->BDTR, TIM_BDTR_MOE);
+        __DSB();
+
+        enabled = ((htim1.Instance->BDTR & TIM_BDTR_MOE) != 0U)
+            && ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) == 0U);
+
+        if (!enabled) {
+            CLEAR_BIT(htim1.Instance->BDTR, TIM_BDTR_MOE);
+        }
+    }
+
     s_power_enabled = enabled;
 
     if (primask == 0U) {
