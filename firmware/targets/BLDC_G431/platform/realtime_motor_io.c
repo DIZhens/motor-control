@@ -6,6 +6,7 @@
 #include "opamp.h"
 #include "tim.h"
 
+#include "bus_observation_internal.h"
 #include "control_time_source.h"
 #include "position_observation_internal.h"
 
@@ -206,4 +207,5 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 
     s_sample_ready_handler(s_sample_ready_context, &observation);
     position_observation_fast_tick(observation_time);
+    bus_observation_fast_tick(observation_time);
 }

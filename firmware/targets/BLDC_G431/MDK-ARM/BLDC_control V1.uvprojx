@@ -475,6 +475,11 @@
               <FileType>1</FileType>
               <FilePath>../platform/position_observation.c</FilePath>
             </File>
+            <File>
+              <FileName>bus_observation.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../platform/bus_observation.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
