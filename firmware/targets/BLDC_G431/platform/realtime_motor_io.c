@@ -178,7 +178,9 @@ bool realtime_motor_io_start_drive_timing(void)
      * CH1/2/3 已启用 preload。计数器尚未启动时用一次 UG 把 neutral preload
      * 转入 active register，保证 Drive Timing 从确定的零线电压状态开始。
      */
-    __HAL_TIM_GENERATE_EVENT(&htim1, TIM_EVENTSOURCE_UPDATE);
+    if (HAL_TIM_GenerateEvent(&htim1, TIM_EVENTSOURCE_UPDATE) != HAL_OK) {
+        return false;
+    }
     __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_UPDATE);
 
     output_enable_mask = TIM_CCER_CC1E | TIM_CCER_CC1NE
