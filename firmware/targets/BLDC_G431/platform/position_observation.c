@@ -11,7 +11,9 @@
 /* 当前 20 kHz fast tick 每 20 tick 发起一次 SSI 采集，即 1 kHz。 */
 #define POSITION_ACQUISITION_DIVIDER (20U)
 
-#define MT6701_FRAME_SIZE_BYTES (3U)
+#define MT6701_TRANSFER_SIZE_BYTES (4U)
+#define MT6701_FRAME_TRAILING_BITS (7U)
+#define MT6701_FRAME_MASK (0x00FFFFFFU)
 #define MT6701_ANGLE_SHIFT (10U)
 #define MT6701_STATUS_SHIFT (6U)
 #define MT6701_STATUS_MASK (0x0FU)
@@ -22,7 +24,7 @@
 #define MT6701_CRC_POLYNOMIAL_LOW (0x03U)
 #define MT6701_ANGLE_COUNTS_PER_TURN (16384.0f)
 
-static uint8_t s_rx_frame[MT6701_FRAME_SIZE_BYTES];
+static uint8_t s_rx_frame[MT6701_TRANSFER_SIZE_BYTES];
 static PositionObservation s_publications[2];
 
 static volatile uint32_t s_active_publication_index;
@@ -107,9 +109,17 @@ static bool frame_is_valid(uint32_t frame)
 
 static uint32_t assemble_frame(void)
 {
-    return ((uint32_t)s_rx_frame[0] << 16U)
-        | ((uint32_t)s_rx_frame[1] << 8U)
-        | (uint32_t)s_rx_frame[2];
+    uint32_t transfer = ((uint32_t)s_rx_frame[0] << 24U)
+        | ((uint32_t)s_rx_frame[1] << 16U)
+        | ((uint32_t)s_rx_frame[2] << 8U)
+        | (uint32_t)s_rx_frame[3];
+
+    /*
+     * SPI1 空闲高、首边沿采样：首个下降沿先采到一位空闲 DO，
+     * 随后的上升沿才开始移出 D13。4 字节传输覆盖这一个前导位、
+     * 完整 24 位 SSI 帧和 7 位尾部数据；CRC 只校验有效帧。
+     */
+    return (transfer >> MT6701_FRAME_TRAILING_BITS) & MT6701_FRAME_MASK;
 }
 
 PositionTopology position_observation_get_topology(void)
@@ -195,7 +205,7 @@ void position_observation_fast_tick(ControlTime fast_tick_time)
     s_transfer_active = true;
 
     HAL_GPIO_WritePin(SPI1_CSN_GPIO_Port, SPI1_CSN_Pin, GPIO_PIN_RESET);
-    status = HAL_SPI_Receive_IT(&hspi1, s_rx_frame, MT6701_FRAME_SIZE_BYTES);
+    status = HAL_SPI_Receive_IT(&hspi1, s_rx_frame, MT6701_TRANSFER_SIZE_BYTES);
     if (status != HAL_OK) {
         HAL_GPIO_WritePin(SPI1_CSN_GPIO_Port, SPI1_CSN_Pin, GPIO_PIN_SET);
         s_transfer_active = false;
