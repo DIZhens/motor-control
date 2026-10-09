@@ -97,7 +97,7 @@ M0 / M1 均具有由高级定时器生成三相互补 PWM 的硬件条件。
 | M0_SO2 | PC1 / ADC11 | M0 current sense 2 |
 | M1_SO2 | PC2 / ADC12 | M1 current sense 2 |
 | M1_SO1 | PC3 / ADC13 | M1 current sense 1 |
-| M0_TEMP | PC4 / ADC14 | M0 NTC |
+| M0_TEMP | PC5 / ADC15 | M0 NTC |
 | M1_TEMP | PA4 / ADC4 | M1 NTC |
 | AUX_TEMP | PA5 / ADC5 | AUX NTC |
 | VBUS_S | PA6 / ADC6 | bus voltage |
@@ -115,7 +115,7 @@ M0 / M1 均具有由高级定时器生成三相互补 PWM 的硬件条件。
 | M0_ENC_Z | PC9 |
 | M1_ENC_A | PB6 |
 | M1_ENC_B | PB7 |
-| M1_ENC_Z | PC13 |
+| M1_ENC_Z | PC15 |
 | SPI3_SCK | PC10 |
 | SPI3_MISO | PC11 |
 | SPI3_MOSI | PC12 |
@@ -330,7 +330,7 @@ VCC → NTC10k → TEMP node → 3.3 kΩ → GND
 
 ```text
 M0: PB4 / PB5 / PC9
-M1: PB6 / PB7 / PC13
+M1: PB6 / PB7 / PC15
 ```
 
 各 A/B/Z 信号在原理图中有 3.3 kΩ 上拉。
