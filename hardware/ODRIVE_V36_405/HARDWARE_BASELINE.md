@@ -9,7 +9,7 @@
 ```text
 Board family       第三方 ODrive V3.6 兼容板 / loop222 驱动板405
 PCB silkscreen     V3.6-56V
-MCU                STM32F405RG-class，LQFP64
+MCU                STM32F405RGT6，LQFP64
 External clock     8 MHz
 Axes               2 × 3-phase motor axis: M0 / M1
 Gate driver        2 × EG2134（商家原理图标注，实物料号仍以芯片丝印为准）
@@ -22,7 +22,7 @@ CAN PHY            TJA1051T/3（商家原理图标注）
 USB                USB FS over USB Type-C
 ```
 
-MCU 的完整订货后缀尚未从实物顶层丝印独立复核；商家资料属于 STM32F405RG / ODrive V3.6 引脚体系。
+MCU 顶部丝印已由用户实物确认：`STM32F405RGT6`。
 
 ## 2. Supply and Voltage Boundary
 
