@@ -29,4 +29,7 @@ targets/custom_g431/
 └── MDK-ARM/
 ```
 
-第一步迁移现有 BLDC G431 工程时，先保持原始 CubeMX/Keil 结构并验证能正常打开、Rebuild 和下载，再开始架构重构。
+具体工程入口：
+
+- [BLDC_G431](targets/BLDC_G431/)：G431 自制板 Target。
+- [ODRIVE_V36_405_M0](targets/ODRIVE_V36_405_M0/README.md)：F405、M0、MT6701 / SPI3 Target；当前为功率关闭的观测入口，实机验收尚未完成。

@@ -182,6 +182,20 @@ static void notify_urgent_rescan(void)
     }
 }
 
+static void latch_trip_and_notify(HardwareTripCauseFlags cause)
+{
+    /*
+     * active Break 的 BIF/B2IF 不能清除，继续开 BIE 会反复进入最高优先级 ISR。
+     * 本 episode 只暂停软件通知；BKE/BK2E 和 comparator 仍持续硬件关断。
+     * 期间的新 cause 由 timer flag / condition 保留，snapshot 继续收集 evidence。
+     */
+    __HAL_TIM_DISABLE_IT(&htim1, TIM_IT_BREAK);
+    realtime_motor_io_safe_off();
+    s_latched_causes |= cause;
+    latch_authoritative_evidence();
+    notify_urgent_rescan();
+}
+
 bool hardware_trip_bind(
     HardwareTripHandler handler,
     void *context)
@@ -278,6 +292,7 @@ bool hardware_trip_rearm(void)
     primask = __get_PRIMASK();
     __disable_irq();
 
+    __HAL_TIM_DISABLE_IT(&htim1, TIM_IT_BREAK);
     latch_authoritative_evidence();
     active_causes = current_condition_causes();
 
@@ -298,6 +313,11 @@ bool hardware_trip_rearm(void)
             && (current_condition_causes() == HARDWARE_TRIP_CAUSE_NONE);
     }
 
+    if (success) {
+        /* 新 boundary 之后的 Break 保持 pending，恢复 BIE 后仍会通知。 */
+        __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_BREAK);
+    }
+
     if (primask == 0U) {
         __enable_irq();
     }
@@ -312,12 +332,11 @@ void HAL_TIMEx_BreakCallback(TIM_HandleTypeDef *htim)
     }
 
     /*
-     * HAL 在进入 callback 前已清 BIF；当前 BRK1 唯一外部来源为 COMP3。
+     * HAL 在 callback 前尝试清 BIF；active 条件下 flag 会保持。
+     * 当前 BRK1 唯一外部来源为 COMP3。
      * 硬件 Break 已先于本 ISR 清 MOE，这里同步失效 Firmware actuation epoch。
      */
-    realtime_motor_io_safe_off();
-    s_latched_causes |= HARDWARE_TRIP_CAUSE_BUS_OVERVOLTAGE;
-    notify_urgent_rescan();
+    latch_trip_and_notify(HARDWARE_TRIP_CAUSE_BUS_OVERVOLTAGE);
 }
 
 void HAL_TIMEx_Break2Callback(TIM_HandleTypeDef *htim)
@@ -330,7 +349,5 @@ void HAL_TIMEx_Break2Callback(TIM_HandleTypeDef *htim)
      * BRK2 汇聚 COMP1 / COMP2 / COMP4。
      * 公共 cause 只记录 OVERCURRENT，不暴露具体 comparator / phase。
      */
-    realtime_motor_io_safe_off();
-    s_latched_causes |= HARDWARE_TRIP_CAUSE_OVERCURRENT;
-    notify_urgent_rescan();
+    latch_trip_and_notify(HARDWARE_TRIP_CAUSE_OVERCURRENT);
 }
