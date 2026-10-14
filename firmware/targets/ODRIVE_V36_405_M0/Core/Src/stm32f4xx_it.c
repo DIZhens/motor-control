@@ -26,6 +26,7 @@
 #include "realtime_motor_io_internal.h"
 #include "position_observation_internal.h"
 #include "control_time_source.h"
+#include "target_validation.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -239,8 +240,8 @@ void TIM1_UP_TIM10_IRQHandler(void)
   /* USER CODE END TIM1_UP_TIM10_IRQn 0 */
   HAL_TIM_IRQHandler(&htim1);
   /* USER CODE BEGIN TIM1_UP_TIM10_IRQn 1 */
-
-  /* USER CODE END TIM1_UP_TIM10_IRQn 1 */
+    target_validation_update_irq();
+/* USER CODE END TIM1_UP_TIM10_IRQn 1 */
 }
 
 /**

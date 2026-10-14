@@ -26,26 +26,12 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stddef.h>
-#include "realtime_motor_io.h"
-#include "position_observation.h"
-#include "bus_observation.h"
+#include "target_validation.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-typedef struct
-{
-    RealtimeMotorIoFacts facts;
-    PhaseCurrentObservation current;
-    PositionObservation position;
-    BusObservation bus;
-    uint32_t fast_tick_count;
-    uint32_t invalid_current_count;
-    bool started;
-    bool position_available;
-    bool bus_available;
-} TargetProbe;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -61,7 +47,7 @@ typedef struct
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-static volatile TargetProbe s_target_probe;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -72,16 +58,7 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-/* Target 观测入口；仅供调试器查看，不决定 Motor / Fault / freshness policy。 */
-static void target_sample_ready(void *context, const PhaseCurrentObservation *observation)
-{
-    (void)context;
-    s_target_probe.current = *observation;
-    s_target_probe.fast_tick_count++;
-    if (!observation->acquisition_valid) {
-        s_target_probe.invalid_current_count++;
-    }
-}
+
 /* USER CODE END 0 */
 
 /**
@@ -92,10 +69,8 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-    RealtimeMotorIoFacts facts;
-    PositionObservation position;
-    BusObservation bus;
-  /* USER CODE END 1 */
+
+/* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -123,18 +98,11 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-    if (!realtime_motor_io_get_facts(&facts)
-        || !realtime_motor_io_bind_sample_ready(target_sample_ready, NULL)
-        || !position_observation_arm()
-        || !bus_observation_arm()
-        || !realtime_motor_io_arm()
-        || !realtime_motor_io_start_drive_timing()) {
+    if (!target_validation_start()) {
         Error_Handler();
     }
-    s_target_probe.facts = facts;
-    s_target_probe.started = true;
-    /* 本入口不 stage duty、不 enable power；六路 M0 输入保持 inactive。 */
-  /* USER CODE END 2 */
+    /* 默认只有观测；台架动作通过独立 mailbox 显式提交。 */
+/* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -143,17 +111,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    s_target_probe.position_available = position_observation_get_latest(&position);
-    if (s_target_probe.position_available) {
-        s_target_probe.position = position;
-    }
-    s_target_probe.bus_available = bus_observation_get_latest(&bus);
-    if (s_target_probe.bus_available) {
-        s_target_probe.bus = bus;
-    }
     __WFI();
   }
-  /* USER CODE END 3 */
+/* USER CODE END 3 */
 }
 
 /**

@@ -10,9 +10,13 @@ STM32F405RGT6 / 8 MHz HSE，第三方 ODrive V3.6 风格板的 M0，位置源为
 - Core / Drivers 由 CubeMX 维护；业务接入只写在 USER CODE 区。
 - platform 兑现现有三项公共 HCC，没有 Hardware Trip 实现。
 
-当前 main.c 是 Target-local 观测入口：绑定电流回调，启动三项观测及持续 Drive Timing，
-在调试器中查看 s_target_probe。默认保持功率关闭，不调用 Power Enable，
-不实现 Motor / Measurement / ControlRuntime / SystemRuntime。
+当前 main.c 接入 validation/target_validation：默认绑定观测回调、启动三项观测及持续
+Drive Timing，在调试器中查看 g_target_validation。台架请求写入独立 mailbox，
+PWM_BURST 需要单次确认值，复位后不自动运行；最长 10 ms，截止后 software safe-off。
+具体接线、操作顺序与验收边界见 [VALIDATION.md](VALIDATION.md)。
+CAPTURE_CURRENT 在功率关闭时一次采集 4096 个连续 B/C 样本，保留均值、范围和
+样本方差；不提交 duty，也不应用零点修正。结果用于后续 Measurement 的校准与噪声评估。
+本入口不实现 Motor / Measurement / ControlRuntime / SystemRuntime。
 
 ## 静态配置与实现
 
@@ -45,7 +49,8 @@ M1 的六路输入和 AUX 两路只配置为 GPIO LOW，不提供相应功能。
 10%～90% / 0.45 是首版待实测包络；VREFINT 使用 F405 的 1.21 V 名义值，
 不套用 G431 的 factory calibration。MT6701 的 32 clock framing 需本板无功率 L1 核对。
 
-交付后先由用户对正式 Keil 工程 Rebuild，检查 0 Error / 0 Warning。
+修改台架入口后，由用户对正式 Keil 工程 Rebuild，检查 0 Error / 0 Warning；
+完整链接的 MAP 必须保留 stage_phase_duty、power_enable、safe_off 和截止关断路径。
 配置与工程成员可以重复静态核对（Python 标准库，无额外依赖）：
 
     python firmware/targets/ODRIVE_V36_405_M0/verify_target.py

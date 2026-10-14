@@ -83,7 +83,8 @@ def check():
     require(len(paths) == len(set(paths)), "Duplicate Keil source member")
     for path in paths:
         require(path.is_file(), f"Missing Keil source: {path}")
-    sources = {p.resolve() for folder in ["Core/Src", "platform", "Drivers/STM32F4xx_HAL_Driver/Src"]
+    sources = {p.resolve() for folder in ["Core/Src", "platform", "validation",
+                                        "Drivers/STM32F4xx_HAL_Driver/Src"]
                for p in (ROOT / folder).glob("*.c")}
     require(sources == {p for p in paths if p.suffix == ".c"},
             "Keil C membership differs from formal source set")
@@ -91,7 +92,8 @@ def check():
     for path in includes:
         require((ROOT / "MDK-ARM" / path.replace("\\", "/")).is_dir(),
                 f"Missing Keil include: {path}")
-    for path in [(ROOT / "platform").resolve(), (ROOT / "../../platform_contract").resolve()]:
+    for path in [(ROOT / "platform").resolve(), (ROOT / "validation").resolve(),
+                 (ROOT / "../../platform_contract").resolve()]:
         require(path in {(ROOT / "MDK-ARM" / p.replace("\\", "/")).resolve() for p in includes},
                 f"Missing include binding: {path}")
 
@@ -106,7 +108,17 @@ def check():
     require("RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;" in main
             and "RCC_OscInitStruct.PLL.PLLN = 336;" in main, "Generated PLL mismatch")
     require(not re.search(r"\brealtime_motor_io_power_enable\s*\(", main),
-            "Observation entry must keep power disabled")
+            "main must not enable power directly")
+    require("target_validation_start()" in main, "Missing Target validation entry")
+    validation = read("validation/target_validation.c")
+    for fragment in ["g_target_validation_request.power_key = 0U;",
+                     "g_target_validation_request.sequence = 0U;",
+                     "request.power_key != TARGET_VALIDATION_POWER_KEY",
+                     "target_validation_update_irq", "realtime_motor_io_power_enable()",
+                     "realtime_motor_io_stage_phase_duty(&s_duty)"]:
+        require(fragment in validation, f"Missing validation guard/path: {fragment}")
+    irq = read("Core/Src/stm32f4xx_it.c")
+    require("target_validation_update_irq();" in irq, "Missing independent burst deadline")
     require(not list((ROOT / "platform").glob("*hardware_trip*")), "Unexpected Hardware Trip")
     print(f"PASS: IOC, generated timing, {len(paths)} Keil members, includes, power-disabled entry")
     print("Static checks only; Keil Rebuild and physical L1/L2 remain separate.")
