@@ -147,6 +147,7 @@ m.submit(2)
 m.tick(4)
 assert m.status('stage_successes') == 2 and m.word('model_enable_calls') == 0
 assert m.status('state') == 0 and m.status('result') == 1 and not m.moe()
+assert m.word('model_enable_diagnostic_calls') == 1
 passed('stage-only crosses callbacks without enabling power')
 
 for duty in [-1.0, 0.099, 0.901, 1.0, float('nan'), float('inf')]:

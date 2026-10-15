@@ -31,6 +31,8 @@ static uint64_t s_last_sample_cycle;
 static bool s_sample_seen;
 static volatile ControlTime s_last_sample_time;
 
+volatile RealtimeMotorIoEnableDiagnostics g_realtime_motor_io_enable_diagnostics;
+
 static void restore_interrupts(uint32_t primask)
 {
     if (primask == 0U) {
@@ -173,6 +175,34 @@ bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *request)
     return accepted;
 }
 
+void realtime_motor_io_capture_enable_diagnostics(void)
+{
+    uint32_t primask = __get_PRIMASK();
+    uint32_t flags;
+    uint32_t cr1;
+    uint32_t counter;
+
+    __disable_irq();
+    cr1 = TIM1->CR1;
+    counter = TIM1->CNT;
+    flags = (s_armed ? 1U : 0U) | (s_started ? 2U : 0U)
+        | (s_stage_window ? 4U : 0U) | (s_staged_this_tick ? 8U : 0U)
+        | (s_committed ? 16U : 0U)
+        | ((s_callback_epoch == s_enable_epoch) ? 32U : 0U)
+        | ((((cr1 & TIM_CR1_DIR) != 0U)
+            && (counter >= REALTIME_MOTOR_IO_STAGE_DEADLINE_COUNTS)) ? 64U : 0U);
+    g_realtime_motor_io_enable_diagnostics.flags = flags;
+    g_realtime_motor_io_enable_diagnostics.tim1_cr1 = cr1;
+    g_realtime_motor_io_enable_diagnostics.tim1_cnt = counter;
+    g_realtime_motor_io_enable_diagnostics.tim1_bdtr = TIM1->BDTR;
+    g_realtime_motor_io_enable_diagnostics.enable_epoch = s_enable_epoch;
+    g_realtime_motor_io_enable_diagnostics.callback_epoch = s_callback_epoch;
+    g_realtime_motor_io_enable_diagnostics.boundary_count = s_boundary_count;
+    __DMB();
+    g_realtime_motor_io_enable_diagnostics.capture_count++;
+    restore_interrupts(primask);
+}
+
 bool realtime_motor_io_power_enable(void)
 {
     uint32_t primask = __get_PRIMASK();
@@ -185,6 +215,10 @@ bool realtime_motor_io_power_enable(void)
         __DSB();
         enabled = ((TIM1->BDTR & TIM_BDTR_MOE) != 0U);
         s_power_enabled = enabled;
+    }
+    if (!enabled) {
+        /* 只在拒绝后记录，不给成功使能路径增加前置诊断开销。 */
+        realtime_motor_io_capture_enable_diagnostics();
     }
     restore_interrupts(primask);
     return enabled;

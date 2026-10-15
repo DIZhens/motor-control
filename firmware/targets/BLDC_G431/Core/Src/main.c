@@ -31,41 +31,12 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stddef.h>
-
-#include "bus_observation.h"
-#include "hardware_trip.h"
-#include "position_observation.h"
-#include "realtime_motor_io.h"
+#include "target_validation.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-/* 首板无功率诊断快照：仅供 Keil Watch 观察，不作为正式 Firmware API。 */
-typedef struct
-{
-    volatile uint32_t status;                /* 1=运行；101~110=启动失败；111=MOE 异常。 */
-    volatile uint32_t fast_ticks;            /* 实际收到的同步采样 callback 数量。 */
-    volatile uint32_t current_valid_ticks;   /* 本次 B/C 电流采集完整的次数。 */
-    volatile uint32_t current_invalid_ticks; /* 本次采集未完整的次数。 */
-    volatile uint32_t measured_phases;       /* 最近采集实际测得的物理相位位图。 */
-    volatile float phase_b_a;                /* 最近实际测得的 B 相电流，A。 */
-    volatile float phase_c_a;                /* 最近实际测得的 C 相电流，A。 */
-    volatile uint32_t position_samples;      /* 不同 ControlTime 的位置 publication 数。 */
-    volatile float position_turns;           /* 最近位置，机械圈。 */
-    volatile bool position_valid;            /* 最近位置采集是否有效。 */
-    volatile uint32_t bus_samples;           /* 不同 ControlTime 的母线 publication 数。 */
-    volatile float bus_voltage_v;            /* 最近母线电压，V。 */
-    volatile bool bus_valid;                 /* 最近母线采集是否有效。 */
-    volatile uint32_t trip_notifications;    /* 仅统计 rescan 通知，不作为 fault evidence。 */
-    volatile uint32_t trip_rescans;          /* 成功读取 authoritative snapshot 的次数。 */
-    volatile bool trip_armed;                /* protection arm 已成功；不表示 condition healthy。 */
-    volatile bool trip_snapshot_valid;       /* 最近一次 snapshot 读取是否成功。 */
-    volatile bool trip_condition_active;     /* authoritative snapshot 的当前物理条件。 */
-    volatile HardwareTripCauseFlags trip_causes; /* 尚未恢复 episode 的 sticky cause。 */
-    volatile uint32_t moe_checks;            /* 无功率 Bring-up 每个 fast tick 检查 MOE。 */
-    volatile uint32_t moe_violations;
-} PlatformBringupDebug;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -81,196 +52,18 @@ typedef struct
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-volatile PlatformBringupDebug g_platform_bringup;
-static ControlTime s_last_position_time;
-static ControlTime s_last_bus_time;
-static volatile bool s_trip_rescan_pending;
-static uint32_t s_last_bringup_poll_ms;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-static void platform_bringup_sample_ready(
-    void *context,
-    const PhaseCurrentObservation *observation);
-static void platform_bringup_start(void);
-static void platform_bringup_poll(void);
-static void platform_bringup_service(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-/*
- * 无功率 Bring-up：观测 ADC / SPI / ControlTime，并在时基启动前 arm protection。
- * 不提交 phase duty，不调用 realtime_motor_io_power_enable()。
- * 上板前仍需断开电机，并确认安全供电与功率路径。
- */
-static void platform_bringup_trip_notify(void *context)
-{
-    (void)context;
-    g_platform_bringup.trip_notifications++;
-    s_trip_rescan_pending = true;
-}
 
-static bool platform_bringup_rescan_trip(void)
-{
-    HardwareTripSnapshot snapshot;
-
-    if (!g_platform_bringup.trip_armed) {
-        return false;
-    }
-    if (!hardware_trip_get_snapshot(&snapshot)) {
-        g_platform_bringup.trip_snapshot_valid = false;
-        g_platform_bringup.status = 109U;
-        realtime_motor_io_safe_off();
-        return false;
-    }
-    g_platform_bringup.trip_condition_active = snapshot.condition_active;
-    g_platform_bringup.trip_causes = snapshot.causes;
-    g_platform_bringup.trip_snapshot_valid = true;
-    g_platform_bringup.trip_rescans++;
-    return true;
-}
-
-static void platform_bringup_sample_ready(
-    void *context,
-    const PhaseCurrentObservation *observation)
-{
-    (void)context;
-
-    g_platform_bringup.fast_ticks++;
-    g_platform_bringup.moe_checks++;
-    if ((TIM1->BDTR & TIM_BDTR_MOE) != 0U) {
-        g_platform_bringup.moe_violations++;
-        g_platform_bringup.status = 111U;
-        realtime_motor_io_safe_off();
-    }
-    g_platform_bringup.measured_phases = observation->measured_phases;
-
-    if (observation->acquisition_valid) {
-        g_platform_bringup.current_valid_ticks++;
-    } else {
-        g_platform_bringup.current_invalid_ticks++;
-    }
-
-    if ((observation->measured_phases & PHASE_MASK_B) != 0U) {
-        g_platform_bringup.phase_b_a = observation->phase_b_a;
-    }
-
-    if ((observation->measured_phases & PHASE_MASK_C) != 0U) {
-        g_platform_bringup.phase_c_a = observation->phase_c_a;
-    }
-}
-
-static void platform_bringup_start(void)
-{
-    RealtimeMotorIoFacts facts;
-
-    /* 所有启动阶段都禁止功率输出；失败时保持 safe-off。 */
-    realtime_motor_io_safe_off();
-
-    if (!realtime_motor_io_get_facts(&facts)) {
-        g_platform_bringup.status = 101U;
-        return;
-    }
-
-    if (!realtime_motor_io_bind_sample_ready(
-            platform_bringup_sample_ready, NULL)) {
-        g_platform_bringup.status = 102U;
-        return;
-    }
-
-    if (!hardware_trip_bind(platform_bringup_trip_notify, NULL)) {
-        g_platform_bringup.status = 107U;
-        return;
-    }
-
-    if (!position_observation_arm()) {
-        g_platform_bringup.status = 103U;
-        return;
-    }
-
-    if (!bus_observation_arm()) {
-        g_platform_bringup.status = 104U;
-        return;
-    }
-
-    if (!realtime_motor_io_arm()) {
-        g_platform_bringup.status = 105U;
-        realtime_motor_io_safe_off();
-        return;
-    }
-
-    if (!hardware_trip_arm()) {
-        g_platform_bringup.status = 108U;
-        realtime_motor_io_safe_off();
-        return;
-    }
-    g_platform_bringup.trip_armed = true;
-    if (!platform_bringup_rescan_trip()) {
-        return;
-    }
-    if (g_platform_bringup.trip_condition_active
-        || (g_platform_bringup.trip_causes != HARDWARE_TRIP_CAUSE_NONE)) {
-        g_platform_bringup.status = 110U;
-        realtime_motor_io_safe_off();
-        return;
-    }
-
-    if (!realtime_motor_io_start_drive_timing()) {
-        g_platform_bringup.status = 106U;
-        realtime_motor_io_safe_off();
-        return;
-    }
-
-    g_platform_bringup.status = 1U;
-}
-
-static void platform_bringup_poll(void)
-{
-    PositionObservation position;
-    BusObservation bus;
-
-    /* 周期扫描也从 snapshot 获取 evidence，不依赖通知次数。 */
-    (void)platform_bringup_rescan_trip();
-
-    if (position_observation_get_latest(&position)) {
-        if (position.observation_time != s_last_position_time) {
-            s_last_position_time = position.observation_time;
-            g_platform_bringup.position_samples++;
-        }
-
-        g_platform_bringup.position_turns = position.mechanical_position_turns;
-        g_platform_bringup.position_valid = position.acquisition_valid;
-    }
-
-    if (bus_observation_get_latest(&bus)) {
-        if (bus.observation_time != s_last_bus_time) {
-            s_last_bus_time = bus.observation_time;
-            g_platform_bringup.bus_samples++;
-        }
-
-        g_platform_bringup.bus_voltage_v = bus.voltage_v;
-        g_platform_bringup.bus_valid = bus.acquisition_valid;
-    }
-}
-
-static void platform_bringup_service(void)
-{
-    uint32_t now_ms;
-
-    if (s_trip_rescan_pending) {
-        /* 先消费通知；扫描期间的新通知保留到下次 service。 */
-        s_trip_rescan_pending = false;
-        (void)platform_bringup_rescan_trip();
-    }
-    now_ms = HAL_GetTick();
-    if ((now_ms - s_last_bringup_poll_ms) >= 10U) {
-        s_last_bringup_poll_ms = now_ms;
-        platform_bringup_poll();
-    }
-}
 /* USER CODE END 0 */
 
 /**
@@ -320,7 +113,7 @@ int main(void)
   MX_USB_PCD_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-  platform_bringup_start();
+  target_validation_start();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -331,7 +124,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     /* 周期观测保持 10 ms；不在 HAL_Delay 中延后 urgent rescan。 */
-    platform_bringup_service();
+    target_validation_service();
   }
   /* USER CODE END 3 */
 }

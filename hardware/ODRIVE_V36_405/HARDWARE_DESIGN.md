@@ -456,6 +456,11 @@ PGND
 
 Gate Driver 为 EG2132。
 
+AUX 接口的正端连接 Q7 Source / Q8 Drain 的半桥中点，负端连接 PGND。
+主电源应接板边 DC 接口，不从 AUX 输入。若电源正端误接 AUX 正端，
+可经 Q7 从 Source 到 Drain 的体二极管给 DCBUS 充电和供电，形成一段结压降；
+不把这条误供电路径视为主输入的保护设计。
+
 ```text
 PB11 AUX_H
 PB10 AUX_L

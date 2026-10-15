@@ -23,6 +23,7 @@ uint32_t model_drive_start_ok = 1;
 float model_current_b_a;
 float model_current_c_a;
 uint32_t model_tick_step_us = 50;
+uint32_t model_enable_diagnostic_calls;
 
 static PhaseCurrentSampleReadyHandler model_handler;
 static void *model_context;
@@ -113,6 +114,10 @@ bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *duty)
         model_common_duty_failures++;
     }
     return model_stage_ok != 0;
+}
+void realtime_motor_io_capture_enable_diagnostics(void)
+{
+    model_enable_diagnostic_calls++;
 }
 bool realtime_motor_io_power_enable(void)
 {

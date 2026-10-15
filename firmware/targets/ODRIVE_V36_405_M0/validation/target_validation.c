@@ -4,6 +4,7 @@
 #include <float.h>
 #include "tim.h"
 #include "control_time_source.h"
+#include "realtime_motor_io_internal.h"
 
 #define OBSERVATION_DIVIDER (20U)
 #define BUS_MAX_AGE_US (5000U)
@@ -281,6 +282,8 @@ static void run_test(const PhaseCurrentObservation *current, ControlTime now)
             s_staging_ticks++;
             if (s_staging_ticks >= 2U) {
                 if (!s_power_requested) {
+                    /* 先观察使能前提再关断；STAGE_ONLY 始终不调用 power_enable。 */
+                    realtime_motor_io_capture_enable_diagnostics();
                     stop_test(TARGET_VALIDATION_RESULT_COMPLETE);
                 } else if (!s_powered) {
                     g_target_validation.enable_attempts++;

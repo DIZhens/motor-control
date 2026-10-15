@@ -167,39 +167,32 @@ RDP      未修改
 
 ## 7. Current Bring-up Baseline
 
-当前已经验证：
+截至 2026-10-15，当前首板完成本轮修复后的无电机基础故障初筛。
+供电为 UTP1306-II 的 12 V / 50 mA 限流，无电池、无电机；ST-Link 的 3V3 供电线断开。
+静态用户读数为 VBUS 约 12.1 V、3V3 约 3.33 V、输入约 16 mA / CV，30 s 观察稳定。
 
-```text
-SWD connection                 PASS
-Option Bytes readback          PASS
-nSWBOOT0=0, nBOOT0=1          PASS
-Keil full Rebuild ×2           0 Error / 0 Warning
-Flash program                  PASS
-Flash verify                   PASS
-```
+| 项目 | 当前结论与证据范围 |
+| --- | --- |
+| 启动、构建及镜像 | SWD、Option Bytes、烧录/回读核对通过；本轮主动验证镜像 B5357289…，构建 0 Error / 0 Warning、63 个 ARM 模型用例通过 |
+| 原低阻与异常发热 | 更换 DRV8300DPWR 和三颗自举电容后未复现；最后一轮用户报告电源/DRV 无异常。最初原因未能区分芯片损伤与拆焊消除连锡等可能 |
+| 六路静态 VGS | 用户万用表报告均约 0 V；三相对 GND 的上电静态高电位不能单独判定 MOS 导通 |
+| LA/LB/LC 低侧基本波形 | 20 kHz / 共同 50% 基本电平与周期检查通过；LA 照片，LB/LC 用户人工复核 |
+| MA/MB/MC 相端基本波形 | 无负载周期切换、频率与占空比初筛通过；MA 照片，MB/MC 用户人工复核 |
+| 高侧 A/B/C 稳定平台 | Gate/GND 与 Source/GND 双通道同一时刻的平台差粗查通过；A/C 照片，B 用户人工复核，导通 VGS 约 10～11 V、关断差接近 0 V |
+| 结束后的软件/寄存器证据 | 共 14 次独立短脉冲；各次成功完成后核对 MOE=0、六路输入 LOW、测试计时停止、key 消费、保护无故障及无重放。计数不是 Gate 精确关断延迟测量 |
+| 采样与逻辑保护诊断 | 无功率连续采样、软件截止/ADC IRQ 丢失及 Trip 通知/恢复诊断有独立通过记录，不替代真实带功率保护验收 |
 
-同日将 Hardware Trip 接入普通 Bring-up：bind → arm protection → start drive timing；callback 仅请求 rescan，故障事实来自 authoritative snapshot。正式 4 A OCP / 17 V OVP 配置下，全量构建为 0 Error / 0 Warning，烧录校验通过；连续 5 次重启均 arm 成功且无虚假 trip。约 22 秒无断点回归中，Current=20.00 kHz、invalid=0，Position/Bus=1 kHz，SSI CRC 抽样 25/25 通过；snapshot 有效、condition_active=false、causes=NONE，459333 次软件 MOE 检查未发现使能。供电条件仍为 ST-Link 3V3、无电池、无电机，未调用 Power Enable。
+原始阶段记录及每轮证据说明见 [首板实物调试记录](../../firmware/targets/BLDC_G431/COMMISSIONING.md)；
+当前操作步骤与状态表见 [台架验证](../../firmware/targets/BLDC_G431/VALIDATION.md)。
+HARDWARE_BASELINE 保留长期事实与当前边界，不继续逐条堆积操作流水。
 
-持续故障验证发现 active Break flag 无法清除会导致重复中断、阻塞后台 rescan。Target 已改为首次 Trip 后暂停 BIE 软件通知，保持 comparator 与 BKE/BK2E 硬件保护；显式 rearm 成功才恢复通知。约 2.3 秒持续 OVP 实测中通知次数不再增长，Current 保持约 20 kHz，SysTick 与 rescan 持续前进；BIE 暂停期间叠加 OCP，snapshot 仍保留两个 cause。6 次 active rearm 拒绝、5 次条件消失后恢复、新 episode boundary 竞争测试均通过，28 次观测 current invalid=0、SSI CRC 有效、MOE=0。一次性 rearm 验证入口已移除；普通固件重新全量构建、烧录校验通过，5 次重启与约 22 秒采集回归通过，456573 次软件 MOE 检查未发现使能。
+以下能力仍未完成实机资格化：
 
-此前进行 3S 电池供电、无电机、MOE=0 的静态检查：SWD 回读六路 MCU 驱动输入均低、保护 snapshot 无故障，Current/Position/Bus 采集正常；用户报告 VBUS 实测 12.04 V，3V3/VREF+ 和六路静态 VGS 符合预期。母线 ADC 约 11.9 V，该单点对照不构成测量校准。U5（DRV8300DPWR）随后被确认烫手；用户补充首次焊接后直接接电池时，该区域曾疑似短暂冒烟，来源未确认。故功率域静态验收未通过，停止带功率验证。
-
-断电排查发现原 B/C 自举支路为几 Ω、A 为 MΩ 级；C26 离板高阻，原焊盘仍低阻。移除 U5 和 C25–C27 后三路空焊盘均恢复高阻（用户报告至少 100 MΩ）；旧 U5 相关引脚粗测为 MΩ 级，密脚接触可靠性未确认。U5 移除状态下，六路 Gate–Source 均约 10 kΩ；三相高侧/低侧 Drain–Source 二极管档正向约 0.45 V、反向超量程，未见明显硬短路，该筛查不构成高压漏电或开关性能验收。已更换备用 DRV8300DPWR 并复装三颗自举电容，用户报告三路 BST–SH 在板阻值均约 40 MΩ，原低阻未复现；用户更正复装后的断电读数：VBUS 对 GND 约 46 kΩ 后上升变慢，47 kΩ / 5.1 kΩ 分压电阻在板分别约 42 kΩ / 4 kΩ；这与分压及其他并联支路的量级相符，未见母线硬短路，不据此判定电阻精度或功率域验收通过。尚不能确定原异常来自芯片内部损伤还是拆焊消除的连锡；新芯片未上电验证，尚无温度或支路电流实测。未执行主动 PWM 或带功率 Break 测试。
-
-以上只证明 MCU 工程、SWD、启动配置和下载链路可用，不代表以下能力已经完成实机验证：
-
-```text
-3-phase PWM waveform
-Gate VGS
-Current-sense offset / gain
-OCP / OVP / TIM1 Break
-MT6701
-UART / USB / FDCAN
-Motor operation
-FOC
-```
-
-后续验证必须按实际修改影响边界推进，不因为 Target 已能下载就提前宣称功率级或控制链路通过。
+- 实际瞬态峰值和精确动态 VGS / 死区；MA 负向尖峰尚未分离真实电路与鳄鱼夹地线引入的分量。
+- 不同 duty、相间时序及带负载 PWM。
+- 电流采样 offset / gain / 温漂校准；已有零点候选和噪声统计不作为校准完成。
+- 实际 OCP / OVP 阈值与 TIM1 Break 带功率关断。
+- MT6701 物理时序 / 位置精度、UART / USB / FDCAN、Motor operation 与 FOC。
 
 ## 8. Source of Truth
 
