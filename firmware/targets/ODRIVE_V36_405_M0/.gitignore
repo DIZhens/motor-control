@@ -1,0 +1,7 @@
+/MDK-ARM/ODRIVE_V36_405_M0/
+/MDK-ARM/DebugConfig/
+/MDK-ARM/RTE/
+/MDK-ARM/*.uvguix.*
+/MDK-ARM/*.lst
+/MDK-ARM/build*.log
+/MDK-ARM/EventRecorderStub.scvd

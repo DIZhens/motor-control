@@ -1,0 +1,3 @@
+# Local measurement records and frozen diagnostic scripts; do not commit raw artifacts.
+*
+!.gitignore

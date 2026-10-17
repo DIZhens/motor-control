@@ -97,7 +97,7 @@ M0 / M1 均具有由高级定时器生成三相互补 PWM 的硬件条件。
 | M0_SO2 | PC1 / ADC11 | M0 current sense 2 |
 | M1_SO2 | PC2 / ADC12 | M1 current sense 2 |
 | M1_SO1 | PC3 / ADC13 | M1 current sense 1 |
-| M0_TEMP | PC4 / ADC14 | M0 NTC |
+| M0_TEMP | PC5 / ADC15 | M0 NTC |
 | M1_TEMP | PA4 / ADC4 | M1 NTC |
 | AUX_TEMP | PA5 / ADC5 | AUX NTC |
 | VBUS_S | PA6 / ADC6 | bus voltage |
@@ -115,7 +115,7 @@ M0 / M1 均具有由高级定时器生成三相互补 PWM 的硬件条件。
 | M0_ENC_Z | PC9 |
 | M1_ENC_A | PB6 |
 | M1_ENC_B | PB7 |
-| M1_ENC_Z | PC13 |
+| M1_ENC_Z | PC15 |
 | SPI3_SCK | PC10 |
 | SPI3_MISO | PC11 |
 | SPI3_MOSI | PC12 |
@@ -294,13 +294,14 @@ Gain:              20
 
 ```text
 DCBUS
- ↓ 39 kΩ
+ ↓ R5 / 39 kΩ
 VBUS_S
- ↓ 2.2 kΩ
+ ↓ R12 / 2.2 kΩ
 GND
 ```
 
-并有 100 nF 级滤波电容。
+滤波电容为 C3（100 nF），并在 R12 两端。以上为商家单排 MOS 原理图标称值，
+不等于实物阻值已完成测量。该图未在 DCBUS 到分压上臂之间画出串联二极管。
 
 ```text
 VBUS_S → PA6 / ADC6
@@ -330,7 +331,7 @@ VCC → NTC10k → TEMP node → 3.3 kΩ → GND
 
 ```text
 M0: PB4 / PB5 / PC9
-M1: PB6 / PB7 / PC13
+M1: PB6 / PB7 / PC15
 ```
 
 各 A/B/Z 信号在原理图中有 3.3 kΩ 上拉。
@@ -454,6 +455,11 @@ PGND
 ```
 
 Gate Driver 为 EG2132。
+
+AUX 接口的正端连接 Q7 Source / Q8 Drain 的半桥中点，负端连接 PGND。
+主电源应接板边 DC 接口，不从 AUX 输入。若电源正端误接 AUX 正端，
+可经 Q7 从 Source 到 Drain 的体二极管给 DCBUS 充电和供电，形成一段结压降；
+不把这条误供电路径视为主输入的保护设计。
 
 ```text
 PB11 AUX_H

@@ -9,7 +9,7 @@
 ```text
 Board family       第三方 ODrive V3.6 兼容板 / loop222 驱动板405
 PCB silkscreen     V3.6-56V
-MCU                STM32F405RG-class，LQFP64
+MCU                STM32F405RGT6，LQFP64
 External clock     8 MHz
 Axes               2 × 3-phase motor axis: M0 / M1
 Gate driver        2 × EG2134（商家原理图标注，实物料号仍以芯片丝印为准）
@@ -22,7 +22,7 @@ CAN PHY            TJA1051T/3（商家原理图标注）
 USB                USB FS over USB Type-C
 ```
 
-MCU 的完整订货后缀尚未从实物顶层丝印独立复核；商家资料属于 STM32F405RG / ODrive V3.6 引脚体系。
+MCU 顶部丝印已由用户实物确认：`STM32F405RGT6`。
 
 ## 2. Supply and Voltage Boundary
 
@@ -55,6 +55,13 @@ AMS1117-class LDO  → VCC / ~3.3 V
 ```
 
 以上器件型号来自商家原理图，实物替代料以板上丝印为准。
+
+主电源接板边标有 DC 的接口：正端与 R5 母线端同属 DCBUS，负端接 PGND；
+改用正确 DC 接口后，输入正端与 R5 母线端等电位已由实物测量核对。
+中间 AUX 接口的正端是制动半桥中点，负端接 PGND，不作为主电源输入。
+从 AUX 正端向板内供电时，上管 Q7 的体二极管可给 DCBUS 供电并产生约 0.6 V
+压降；该现象不属于主输入保护器件或实物版本差异的证据。
+母线观测应对照内部 DCBUS 的实际电压，不能按外部输入电压直接添加固定补偿。
 
 ## 3. PWM and Power Stage
 
@@ -127,7 +134,7 @@ PC3 / ADC13 → M1_SO1
 
 商家声明最大采样电流 60 A；该数值当前只视为商家规格，不视为已经验证的连续/峰值安全电流。
 
-用户已验证商家提供的 `5_Isample_M0_F4_2804_AS5600` 示例工程可以在本板上驱动电机运行。该事实确认了至少一条 M0 PWM → Gate Driver → 三相桥 → 电机及 AS5600 位置反馈链路可工作；不能据此单独宣称电流比例、同步采样与电流闭环已经完成精度验证。
+用户已验证商家提供的 `6双电机控制_F4/6_DoubleMotor_2804_AS5600` 示例工程可以在本板上驱动电机运行。该事实确认了至少一条 M0 PWM → Gate Driver → 三相桥 → 电机及 AS5600 位置反馈链路可工作；不能据此单独宣称电流比例、同步采样与电流闭环已经完成精度验证。
 
 ## 5. Bus and Thermal Observation
 
@@ -136,6 +143,9 @@ PC3 / ADC13 → M1_SO1
 ```text
 DCBUS → 39 kΩ / 2.2 kΩ divider → VBUS_S → PA6 / ADC6
 ```
+
+商家单排 MOS 原理图中，上臂为 R5（39 kΩ），下臂为 R12（2.2 kΩ），
+C3（100 nF）并在 R12 两端；R12 下端接 GND。器件标称值仍需与实物区分。
 
 理想分压比例约为：
 
@@ -146,7 +156,7 @@ DCBUS → 39 kΩ / 2.2 kΩ divider → VBUS_S → PA6 / ADC6
 温度通道：
 
 ```text
-M0_TEMP   → PC4 / ADC14
+M0_TEMP   → PC5 / ADC15
 M1_TEMP   → PA4 / ADC4
 AUX_TEMP  → PA5 / ADC5
 ```
@@ -166,7 +176,7 @@ M0 ENC Z → PC9
 
 M1 ENC A → PB6
 M1 ENC B → PB7
-M1 ENC Z → PC13
+M1 ENC Z → PC15
 ```
 
 商家还复用这些接口支持 AS5600：

@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G431xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../validation</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -659,6 +659,21 @@
         </Group>
         <Group>
           <GroupName>::CMSIS</GroupName>
+        </Group>
+        <Group>
+          <GroupName>Application/User/Validation</GroupName>
+          <Files>
+            <File>
+              <FileName>target_validation.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../validation/target_validation.c</FilePath>
+            </File>
+              <File>
+                <FileName>protection_probe.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>../validation/protection_probe.c</FilePath>
+              </File>
+          </Files>
         </Group>
       </Groups>
     </Target>

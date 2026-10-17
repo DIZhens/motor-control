@@ -9,4 +9,4 @@
 - `HARDWARE_BASELINE.md`：Firmware 快速读取的长期硬件事实与安全边界；
 - `HARDWARE_DESIGN.md`：更完整的电路、接口、证据来源、冲突与待确认项。
 
-本目录只记录硬件事实，不表示当前阶段已经启用 ODrive Firmware Target。当前阶段软件目标仍以根目录 `ARCHITECTURE.md` 为准。
+本目录只记录硬件事实，不承担当前阶段状态管理。当前开发阶段由活动 Git Branch / PR 表达；长期系统约束仍以根目录 `ARCHITECTURE.md` 为准。

@@ -1,0 +1,168 @@
+#ifndef BLDC_G431_TARGET_VALIDATION_H
+#define BLDC_G431_TARGET_VALIDATION_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "hardware_trip.h"
+#include "realtime_motor_io.h"
+#include "position_observation.h"
+#include "bus_observation.h"
+
+/* 首板无功率诊断快照：仅供 Keil Watch 观察，不作为正式 Firmware API。 */
+typedef struct
+{
+    volatile uint32_t status;                /* 1=运行；101~110=启动失败；111=MOE 异常；112=时钟错误。 */
+    volatile uint32_t fast_ticks;            /* 实际收到的同步采样 callback 数量。 */
+    volatile uint32_t current_valid_ticks;   /* 本次 B/C 电流采集完整的次数。 */
+    volatile uint32_t current_invalid_ticks; /* 本次采集未完整的次数。 */
+    volatile uint32_t measured_phases;       /* 最近采集实际测得的物理相位位图。 */
+    volatile float phase_b_a;                /* 最近实际测得的 B 相电流，A。 */
+    volatile float phase_c_a;                /* 最近实际测得的 C 相电流，A。 */
+    volatile uint32_t position_samples;      /* 不同 ControlTime 的位置 publication 数。 */
+    volatile float position_turns;           /* 最近位置，机械圈。 */
+    volatile bool position_valid;            /* 最近位置采集是否有效。 */
+    volatile uint32_t bus_samples;           /* 不同 ControlTime 的母线 publication 数。 */
+    volatile float bus_voltage_v;            /* 最近母线电压，V。 */
+    volatile bool bus_valid;                 /* 最近母线采集是否有效。 */
+    volatile uint32_t trip_notifications;    /* 仅统计 rescan 通知，不作为 fault evidence。 */
+    volatile uint32_t trip_rescans;          /* 成功读取 authoritative snapshot 的次数。 */
+    volatile bool trip_armed;                /* protection arm 已成功；不表示 condition healthy。 */
+    volatile bool trip_snapshot_valid;       /* 最近一次 snapshot 读取是否成功。 */
+    volatile bool trip_condition_active;     /* authoritative snapshot 的当前物理条件。 */
+    volatile HardwareTripCauseFlags trip_causes; /* 尚未恢复 episode 的 sticky cause。 */
+    volatile uint32_t moe_checks;            /* 无功率 Bring-up 每个 fast tick 检查 MOE。 */
+    volatile uint32_t moe_violations;
+} PlatformBringupDebug;
+
+/*
+ * 保留原 Bring-up 的 Watch 名称及布局，便于沿用已有离线读回工具。
+ * ADC callback、Trip IRQ 和后台分别更新所属字段；整份结构不是一致性快照。
+ * 运行中按独立字段观察，不能将一次大块 SWD 读取视为同一采集时刻。
+ */
+extern volatile PlatformBringupDebug g_platform_bringup;
+
+typedef enum {
+    TARGET_VALIDATION_COMMAND_NONE = 0,
+    TARGET_VALIDATION_COMMAND_SAFE_OFF = 1,
+    TARGET_VALIDATION_COMMAND_STAGE_ONLY = 2,
+    TARGET_VALIDATION_COMMAND_PWM_BURST = 3,
+    TARGET_VALIDATION_COMMAND_CAPTURE_CURRENT = 4,
+    TARGET_VALIDATION_COMMAND_BREAK_OVP = 5,
+    TARGET_VALIDATION_COMMAND_BREAK_OCP_C = 6,
+    TARGET_VALIDATION_COMMAND_BREAK_OCP_AB = 7,
+    TARGET_VALIDATION_COMMAND_CLEAR_INJECTION = 8,
+    TARGET_VALIDATION_COMMAND_REARM = 9
+} TargetValidationCommand;
+
+typedef enum {
+    TARGET_VALIDATION_STATE_OBSERVE = 0,
+    TARGET_VALIDATION_STATE_STAGING = 1,
+    TARGET_VALIDATION_STATE_POWERED = 2,
+    TARGET_VALIDATION_STATE_CAPTURING_CURRENT = 3
+} TargetValidationState;
+
+typedef enum {
+    TARGET_VALIDATION_RESULT_NONE = 0,
+    TARGET_VALIDATION_RESULT_COMPLETE = 1,
+    TARGET_VALIDATION_RESULT_OPERATOR_STOP = 2,
+    TARGET_VALIDATION_RESULT_LOCKED = 3,
+    TARGET_VALIDATION_RESULT_BAD_REQUEST = 4,
+    TARGET_VALIDATION_RESULT_BUSY = 5,
+    TARGET_VALIDATION_RESULT_BAD_CURRENT = 6,
+    TARGET_VALIDATION_RESULT_BAD_BUS = 7,
+    TARGET_VALIDATION_RESULT_STAGE_REJECTED = 8,
+    TARGET_VALIDATION_RESULT_ENABLE_REJECTED = 9,
+    TARGET_VALIDATION_RESULT_PLATFORM_OFF = 10,
+    TARGET_VALIDATION_RESULT_HARDWARE_TRIP = 11,
+    TARGET_VALIDATION_RESULT_BAD_CLOCK = 12,
+    TARGET_VALIDATION_RESULT_PROBE_REJECTED = 13,
+    TARGET_VALIDATION_RESULT_BREAK_NOT_OBSERVED = 14,
+    TARGET_VALIDATION_RESULT_REARM_REJECTED = 15
+} TargetValidationResult;
+
+#define TARGET_VALIDATION_POWER_KEY (0x4310A11EU)
+#define TARGET_VALIDATION_MAX_BURST_US (10000U)
+#define TARGET_VALIDATION_CURRENT_SAMPLE_COUNT (4096U)
+#define TARGET_VALIDATION_PROBE_DURATION_US (2000U)
+
+/* 先写 payload，最后写新的非零 sequence；等待消费后再提交下一条。
+ * power_key 消费即清零，PWM_BURST / BREAK_* 必须逐次提供。不是安全认证。
+ * BREAK_* 固定 duration_us=2000 / common_duty=0.5，不允许带电机。 */
+typedef struct {
+    uint32_t sequence;
+    uint32_t command;
+    uint32_t power_key;
+    uint32_t duration_us; /* stage/burst 总时间 1000～10000 us，包含 staging。 */
+    float common_duty;   /* 三相相同，0.10～0.90；电机三相必须断开。 */
+} TargetValidationMailbox;
+
+typedef struct {
+    float mean_a;
+    float min_a;
+    float max_a;
+    float variance_a2; /* 无偏样本方差，不应用零点修正。 */
+} TargetValidationPhaseStatistics;
+
+typedef struct {
+    uint32_t request_sequence;
+    uint32_t result;
+    uint32_t sample_count;
+    uint32_t interval_min_cycles;
+    uint32_t interval_max_cycles;
+    ControlTime first_sample_time; /* 本 Target 1 tick = 50 us，不是 us。 */
+    ControlTime last_sample_time;
+    TargetValidationPhaseStatistics phase_b;
+    TargetValidationPhaseStatistics phase_c;
+} TargetValidationCurrentStatistics;
+
+/* 接收请求和结束时发布，期间保持不变；读前后 sequence 相同且为偶数。
+ * 仅 result=COMPLETE 且 sample_count=4096 才是完整窗口。 */
+typedef struct {
+    uint32_t sequence;
+    TargetValidationCurrentStatistics statistics;
+} TargetValidationCurrentCapture;
+
+/* ADC callback 是唯一运行期写者；整份读回需核对前后 sequence 为同一偶数。 */
+typedef struct {
+    uint32_t sequence;
+    uint32_t started;
+    uint32_t state;
+    uint32_t result;
+    uint32_t command_sequence;
+    uint32_t active_request_sequence;
+    uint32_t fast_tick_count;
+    uint32_t invalid_current_count;
+    uint32_t interval_min_cycles;
+    uint32_t interval_max_cycles;
+    uint32_t callback_max_cycles; /* 只计 consumer，不是整个 ADC ISR WCET。 */
+    uint32_t stage_attempts;
+    uint32_t stage_successes;
+    uint32_t enable_attempts;
+    uint32_t enable_successes;
+    uint32_t capture_samples;
+    uint32_t tim1_bdtr;
+    uint32_t tim1_ccer;
+    uint32_t guard_irq_count;
+    uint32_t trip_valid;
+    HardwareTripSnapshot trip;
+    RealtimeMotorIoFacts facts;
+    PhaseCurrentObservation current;
+    PositionObservation position;
+    BusObservation bus;
+} TargetValidationSnapshot;
+
+extern volatile TargetValidationMailbox g_target_validation_request;
+extern volatile TargetValidationSnapshot g_target_validation;
+extern volatile TargetValidationCurrentCapture g_target_validation_capture;
+/* ADC 丢失时快照可能停在旧状态；此字独立记录关断原因。 */
+extern volatile uint32_t g_target_validation_stop_reason;
+
+/* 外设初始化后调用一次；默认 OBSERVE，不消费复位前的请求。 */
+void target_validation_start(void);
+/* 主循环调用，处理保护通知并每 10 ms 轮询慢观测，不阻塞等待外设。 */
+void target_validation_service(void);
+/* 已配置的 TIM6_DAC IRQ 中调用；只处理 TIM6 update，不占用 DAC handler。 */
+void target_validation_guard_irq(void);
+
+#endif /* BLDC_G431_TARGET_VALIDATION_H */
