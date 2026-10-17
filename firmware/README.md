@@ -2,7 +2,21 @@
 
 MCU 电机控制固件。
 
-长期结构：
+## 实现边界
+
+当前两个 Target 的 `main()` 都进入各自的 `validation/` 台架程序，尚未接入正式 Motor / ControlRuntime。公共 HCC 头文件已经定义，不等于全部 Target 实现和实机验收均已完成。
+
+| 区域 | 当前内容 | 后续门槛 |
+| --- | --- | --- |
+| `platform_contract/` | 实时电流/驱动、位置、母线、ControlTime 和可选 Hardware Trip 的能力合同 | 逐个 Target 核对实现、失败语义与物理验收 |
+| `targets/BLDC_G431/` | Platform、单次命令台架、无电机实测与模型测试 | 补真实 staging deadline 检查；电流增益、动态功率级及带载控制尚未验收 |
+| `targets/ODRIVE_V36_405_M0/` | Platform、deadline/epoch 检查、功率关闭观测入口 | 当前固件实机验收；未提供可选 Hardware Trip，不能沿用 G431 的硬件保护结论 |
+| `app/` | 尚未建立；以下为长期设计 | 先明确控制闭环范围与底层进入条件 |
+
+公共应用使用 HCC，不直接依赖某一 Target 的 HAL、调试邮箱或保护注入命令。
+两板验证结果互不替代；模型、静态检查、目标编译和实物验证分别记录。
+
+## 长期结构
 
 ```text
 firmware/

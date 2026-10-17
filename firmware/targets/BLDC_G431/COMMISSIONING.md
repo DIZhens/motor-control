@@ -1,8 +1,13 @@
 # BLDC_G431 首板修复与实物调试记录
 
-记录范围：首板 Bring-up、DRV8300 修复，以及截至 2026-10-15 的第 14 次独立短脉冲请求。
+记录范围：首板 Bring-up、DRV8300 修复、截至 2026-10-15 的第 14 次独立短脉冲请求，
+以及 2026-10-17 的保护候选逻辑、12 V 静态、第 15/16/17 次 OVP、第 18/19 次 OCP，
+及 2026-10-17～18 的第 20/21 次 30%/70% PWM、第 22/23 次 70% 包末尾补采、第 24 次 AUTO 观察，
+随后功率关闭时的五窗电流统计与编码器手动正反转观测。
 本文件保存过程与证据边界；历史段落中的“待测”按当时状态保留，
 当前汇总以 [台架验证状态](VALIDATION.md) 和 [硬件基线](../../../hardware/BLDC_G431/HARDWARE_BASELINE.md) 为准。
+
+少量原始波形已另存为[公开证据](validation/evidence/20261018-baseline/README.md)。下文 `local-evidence` 链接为本机原始记录索引，不随仓库分发；历史操作指令不是当前待执行任务。
 
 ## 本轮证据定位
 
@@ -28,6 +33,418 @@
 106 个 ARM 执行模型用例通过，全量构建 0 Error / 0 Warning，候选 HEX 为
 29AB28611691DD220624708ECF826BE9EA31F4C82753418DCC6BE64D8F5FACFF。
 尚未烧录，没有新增实物验收。详见 [注入方案与验收步骤](validation/PROTECTION_PROBE.md)。
+
+### 2026-10-17：保护候选身份核对及 ST-Link 供电逻辑检查
+
+用户确认 OUTPUT 关闭、ST-Link 3V3 已接，无电池/电机。
+备份完整 128 KiB Flash 后发现已匹配保护候选 29AB2861… 的 29720 个镜像字节，
+本次未执行烧录；不能由此确定此前何时加载。首次连接未取得有效运行状态，
+无母线软件复位后运行恢复，初始状态原因未确定，仍需下一供电阶段核对自然上电启动。
+
+读取工具最初将 ARMCC 的 1 字节 PhaseMask 按 4 字节解码，已修正为从 AXF 同时取得
+字段偏移和宽度；修正前的该字段不作为硬件证据。27 项主机安全检查通过。
+修正后两次只读检查通过：status/started=1、OBSERVE、current invalid=0、
+Hardware Trip 健康、六路 LOW、MOE=0；采样与 SysTick 持续前进。
+随后六个明确的逻辑请求为 stage-only、4096 点采集、以及 key=0 的命令 3/5/6/7。
+前两项 COMPLETE，后四项 LOCKED；stage successes=2、enable attempts/successes=0、
+probe outcome/held=0、DAC 仍为 2065/345/345、TIM6 结束后关闭，无自动重放。
+观察约 19.991 samples/ms SysTick，consumer 最大 14.32 us（不是整个 ADC ISR WCET）。
+母线 ADC 约 2.65 V，与先前 ST-Link 3V3 记录相近；无万用表对照，不资格化真实电压/反灌。
+
+本次没有带功率请求，历史功率脉冲仍为 14 次。原始备份、复位前后读回、工具版本、
+命令与捕获结果见 [本次会话](validation/local-evidence/20261017-151739-probe-flash-logic/session-summary.json)。
+下一项为移除 ST-Link 3V3 后，12 V / 50 mA 的自然上电与静态检查，再准备受控 OVP。
+
+### 2026-10-17：12 V 静态及单次注入工具准备
+
+用户回报“12V供电无异常”。本次未执行 reset/download/halt，直接 HOTPLUG 读取到健康
+新启动状态：命令/stage/enable/capture 均为 0，采样和 SysTick 持续前进，current invalid=0，
+六路 LOW、MOE=0、Trip condition/cause=0，DAC 阈值 2065/345/345 未变。
+三次初读与随后严格预检的母线观测约 11.96～12.04 V；用户未另报精确电流与 CV/CC，
+不把此前 16 mA/CV 当作本次新读数。此次上电正常，首次连接异常的成因仍未确定。
+
+新增独立主机工具 probe_once.py，59 项无硬件状态机检查通过；logic_check.py 的读取层
+补充了 AXF 派生的 64 位观测时间及母线浮点值，原 27 项主机检查继续通过。
+工具从前次 summary 锚定静止计数和命令结果，核对 Flash/布局、路由、比较器和 DAC 模式，
+--preflight 只读通过；尚未执行 --execute-once，没有提供任何功率 key。
+功率脉冲历史仍为 14 次。波形人工确认后恢复分为四次独立命令：故障保持时 rearm 拒绝、
+清除注入但保留锁存、无功率 STAGE_ONLY 被锁存拒绝、显式 rearm 后保持输出关闭。
+
+工具版本、只读快照和检查记录见
+[本次静态证据](validation/local-evidence/20261017-153714-powered-static/qualified/summary.json)。
+下一项为 LA 单通道等待触发，用户“开始”后 8 秒可中断倒计时，再单次执行 OVP。
+
+### 2026-10-17：OVP 单次注入，寄存器证据通过，波形待确认
+
+用户“开始”后，先以 HOTPLUG 只读核对 Flash、布局、两次健康状态和前次静态证据。
+明确宣布 8 秒倒计时；等待完成后再次检查并仅提交一次 BREAK_OVP，sequence=1。
+工具返回 PROBE_OBSERVED_OFF_SCOPE_PENDING；本镜像本次启动的 enable attempts/successes=1/1，
+stage attempts/successes=5/5，guard IRQ=4。历史带功率请求累计 15 次，不将本次故障提前
+结束的 Gate 包宽当作 2 ms 截止时长。
+
+独立 capture 两次读取相同且 sequence=4：MOE before=1、COMP before=0、无 BIF/B2IF；
+随后 COMP3=高、BIF=1、MOE after=0。捕获期间可屏蔽 IRQ 已屏蔽，采集之前没有软件
+MOE 清零，采集后才软件 safe-off。elapsed=70 cycles / polls=1 仅为轮询观察区间，
+不是实际 Gate 传播延迟。consumer 最大 3135 cycles（18.44 us），不代表完整 ISR WCET。
+
+结束后 OBSERVE / result=stop=HARDWARE_TRIP，MOE=0、六路 LOW、TIM6 CEN/UIE 关闭，
+key 已清、ADC/SysTick 持续、invalid=0、无额外 enable。DAC1_CH1 仍为 0，其他两路
+仍为 345；COMP3/BIF 和 OVP sticky cause 保持，BIE 暂停软件通知，BKE/BK2E 不变。
+已告知用户可以放下探头，并请求 LA 波形及电源/DRV 状态。尚未清注入或 rearm；
+实际 Gate 和恢复流程均待确认，不把本轮寄存器观察直接作为完整硬件保护验收。
+证据、冻结工具和原始 CLI 读回见
+[本次 OVP 现场](validation/local-evidence/20261017-153714-powered-static/ovp-execute/observation-record.json)。
+
+### 2026-10-17：人工要求重测 OVP，第 16 次功率请求
+
+尚未收到首次照片时，用户明确要求“再来一次”。先只读检查，原本预期保持故障，
+实际发现命令/stage/enable/probe 计数均为 0、名义阈值已恢复、Trip 健康，是新的启动状态。
+这是状态变化，不是持续故障恢复通过；本主控没有发送 reset/clear/rearm，也不推定状态变化原因。
+首次寄存器证据仍在磁盘，首次 scope/recovery 均保持未验收。
+
+对新启动的两次只读结果执行完整健康检查、保存独立锚点后，宣布并完成 8 秒倒计时，
+仅提交一次新的 OVP。回读本次启动 sequence=1，stage=5、enable=1、guard IRQ=4；
+捕获再次为 COMP3/BIF 成立、软件 safe-off 前 MOE 1→0，elapsed=70 cycles / polls=1，
+不作为 Gate 延迟。结束时六路 LOW/MOE=0、TIM6 已关、invalid=0、阈值 0/345/345、
+OVP condition/cause 保持、BIE 暂停、CPU/采样运行，没有自动重放。历史功率请求累计 16。
+已立即通知用户可以放下探头；当前等待本次 LA 照片及电源/DRV 状态，尚未执行恢复。
+最新证据见 [本次人工重测](validation/local-evidence/20261017-153714-powered-static/ovp-repeat1-execute/observation-record.json)。
+
+### 2026-10-17：OVP 的 LA 包结束照片确认，恢复前连接未通过
+
+先收到 20 us/div 的周期局部照片，右端仍有高脉冲延伸出可见窗口，未据此验收包结束。
+随后收到同一 STOP 记录的 50 us/div 视图：CHA 为 X10 / DC / 5 V/div、上升沿约 4.97 V，
+水平偏移 281 us；显示频率 20.0 kHz、Vmax 12.2 V、正脉宽 24.8 us、Vmin -204 mV。
+可见四个完整高脉冲，末尾回到低电平并保持至窗口结束，起始另有很窄的边沿残迹。
+本图通过有限 Gate 包结束检查；不将自动极值、显示缩放或边沿残迹用于精确尖峰、
+死区、关断延迟或真实 17 V 阈值验收，也没有补发功率请求。
+原图及 SHA256/判读保存在
+[LA 包结束证据](validation/local-evidence/20261017-153714-powered-static/ovp-repeat1-execute/scope-la-packet-end.json)。
+
+恢复前的只读连接识别到 ST-Link，但未取得 MCU core ID。一次连接尚未结束时误启动的
+另一只读检查报 DEV_CONNECT_ERR，不把该次竞争当作独立 MCU 诊断；随后串行 1000 kHz
+HOTPLUG 仍未取得 core ID。没有 reset/halt、clear/rearm、阈值写入或新增 PWM。
+最后成功回读仍为第 16 次结束时的故障保持状态，不能称为照片后的实时状态。
+恢复四步均未执行；等待确认 OUTPUT/连接状态后重新核对本启动与原捕获的连续性。
+
+### 2026-10-17：确认曾断电，第 17 次补做 OVP 恢复
+
+用户说明此前已关闭电源、现在刚打开并要求继续。只读 HOTPLUG 恢复，Flash 仍逐字节匹配
+29AB2861…；新启动命令/stage/enable/probe 均为 0、保护健康、母线约 11.96 V、采样正常，
+MOE=0、六路 LOW。本次没有复位。前次连接失败发生在用户关电期间，不据此判断 MCU 故障，
+也不能认定所有历史连接失败均有同一原因。第 16 次照片继续有效，恢复未完成。
+
+为减少重复人工抓图，主机工具新增显式恢复用波形引用：核对先前同镜像/source、已通过的
+寄存器证据、包结束照片及哈希。只允许用于不使能输出的四步恢复；本轮 scope_qualified
+保持 false。新增引用来源错误、图片变化、功率命令误用、恢复中更换引用等反例后，
+74 项主机工具检查通过；原逻辑工具 27 项继续通过。固件与构建产物未改动，不重复编译。
+
+实时预检通过，明确宣布并完成 8 秒可中断等待，只提交第 17 次独立 OVP 注入。
+本次 sequence=1、stage=5 / enable=1 / guard=4；COMP3/BIF 成立且软件 safe-off 前 MOE 1→0，
+elapsed=70 cycles / polls=1，不能当作实际关断延迟。输出关闭、故障保持后，逐条检查并发送：
+
+1. sequence=2 REARM：REARM_REJECTED，held=1、COMP3/BIF/cause=OVP 均保持。
+2. sequence=3 CLEAR_INJECTION：恢复 2065/345/345、COMP 回低、held=0；OVP sticky 保留、BIE 仍暂停。
+3. sequence=4 STAGE_ONLY：HARDWARE_TRIP，stage/enable 计数未增加，验证锁存继续拒绝动作。
+4. sequence=5 REARM：成功，cause/COMP/Break=0、BIE 恢复，保护健康但不自动输出。
+
+四步来自同一连续启动和原 capture；active_request 始终为 1，stage/enable/guard 仍为 5/1/4，
+六路 LOW、MOE=0、TIM6 已关、采样和 SysTick 推进且 invalid=0。未自动重试、复位或烧录。
+本次没有新波形照片；关断波形证据来自第 16 次，恢复证据单独来自第 17 次。
+冻结工具、74/27 项主机检查结果、每步原始读回及结论见
+[本次恢复记录](validation/local-evidence/20261017-153714-powered-static/ovp-recovery-rearm/observation-record.json)。
+OVP 注入关断及恢复阶段通过，实际阈值、精确 Gate 延迟及 OCP/BRK2 仍待验收。
+
+### 2026-10-17：第 18 次 C 相 OCP，寄存器关断证据通过
+
+用户在说明交流后明确要求继续 C 相验证并“直接开始”。只读 HOTPLUG 核对同次 AXF/MAP、
+29720 字节 Flash 身份及健康状态，发现已是新的零事务启动；没有沿用第 17 次的运行期计数，
+本主控也没有复位。两次回读采样正常、保护健康、六路 LOW/MOE=0，母线约 11.94 V。
+当前主机工具 SHA256 与 74/27 项通过检查的冻结版本一致，无固件或工具修改。
+
+明确宣布并完成 8 秒可中断倒计时后，重新完整核对，只提交一次 BREAK_OCP_C（命令 6，
+2000 us / 共同 50%，使能后四个 ADC 回调再注入）。本启动 sequence=1，stage=5、
+enable 尝试/成功各 1、guard IRQ=4；历史功率请求累计 18 次，没有自动重试。
+
+capture sequence=4、source=C、outcome=OBSERVED：注入前 MOE=1、比较器全低、无 Break 标志；
+注入后 COMP1=高、B2IF=1、MOE=0，均在软件 safe-off 前采集。elapsed=70 cycles / polls=1，
+不能作为 Gate 关断延迟。consumer 最大 3144 cycles（约 18.49 us），不是整个 ADC ISR WCET。
+结束后两次回读均为六路 LOW/MOE=0、TIM6 关闭、key=0、invalid=0，CPU/采样继续；
+阈值为 2065/0/345、held=1、OCP condition/cause 保持，BIE 暂停且 BKE/BK2E 保留。
+
+已立即告知可以放下探头；当前等待本次 LA 包结束照片及电源/DRV 人工反馈，尚未 clear/rearm。
+C 相波形及四步恢复未验收，共享 AB 未执行，实际 4 A 门限和精确 Gate 延迟未资格化。
+证据、冻结工具与原始读回见
+[本次 C 相 OCP](validation/local-evidence/20261017-153714-powered-static/ocp-c-ready-230805-execute/observation-record.json)。
+
+### 2026-10-17：C 相 OCP 波形及同轮四步恢复通过
+
+用户提供第 18 次的 LA STOP 照片：100 us/div、水平偏移 0、X10 / DC / 5 V/div，
+CHA 上升沿 4.97 V；显示频率 20.0 kHz、正脉宽 24.8 us、Vmax 12.2 V、Vmin -204 mV。
+可见四个完整高脉冲及其后持续低电平，起始另有很窄的边沿残迹，有限 Gate 包结束检查通过。
+不由自动极值推定真实瞬态、死区或保护传播延迟。本次照片未附电源/DRV 人工状态报告，
+不代填精确输入电流、CV 或温升。原图及 SHA256/判读保存在该请求的 scope-la-packet-end.jpg/.json。
+
+恢复前重新核对当前 Flash、两次运行状态、原请求及 capture，确认同一连续启动内仍 held=1、
+COMP1/B2IF/OCP cause 保持、MOE=0、六路 LOW，母线约 12.00 V。随后四条无功率命令逐次验证：
+
+1. sequence=2 REARM 返回 REARM_REJECTED，故障持续时拒绝恢复。
+2. sequence=3 CLEAR_INJECTION 恢复阈值、COMP 回低、held=0，OCP sticky 仍保留且 BIE 暂停。
+3. sequence=4 STAGE_ONLY 返回 HARDWARE_TRIP，stage/enable 未增加，锁存继续阻止动作。
+4. sequence=5 REARM 成功，cause/COMP/Break 清零、BIE 恢复，但功率输出保持关闭。
+
+四步都锚定第 18 次原捕获，active_request=1，stage/enable/guard 始终为 5/1/4，
+六路 LOW、MOE=0、TIM6 已关、采样与 SysTick 继续且 invalid=0，没有自动重启。
+本次波形和恢复来自同一连续运行，未借用 OVP 照片，未新增 PWM、复位、烧录或修改固件。
+第 18 次 C 相注入关断及恢复阶段通过，共享 AB、实际 4 A 阈值和精确 Gate 延迟仍未验收。
+汇总与每步原始证据见
+[本次 C 相恢复](validation/local-evidence/20261017-153714-powered-static/ocp-c-recovery-rearm/observation-record.json)。
+
+### 2026-10-17：第 19 次共享 A/B 注入与恢复通过，本轮保护检查结束
+
+用户按“电源/DRV 无异常且单次触发就绪后回复开始”的准备说明回复“开始”，没有另报新的
+精确电流/CV 或温升数值。只读预检确认仍是 C 相恢复后的同一启动、镜像匹配、母线约 12.01 V、
+保护健康、采样正常、输出关闭；主机工具与冻结的 74/27 项检查版本一致。
+明确宣布并完成 8 秒可中断等待后重新检查，仅提交一次命令 7（2000 us / 共同 50%）。
+本启动 sequence=6，stage/enable/guard 从 5/1/4 增至 10/2/8，历史功率请求累计 19。
+
+capture sequence=10、request_sequence=6、source=AB、outcome=OBSERVED：注入前 MOE=1、
+比较器全低、无 Break 标志；随后 COMP2/4 同时高、B2IF=1、MOE=0，全部在软件 safe-off 前采集。
+elapsed=70 cycles / polls=1 为轮询观察区间；结束时六路 LOW/MOE=0、TIM6 关、key=0、
+阈值 2065/345/0、held=1、OCP condition/cause 保持，CPU/采样继续且 invalid=0。
+
+用户随即人工报告“和前面的波形一样”，接受为本请求的有限 LA 包结束及后续低电平功能确认；
+没有本次照片或逐项原始数值，不复制 C 相精确读数。重新只读核对同一请求及 held capture 后：
+
+1. sequence=7 REARM：REARM_REJECTED，故障存在时拒绝恢复。
+2. sequence=8 CLEAR_INJECTION：恢复阈值、COMP 回低、held=0，OCP sticky 保留。
+3. sequence=9 STAGE_ONLY：HARDWARE_TRIP，stage/enable 未增加。
+4. sequence=10 REARM：成功，cause/COMP/Break 清零、BIE 恢复，功率输出仍关闭。
+
+恢复全过程 active_request=6，stage/enable/guard 保持 10/2/8，未新增功率动作、复位或烧录。
+最后独立只读检查再次核对健康、镜像、关断、计数、原 capture 及采样推进，invalid=0、
+母线约 12.02 V，无自动重启。共享 A/B 同时激活不能单独资格化每条 OR 路由。
+共享 A/B 的寄存器、人工波形和同轮四步恢复见
+[本次 A/B 恢复](validation/local-evidence/20261017-153714-powered-static/ocp-ab-recovery-rearm/observation-record.json)。
+
+本轮 OVP、C 相及共享 A/B 受控注入的关断和恢复检查完成，汇总见
+[保护阶段证据](validation/local-evidence/20261017-153714-powered-static/protection-stage-summary.json)。
+OVP 采用第 16 次照片与第 17 次同轮恢复，C 相采用第 18 次照片与同轮恢复，共享 A/B 采用
+第 19 次人工波形复核与同轮恢复；不混合不同启动的故障持续状态。
+实际 4 A/17 V 门限、精确 Gate 延迟/动态 VGS/死区、不同 duty、带负载和电机运行仍未验收。
+下一阶段按 VALIDATION.md 补不同 duty 的无电机短脉冲；当前没有新的功率动作排队。
+
+### 2026-10-17：不同占空比验证离线准备，实物尚未执行
+
+用户要求继续下一步。确认当前固件命令 3 已支持可变共同 duty，生产 C 源码及 HEX/AXF/MAP
+仍匹配既有构建清单，本次没有改固件、重新构建目标镜像或烧录。
+新增独立主机工具 pwm_once.py，仅允许 30%/70%、2000 us，前后检查硬件配置、采样/保护、
+锚定计数、实际 mailbox 参数、一次使能与结束关断；失败不重发，写后失败只补 SAFE_OFF。
+62 项主机检查通过；原保护 74 项、逻辑 27 项继续通过。
+
+离线模型 fixture 记录实际收到的 PhaseDutyRequest，runner 加入 30%/70% 并核对三相实际传参，
+扩展后的 108 项 ARM 执行模型通过。仅模型文件变化，不修改固件 ABI 或生产代码；
+原 106 项构建清单作为历史冻结记录保留，不覆盖其源码哈希。
+还用上一阶段保存的 TIM1 原始数据静态核对了新工具的 PWM 配置解码；未取得新实时硬件状态。
+
+TIM1 PWM1 与互补低侧输出、DRV8300DPWR 非反相输入共同决定：程序 duty=30%/70% 时，
+LA 的名义高脉宽分别约 35/15 us，实际读数受死区与边沿影响，不能把低侧互补关系当作参数错误。
+先用 500 us/div 捕获整包，再保持 STOP 放大到 20 us/div 看稳定周期；不为放大重发。
+步骤见 [不同占空比检查](validation/DUTY_CHECK.md)，冻结文件与日志见
+[本次离线清单](validation/local-evidence/20261017-duty-check/source-freeze.json)。
+本步骤没有 SWD 访问、没有新增实物请求或后台功率动作，累计仍为 19；等待第一档现场准备。
+
+### 2026-10-17：第 20 次请求，30% PWM 命令及结束关断检查通过
+
+用户按既定 LA/GND、X10/DC、5 V/div、500 us/div、单次触发及 12 V/50 mA 准备说明回复“开始”。
+当前工具和源文件哈希与离线冻结清单一致；只读检查核对当前 Flash、TIM1 配置、采样/保护及
+结束关断状态，发现为健康的新启动、事务计数均为 0、母线约 11.94 V，本主控没有复位。
+预检通过后明确宣布并完成 8 秒可中断等待，执行工具再检查，仅发一次命令 3，
+共同 duty=0.3（mailbox 浮点位模式 0x3E99999A）、duration_us=2000，sequence 最后提交。
+
+本启动 sequence=1，返回 COMPLETE，stage attempts/successes=40/40、enable=1/1、
+guard IRQ=39；结束后两次回读六路 LOW/MOE=0、TIM6 停止、key=0、保护健康，
+采样与 SysTick 推进且 invalid=0。mailbox 参数与提交值一致，注入 capture 未变，无自动重放。
+历史功率请求累计 20；没有改固件、重新烧录或自动清故障/rearm。
+
+已通知可以放下探头，保留 STOP 全包后放大到 20 us/div 读取稳定周期；LA 名义高脉宽约 35 us
+只是预期值，尚未收到本次照片/读数，不填为实测结果。70% 未执行。
+本次证据见 [30% 首次现场](validation/local-evidence/20261017-duty-check/duty30-ready-234955-execute/observation-record.json)。
+
+### 2026-10-17：30% 的 LA 稳定脉宽初筛通过，包末尾待确认
+
+用户提供第 20 次的稳定周期 STOP 图：20 us/div、水平偏移 -10.5 us、CHA X10 / DC / 5 V/div，
+触发 CHA 上升沿 4.97 V。显示 20.0 kHz、正脉宽 34.8 us、Vmax 12.2 V、Vmin -204 mV；
+LA 占空比由显示值推导约 69.6%，符合程序共同 duty=30% 时低侧互补脉宽约 35 us 的预期。
+稳定频率、基本电平与脉宽响应初筛通过；不将 0.2 us 的名义差值直接当作实测死区或传播延迟。
+图中还有绿色迹线，按 CHA 数据判读，不从 STOP 菜单推断采集阶段 CHB 一定关闭。
+
+该图只显示连续周期的局部，未确认整包最终下降沿后的持续低电平，真实包宽仍未验收。
+已要求先保持 STOP 返回 500 us/div 确认末尾，再重新准备单次触发进行 70%；
+没有补发 PWM、连接 MCU 或修改固件，实物请求仍为 20 次。
+原图和哈希/读数见 [30% 稳定周期](validation/local-evidence/20261017-duty-check/duty30-ready-234955-execute/scope-la-stable.json)。
+
+### 2026-10-18：30% 包结束确认，第 21 次 70% 请求与稳定周期通过
+
+用户按旧 STOP 记录检查末尾及重新准备单次触发的说明回复“已结束，开始70%”。
+第 20 次的最后脉冲后持续低电平按人工确认记录，不新增整包照片，不推定精确包宽。
+只读预检重新核对冻结文件与实时镜像、TIM1 配置、采样/保护和关断，发现健康的零事务
+新启动、母线约 12.05 V；未由主控复位，也不沿用前次启动计数。
+
+明确宣布并完成 8.0066 秒可中断等待，执行前再检查，仅提交一次命令 3、共同 duty=0.7、
+duration_us=2000，mailbox 位模式 0x3F333333。本启动 sequence=1，返回 COMPLETE，
+stage attempts/successes=40/40、enable=1/1、guard IRQ=39。结束后两次回读均六路 LOW/MOE=0、
+TIM6 已关、key 清零，保护健康、invalid=0、采样继续，注入 capture 未变。累计 21 次，
+没有改固件、重新烧录、清故障/rearm 或自动重发。
+
+用户随即提供 LA 的 STOP 稳定周期照片：X10、5 V/div、50 us/div，显示 20.0 kHz、
+正脉宽 14.8 us、Vmax 12.2 V、Vmin -12.3 mV。低侧占空比约 29.6%，符合程序 70% 的
+互补预期；与前档 34.8 us 对照，稳定脉宽变化、频率和基本电平初筛通过。
+这张局部图不证明整包末尾，仍待在旧 STOP 记录中确认最后脉冲后持续低电平，未安排新请求。
+不从自动极值或 0.2 us 名义差值推定真实瞬态、死区或延迟。电源电流/CV 与 DRV 温度未另报。
+本次原图、参数及结束状态见
+[70% 现场](validation/local-evidence/20261017-duty-check/duty70-ready-235953-execute/observation-record.json)。
+
+### 2026-10-18：70% 包末尾未捕获，电源和 DRV 正常
+
+用户反馈第 21 次“其他都正常 包末尾不知道 没抓到”，
+补齐本轮电源/DRV 正常的人工报告，未另报电流/CV 或温度数值。新 STOP 图为 20 us/div、
+水平偏移 -357 us，黄、绿两迹线在同一位置停止，后面为空白网格；不能据此确认包末尾持续低电平。
+70% 的稳定周期通过保持，包末尾记为未捕获。后续补采须在 SINGLE 前设 500 us/div、偏移 0，
+重新确认现场就绪后才单独发一次请求；本步未连接 MCU、未发脉冲，累计仍为 21。
+本次照片与反馈见
+[70% 记录边界](validation/local-evidence/20261017-duty-check/duty70-ready-235953-execute/scope-record-boundary.json)。
+
+### 2026-10-18：电源重启后独立补采 70% 整包，第 22 次功率请求
+
+用户请求“70%补采开始”，中断后要求“继续”。无后台测试进程、新预检为健康零事务启动；
+第一轮 8.0189 秒倒计时后，用户说明重启了电源并要求重新来。当时尚未调用 execute，
+未发功率命令，旧预检及准备参数已作废，该倒计时不计为独立功率请求。
+
+重新检查冻结源文件/工具/镜像、实时 Flash、TIM1 配置、采样/保护和关断，确认新上电健康、
+事务计数为 0、母线约 12.02 V，主控未复位。重新宣布并完成 8.0056 秒准备时间，执行前再检查，
+仅提交一次命令 3、共同 duty=0.7、2000 us，返回 COMPLETE。本启动 sequence=1，
+stage attempts/successes=40/40、enable=1/1、guard IRQ=39；结束两次回读六路 LOW/MOE=0、
+TIM6 关闭、key 清零、保护健康、invalid=0、采样推进，注入 capture 未变。累计 22 次，无自动重发。
+
+本次仅补整包结束证据，保持 500 us/div；整包照片/人工末尾确认及本轮结束电源/DRV 反馈待回报。
+第 21 次 14.8 us 稳定周期照片仍为独立来源，不改写为本次同轮照片。没有固件修改、烧录或 rearm。
+记录见 [70% 包末尾补采](validation/local-evidence/20261017-duty-check/duty70-repeat1-restart-ready-002806-execute/observation-record.json)。
+
+### 2026-10-18：拿错探头后按用户要求重测，第 23 次功率请求
+
+用户报告“再来一次 我拿错探头了”，第 22 次没有有效波形，误拿探头所接测点未说明。
+重新核对冻结文件/实时镜像、同次完成计数、配置及健康关断，母线约 11.96 V、与第 22 次同一启动。
+提醒 CHA 探头接 LA/GND、X10、500 us/div、单次等待，宣布并完成 8.0081 秒准备时间；
+执行前再检查，仅新增一次命令 3、70% / 2000 us，请求 sequence=2、COMPLETE。
+累计 stage=80、enable=2/2、guard=78，本次分别增加 40、1、39；结束回读六路 LOW/MOE=0、
+TIM6 关闭、key 清零、保护健康、invalid=0，采样继续且注入 capture 未变。累计 23 次，
+没有自动重发、复位、烧录或 rearm。本次整包末尾波形和结束电源/DRV 状态待回报，
+第 21 次稳定周期照片保持独立来源，第 22 次错误探头报告另存。
+记录见 [70% 再次补采](validation/local-evidence/20261017-duty-check/duty70-repeat2-ready-003050-execute/observation-record.json)。
+
+### 2026-10-18：第 23 次稳定周期确认，暂停补发并核对 DS100 采集窗口
+
+用户反馈“还是抓不到啊”，新 STOP 图当前为 50 us/div、水平偏移 -496 us、CHA X10 / DC / 5 V/div，
+显示 20.0 kHz、正脉宽 14.8 us、Vmax 12.2 V、Vmin -249 mV。本次稳定周期通过；
+黄、绿迹线在同一位置停止，后面为空白网格，包末尾持续低电平仍不确认。当前 STOP 显示不能反推
+采集前的时基，也不据自动极值判断真实瞬态；本轮结束电源/DRV 状态未另报。
+
+核对 DS100 V1.5 制造商手册的波形存储、水平系统、采样率/存储深度及单次触发说明，
+先保留旧记录，查看 STOP / 500 us/div、水平偏移 0 的总览，并确认是否在 STOP 后改为 50 us/div。
+不直接认定操作员设错，也不再盲目重发；若需新采集，先检查单次等待时的设置照片。
+本步仅保存图片与诊断，没有连接 MCU 或新增功率请求，累计仍为 23。
+证据见 [第 23 次记录边界](validation/local-evidence/20261017-duty-check/duty70-repeat2-ready-003050-execute/scope-la-record-end.json)。
+
+### 2026-10-18：核对 STOP 设置，确认设置后再采集
+
+用户又提供旧 STOP 图，当前 100 us/div、水平/垂直偏移均为 0，
+CHA 上升沿的当前阈值为 -441 mV，稳定周期仍为 20.0 kHz / 14.8 us。
+两路记录一起结束后的空白不能确认包末尾；采集当时的时基/阈值仍未知。
+流程改为先关 OUTPUT，核对 STOP 下 500 us/div、水平偏移 0、CHA 上升沿约 +5 V 的设置照片，
+确认后再安排单次等待；本步未连接 MCU 或发命令，累计仍为 23。
+证据见 [STOP 设置核对](validation/local-evidence/20261017-duty-check/duty70-repeat2-ready-003050-execute/scope-stop-overview-100us.json)。
+
+### 2026-10-18：按用户选择 AUTO，第 24 次请求完成，短包未保留
+
+用户要求正常重新发并改用 AUTO，取消先提供设置照片的流程。预检核对冻结文件/实时镜像及
+健康零事务启动，母线约 12.03 V，未由主控复位。宣布并完成 8.0049 秒等待，执行前再检查，
+仅提交一次命令 3、70% / 2000 us。本启动 sequence=1、COMPLETE，stage=40、enable=1/1、guard=39；
+结束两次回读六路 LOW/MOE=0、TIM6 关闭、key 清零、保护健康、invalid=0、采样继续，注入 capture 未变。
+累计 24 次，没有固件修改、烧录、自动重放或 rearm。
+
+用户随即反馈“没抓到”。AUTO 可能被后续画面覆盖短包，实际仪器采集过程未独立核对；
+先不增加请求。供电 OUTPUT 是否一直开启、当前 LA 是否持续约 0 V 且无周期脉冲待人工确认，
+稳态后态与包末尾边沿/精确时间分别记录；供电中断后不当作本次同轮关断观察。
+记录见 [70% AUTO 观察](validation/local-evidence/20261017-duty-check/duty70-repeat3-auto-ready-004637-execute/observation-record.json)。
+
+### 2026-10-18：供电连续、LA 后态低电平确认，占空比基础检查收尾
+
+用户明确回复“一直开着 始终0V”，确认第 24 次之后电源 OUTPUT 持续开启，AUTO 下 LA
+保持约 0 V。接受为请求结束后低电平的人工复核；不声称用户看到了该次短包或最终下降沿，
+不推定精确包宽或 Gate 关断延迟。70% 稳定脉宽由第 23 次 14.8 us 照片支持，后态由第 24 次支持，
+来源分开记录，避免冒充同一次连续采集。
+
+随后独立只读复核冻结文件、实时 Flash、同一第 24 次事务锚点、PWM 配置、健康保护和采样推进：
+sequence=1、stage=40、enable=1/1、guard=39 保持，六路 LOW/MOE=0、TIM6 已关、key=0、
+cause/COMP/Break=0、invalid=0，母线约 12.06 V。没有新增功率命令、复位、烧录或 rearm，
+历史功率请求累计仍为 24。证据见
+[最后只读核对](validation/local-evidence/20261017-duty-check/post-low-final-inspect-010453/summary.json)。
+
+本轮 LA 的 30%/70% 基础脉宽响应和结束关断/后态检查收尾通过，仍保留 70% 最终边沿/精确包宽、
+真实瞬态、动态 VGS/死区、其他相/相端不同 duty、相间时序与带负载能力的测量边界。
+汇总见 [占空比阶段结论](validation/local-evidence/20261017-duty-check/duty-stage-summary.json)。
+下一步转入电流采样零点/噪声复核及已知电流对照准备，不自动安排新的功率动作。
+
+### 2026-10-18：新镜像下的静态电流五窗复核
+
+用户“继续”后首次只读连接未取得 core ID，没有写入；用户确认此前关闭 OUTPUT、现在已打开。
+重新核对候选 Flash 后，在健康新启动中仅提交五次 CAPTURE_CURRENT，key=0，序号 1～5。
+五窗各 4096 点、共 20480 点，锁存重复读取一致、首末 ControlTime 差各 4095 tick，
+consumer 间隔约 49.66～50.36 us。B 均值 −12.64～−12.07 mA、标准差 3.30～3.44 mA；
+C 均值 +0.23～+0.80 mA、标准差 3.33～3.47 mA。第一窗作离线候选后，其余窗均值
+残差绝对值最大为 B 0.413 mA、C 0.466 mA；未写入校正，不作为增益或温漂资格化。
+stage/enable 从始至终为 0，结束六路 LOW/MOE=0、TIM6 停止、保护健康、invalid=0，
+采样继续，没有重置、烧录或新增功率请求，历史功率请求仍为 24 次。
+主机新增采集工具通过 5 个合成测试方法及其子用例，目标固件未改变。
+数据和源码冻结见 [本轮统计](validation/local-evidence/20261018-current-review-011611/analysis.json)，
+条件、范围和下一步已知电流对照准备见 [电流复核](validation/CURRENT_CHECK.md)。
+
+### 2026-10-18：MT6701 手动一圈观测，待确认实际操作方向
+
+用户确认磁铁固定在电机轴上，并按“正对出轴端看向本体、顺时针约 10 秒一圈”的说明回复开始。
+实机预检通过：约 12.02 V、保护健康、MOE=0、enable=0，候选 Flash 匹配。
+首个主机采集进程在等 stdin 时遇 EOF，只有静止基线、没有运动采集或目标写入；
+改用有 45 秒超时的本地主机 START 文件后重新预检，再提示用户转动并开始 25 秒记录。
+这是主机同步方式调整，固件未改动，所有 SWD 操作仅上传内存，无复位、halt 或命令写入。
+
+取得 3 个静止基线及 101 个运动/停止抽样，共 104 点，抽到的 position_valid 均为真。
+基线约 307.002°，运动主趋势递减，观察到一次约 0.0241 圈到 0.9946 圈的回绕；
+按相邻最短角差展开，净变化约 −0.998108 圈，最后十点中位数约 307.683°。
+首尾模一圈差约 +0.681°，包含手动回标误差，不作为编码器绝对精度或重复定位精度。
+起始整理位置和回标有小幅反向移动，不能称每点严格单调。当前主机抽样间隔约 0.24 秒，
+不等于全部 1 kHz SSI 帧连续记录；valid 字段与角度为独立诊断读数，不声称原子帧配对。
+全程事务计数未变，结束 enable=0、MOE=0、保护健康。实际是否按约定方向转满一圈仍待用户确认，
+确认前只记录递减及一次回绕的观测事实，不固化方向映射，也未做电角度对齐。
+原始内存、逐点数据、工具快照及统计见
+[手动转动观测](validation/local-evidence/20261018-position-cw-observation-01/analysis.json)。
+
+### 2026-10-18：目测一圈条件确认及逆方向复核
+
+用户补充上一轮为“顺时针大概转了一圈，纯目测”，确认方向而未提供精确对标。
+因此只认定顺时针角度递减及回绕的粗查结果，不以 −0.998108 圈或首尾差评价精度。
+补充说明保存为上一轮目录中的 operator-confirmation.json，原始分析按历史状态保留。
+
+随后用户按逆时针约一圈的说明回复开始。工具增加 direction 参数，仅改变记录标签，
+重新做只读预检，基线约 318.076°、母线约 12.03 V、保护健康且 enable=0。
+提示逆时针转动后记录 25 秒，共 108 点（3 个基线、105 个运动/停止抽样），
+抽到的有效标志均为真。角度主趋势递增，观察到 0.996094→0.008789 圈的一次正向回绕，
+相邻最短角差展开的净变化约 +1.001282 圈；末尾十点中位数约 318.538°。
+数据与逆时针约一圈的操作指令相符；用户未另行确认精确行程，且本轮不要求精确行程。
+各次读取的事务计数不变，最终 MOE=0、enable=0、保护无故障，无目标写入。
+当前方向关系按正对出轴端看向本体的约定记录为：顺时针递减，逆时针递增；
+尚未将该约定写为应用层方向配置，电角度零偏/极对数对齐、绝对精度与全部 SSI 帧连续性仍未验收。
+原始数据与脚本快照见 [逆方向观测](validation/local-evidence/20261018-position-ccw-observation-01/analysis.json)。
 
 ### 以下为原硬件基线阶段记录
 

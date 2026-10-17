@@ -34,6 +34,7 @@ uint32_t model_stage_calls;
 uint32_t model_enable_calls;
 uint32_t model_off_calls;
 uint32_t model_common_duty_failures;
+PhaseDutyRequest model_last_duty;
 uint32_t model_clock_ok = 1U;
 uint32_t model_rearm_ok = 1U;
 uint32_t model_rearm_calls;
@@ -107,6 +108,7 @@ bool realtime_motor_io_start_drive_timing(void)
 bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *duty)
 {
     model_stage_calls++;
+    model_last_duty = *duty;
     if ((duty->phase_a_duty != duty->phase_b_duty)
         || (duty->phase_b_duty != duty->phase_c_duty)) {
         model_common_duty_failures++;

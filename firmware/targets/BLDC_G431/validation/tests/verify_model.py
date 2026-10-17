@@ -231,10 +231,11 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
         m.submit(3, key=KEY); m.tick(2)
         assert m.moe() == accepted
         passed("G431 bus freshness/future time boundary")
-    for duty in [0.1, 0.5, 0.9]:
+    for duty in [0.1, 0.3, 0.5, 0.7, 0.9]:
         m = powered(duty=duty); m.tick(60)
         assert not m.moe() and m.status("result") == 1 and m.word("model_enable_calls") == 1
         assert m.word("model_common_duty_failures") == 0
+        assert bytes(m.cpu.mem_read(symbols["model_last_duty"], 12)) == struct.pack("<fff", duty, duty, duty)
         passed("bounded single burst, common duty " + str(duty) + "; no automatic replay")
     m = Model(); m.submit(3, key=KEY, duty=0.1); m.tick(2); assert m.moe()
     m = Model(); m.submit(3, key=KEY, duty=0.9); m.tick(2); assert m.moe()
