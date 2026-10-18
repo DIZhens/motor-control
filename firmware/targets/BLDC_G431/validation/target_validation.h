@@ -8,6 +8,7 @@
 #include "realtime_motor_io.h"
 #include "position_observation.h"
 #include "bus_observation.h"
+#include "timing_probe.h"
 
 /* 首板无功率诊断快照：仅供 Keil Watch 观察，不作为正式 Firmware API。 */
 typedef struct
@@ -52,14 +53,20 @@ typedef enum {
     TARGET_VALIDATION_COMMAND_BREAK_OCP_C = 6,
     TARGET_VALIDATION_COMMAND_BREAK_OCP_AB = 7,
     TARGET_VALIDATION_COMMAND_CLEAR_INJECTION = 8,
-    TARGET_VALIDATION_COMMAND_REARM = 9
+    TARGET_VALIDATION_COMMAND_REARM = 9,
+    TARGET_VALIDATION_COMMAND_TIMING_IMMEDIATE = TIMING_PROBE_CASE_IMMEDIATE,
+    TARGET_VALIDATION_COMMAND_TIMING_BEFORE = TIMING_PROBE_CASE_BEFORE,
+    TARGET_VALIDATION_COMMAND_TIMING_AFTER = TIMING_PROBE_CASE_AFTER,
+    TARGET_VALIDATION_COMMAND_TIMING_CROSS_CYCLE = TIMING_PROBE_CASE_CROSS_CYCLE,
+    TARGET_VALIDATION_COMMAND_TIMING_CANCEL = TIMING_PROBE_CASE_CANCEL
 } TargetValidationCommand;
 
 typedef enum {
     TARGET_VALIDATION_STATE_OBSERVE = 0,
     TARGET_VALIDATION_STATE_STAGING = 1,
     TARGET_VALIDATION_STATE_POWERED = 2,
-    TARGET_VALIDATION_STATE_CAPTURING_CURRENT = 3
+    TARGET_VALIDATION_STATE_CAPTURING_CURRENT = 3,
+    TARGET_VALIDATION_STATE_TIMING = 4
 } TargetValidationState;
 
 typedef enum {
@@ -78,7 +85,9 @@ typedef enum {
     TARGET_VALIDATION_RESULT_BAD_CLOCK = 12,
     TARGET_VALIDATION_RESULT_PROBE_REJECTED = 13,
     TARGET_VALIDATION_RESULT_BREAK_NOT_OBSERVED = 14,
-    TARGET_VALIDATION_RESULT_REARM_REJECTED = 15
+    TARGET_VALIDATION_RESULT_REARM_REJECTED = 15,
+    TARGET_VALIDATION_RESULT_TIMING_REJECTED = 16,
+    TARGET_VALIDATION_RESULT_TIMING_TIMEOUT = 17
 } TargetValidationResult;
 
 #define TARGET_VALIDATION_POWER_KEY (0x4310A11EU)
@@ -88,7 +97,8 @@ typedef enum {
 
 /* 先写 payload，最后写新的非零 sequence；等待消费后再提交下一条。
  * power_key 消费即清零，PWM_BURST / BREAK_* 必须逐次提供。不是安全认证。
- * BREAK_* 固定 duration_us=2000 / common_duty=0.5，不允许带电机。 */
+ * BREAK_* 固定 duration_us=2000 / common_duty=0.5，不允许带电机。
+ * TIMING_* 固定 power_key=0 / duration_us=0 / common_duty=0，仅低于 4 V 母线。 */
 typedef struct {
     uint32_t sequence;
     uint32_t command;
@@ -157,6 +167,8 @@ extern volatile TargetValidationSnapshot g_target_validation;
 extern volatile TargetValidationCurrentCapture g_target_validation_capture;
 /* ADC 丢失时快照可能停在旧状态；此字独立记录关断原因。 */
 extern volatile uint32_t g_target_validation_stop_reason;
+/* 时序用例后的连续正常采样数，饱和至 2；不改变旧诊断结构的 ABI。 */
+extern volatile uint32_t g_target_validation_timing_recovery_ticks;
 
 /* 外设初始化后调用一次；默认 OBSERVE，不消费复位前的请求。 */
 void target_validation_start(void);

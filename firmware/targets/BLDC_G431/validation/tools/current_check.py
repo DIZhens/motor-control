@@ -5,7 +5,6 @@ No reset, flash, PWM, threshold change or automatic retry. Statistics are nomina
 amperes; successful acquisition does not establish offset/gain calibration.
 """
 import argparse
-import hashlib
 import json
 import math
 from pathlib import Path
@@ -123,17 +122,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--windows", type=int, choices=range(1, 6), default=5)
+    common.add_candidate_arguments(parser)
     args = parser.parse_args()
+    common.configure_candidate(args)
     require(not args.output.exists(), "Output exists; refusing overwrite")
     args.output.mkdir()
     session = None
     reports = []
     try:
-        freeze = json.loads((common.TARGET / "validation/local-evidence/20261017-duty-check/source-freeze.json").read_text())
-        for name, expected in freeze["files"].items():
-            require(hashlib.sha256((common.TARGET / name).read_bytes()).hexdigest() == expected, "Frozen source changed: " + name)
-        common.save(args.output / "source-verification.json", {"verified": freeze["files"],
-                    "current_tool_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()})
+        common.verify_source_freeze(args.output)
         layout = capture_layout(args.output)
         session = Session(args.output)
         for index in range(1, args.windows + 1):

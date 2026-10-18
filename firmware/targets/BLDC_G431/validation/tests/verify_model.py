@@ -20,6 +20,7 @@ names = [
     "capture_sequence", "capture_data", "capture_request", "capture_result", "capture_count",
     "capture_min_cycles", "capture_max_cycles", "capture_first", "capture_last",
     "capture_b", "capture_c", "mailbox_size", "legacy_size",
+    "interval_min_cycles", "interval_max_cycles",
 ]
 KEY = 0x4310A11E
 TIM1 = 0x40012C00
@@ -52,7 +53,7 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     command += ["-D" + item for item in settings.findtext("Define").split(",")]
     objects = []
     for source in [root / "validation/tests/model.c", root / "validation/target_validation.c",
-                   root / "validation/protection_probe.c"]:
+                   root / "validation/protection_probe.c", root / "validation/timing_probe.c"]:
         obj = temp / (source.stem + ".o")
         result = subprocess.run(command + ["-c", str(source), "-o", str(obj)],
                                 capture_output=True, text=True)
@@ -180,10 +181,18 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
             data = self.cpu.mem_read(symbols["g_target_validation_probe"], len(probe_names) * 4)
             return dict(zip(probe_names, struct.unpack("<" + "I" * len(probe_names), data)))
 
+        def timing(self):
+            fields = ["sequence", "request", "case", "outcome", "iterations", "elapsed",
+                      "stage_called", "stage_accepted", "second_called", "second_accepted"]
+            data = self.cpu.mem_read(symbols["g_target_validation_timing"], 40)
+            return dict(zip(fields, struct.unpack("<10I", data)))
+
     def powered(duration=2000, duty=0.5):
         m = Model()
         m.tick(200)
         m.submit(3, key=KEY, duration=duration, duty=duty)
+        m.tick()
+        assert not m.moe() and m.word("model_stage_calls") == 0
         m.tick()
         assert not m.moe() and m.word("model_stage_calls") == 1
         m.tick()
@@ -203,12 +212,35 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
         assert m.status("started") == 0 and not m.moe() and m.word("model_enable_calls") == 0
         passed("startup failure preserves disabled power: " + failure)
 
-    m = Model(); m.submit(2); m.tick(2)
+    m = Model(); m.submit(2); m.tick(3)
     assert m.word("model_stage_calls") == 2 and m.word("model_enable_calls") == 0
     assert m.status("result") == 1 and m.status("state") == 0 and not m.moe()
     m.tick(100)
     assert m.word("model_stage_calls") == 2
     passed("stage-only crosses fresh boundaries, never enables and does not replay")
+    for command in [2, 3, 5, 6, 7]:
+        m = Model(); m.tick(20); m.submit(command, key=KEY); m.tick()
+        assert m.status("state") == 1 and m.status("active_request_sequence") == m.sequence
+        assert m.word("model_stage_calls") == m.word("model_enable_calls") == 0 and not m.moe()
+        m.submit(1); m.tick(20)
+        assert m.status("result") == 2 and m.status("state") == 0
+        assert m.word("model_stage_calls") == m.word("model_enable_calls") == 0 and not m.moe()
+        passed("new actuation queues without stage; stop cancels before execution: " + str(command))
+
+    for stage_ticks in [0, 1]:
+        for fault, value, fmt, reason in [("model_current_valid", 0, "I", 6),
+                                          ("model_trip_valid", 0, "I", 11),
+                                          ("model_trip_active", 1, "I", 11),
+                                          ("model_bus_valid", 0, "I", 7),
+                                          ("model_bus_voltage", 9.0, "f", 7)]:
+            m = Model(); m.tick(20); m.submit(3, key=KEY); m.tick(1 + stage_ticks)
+            assert m.word("model_stage_calls") == stage_ticks and not m.moe()
+            m.write(fault, value, fmt); m.tick()
+            assert m.status("result") == reason and m.status("state") == 0
+            assert m.word("model_stage_calls") == stage_ticks and m.word("model_enable_calls") == 0
+            assert not m.moe()
+            passed("queued actuation rechecks fresh prerequisites before stage/enable: "
+                   + str((stage_ticks, fault)))
     for duty in [-1.0, 0.099, 0.901, 1.0, float("nan"), float("inf")]:
         m = Model(); m.submit(3, key=KEY, duty=duty); m.tick(3)
         assert m.status("result") == 4 and m.word("model_enable_calls") == 0 and not m.moe()
@@ -228,7 +260,7 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     for age, future, accepted in [(100, 0, True), (101, 0, False), (0, 1, False)]:
         m = Model(); m.tick(200)
         m.write("model_bus_age_ticks", age); m.write("model_bus_future_ticks", future)
-        m.submit(3, key=KEY); m.tick(2)
+        m.submit(3, key=KEY); m.tick(3)
         assert m.moe() == accepted
         passed("G431 bus freshness/future time boundary")
     for duty in [0.1, 0.3, 0.5, 0.7, 0.9]:
@@ -237,15 +269,15 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
         assert m.word("model_common_duty_failures") == 0
         assert bytes(m.cpu.mem_read(symbols["model_last_duty"], 12)) == struct.pack("<fff", duty, duty, duty)
         passed("bounded single burst, common duty " + str(duty) + "; no automatic replay")
-    m = Model(); m.submit(3, key=KEY, duty=0.1); m.tick(2); assert m.moe()
-    m = Model(); m.submit(3, key=KEY, duty=0.9); m.tick(2); assert m.moe()
+    m = Model(); m.submit(3, key=KEY, duty=0.1); m.tick(3); assert m.moe()
+    m = Model(); m.submit(3, key=KEY, duty=0.9); m.tick(3); assert m.moe()
     passed("accept duty envelope edges")
 
     for duration in [1000, 10000]:
         m = powered(duration=duration); m.tick(duration // 50 + 2)
         assert m.status("result") == 1 and not m.moe() and m.word("model_enable_calls") == 1
         passed("accepted duration boundary " + str(duration))
-    m = powered(); m.tick(38)
+    m = powered(); m.tick(37)
     control_time = m.word("model_time")
     m.advance_guard(50)
     assert not m.moe() and m.word("g_target_validation_stop_reason") == 1
@@ -293,9 +325,11 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     assert m.status("result") == 3 and m.word("model_enable_calls") == 1
     passed("operator stop and one-use power key")
     m = powered(); active = m.status("active_request_sequence")
+    stage_before = m.word("model_stage_calls")
     m.submit(4); m.tick()
     assert m.status("result") == 5 and m.status("active_request_sequence") == active
     assert m.moe() and m.capture()["count"] == 0
+    assert m.word("model_stage_calls") == stage_before + 1
     passed("busy capture cannot replace an active PWM transaction")
 
     m = Model(); m.write("model_current_b_a", -1.5, "f"); m.write("model_current_c_a", 0.75, "f")
@@ -358,7 +392,7 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
         m = Model()
         m.tick(20)
         m.submit(command, key=KEY)
-        m.tick(2)
+        m.tick(3)
         assert m.moe() and m.probe()["outcome"] == 1 and not m.inject_events
         return m
 
@@ -426,8 +460,8 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     m = probe_powered(7); m.inject_fault = "wrong_comp"; m.tick(4)
     assert m.status("result") == 14 and m.probe()["comp_after"] == 2 and not m.moe()
     passed("shared A/B threshold requires both comparator outputs, not just B")
-    m = Model(); m.memory_write(DWT_CYCCNT, 0x100000000 - 6 * 8500 - 50)
-    m.submit(5, key=KEY); m.tick(6)
+    m = Model(); m.memory_write(DWT_CYCCNT, 0x100000000 - 7 * 8500 - 50)
+    m.submit(5, key=KEY); m.tick(7)
     assert m.probe()["outcome"] == 2 and not m.moe()
     passed("injection observation works across DWT wrap")
 
@@ -465,6 +499,108 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     m.write("model_rearm_ok", 0); m.submit(9); m.tick()
     assert m.status("result") == 15 and m.word("model_trip_causes") == 4 and not m.moe()
     passed("HCC rearm rejection preserves sticky fault and disabled output")
+
+    # Mailbox/transaction integration uses the existing fake HCC. Successful
+    # timing outcomes against the real Platform are tested in verify_timing.py.
+    def timing_ready():
+        m = Model(); m.write("model_bus_voltage", 1.0, "f"); m.tick(3)
+        assert m.word("g_target_validation_timing_recovery_ticks") == 2
+        return m
+
+    def submit_timing(m, command=10, **payload):
+        values = {"key": 0, "duration": 0, "duty": 0.0}
+        values.update(payload)
+        m.submit(command, **values)
+
+    for command in range(10, 15):
+        m = Model(pending=command); m.tick(5)
+        assert m.timing()["sequence"] == 0 and m.status("state") == 0
+        assert not m.moe() and m.word("model_stage_calls") == m.word("model_enable_calls") == 0
+        passed("startup discards timing mailbox command " + str(command))
+        for payload in [{"key": KEY}, {"duration": 1}, {"duty": 0.5},
+                        {"duty": float("nan")}, {"duty": float("inf")}]:
+            m = timing_ready(); submit_timing(m, command, **payload); m.tick(2)
+            assert m.status("result") == 4 and m.timing()["sequence"] == 0
+            assert not m.moe() and m.word("model_stage_calls") == m.word("model_enable_calls") == 0
+            passed("timing fixed no-power payload rejects " + str((command, payload)))
+
+    for voltage in [-0.1, 4.0, 12.0, float("nan"), float("inf")]:
+        m = timing_ready(); m.write("model_bus_voltage", voltage, "f")
+        submit_timing(m); m.tick()
+        assert m.status("result") == 7 and m.timing()["sequence"] == 0 and not m.moe()
+        passed("timing low-bus prerequisite rejects " + str(voltage))
+    for variable, value in [("model_bus_valid", 0), ("model_bus_age_ticks", 101),
+                             ("model_bus_future_ticks", 1)]:
+        m = timing_ready(); m.tick(200); m.write(variable, value)
+        submit_timing(m); m.tick()
+        assert m.status("result") == 7 and m.timing()["sequence"] == 0
+        passed("timing rejects untrustworthy bus: " + variable)
+    for voltage, age in [(0.0, 0), (3.999, 100)]:
+        m = timing_ready(); m.tick(200); m.write("model_bus_voltage", voltage, "f")
+        m.write("model_bus_age_ticks", age); submit_timing(m); m.tick()
+        assert m.status("state") == 4 and m.status("result") == 0
+        assert m.timing()["sequence"] == 0 and m.word("model_stage_calls") == 0
+        passed("valid low-bus boundary queues a fresh callback: " + str((voltage, age)))
+
+    m = Model(); m.write("model_bus_voltage", 1.0, "f"); submit_timing(m); m.tick()
+    assert m.status("result") == 16 and m.timing()["sequence"] == 0
+    passed("timing cannot start before two recovered intervals")
+
+    m = timing_ready(); m.submit(4); m.tick(); active = m.status("active_request_sequence")
+    for command in range(10, 15):
+        submit_timing(m, command); m.tick()
+        assert m.status("result") == 5 and m.status("state") == 3
+        assert m.status("active_request_sequence") == active and m.timing()["sequence"] == 0
+    assert not m.moe() and m.word("model_stage_calls") == m.word("model_enable_calls") == 0
+    passed("timing mailbox cannot displace active sample capture")
+
+    m = timing_ready(); submit_timing(m); m.tick()
+    assert m.status("state") == 4 and m.timing()["sequence"] == 0
+    m.submit(1); m.tick(5)
+    assert m.status("result") == 2 and m.status("state") == 0 and m.timing()["sequence"] == 0
+    assert m.word("model_stage_calls") == m.word("model_enable_calls") == 0
+    passed("operator stop cancels queued timing before the next probe callback")
+
+    for command in range(10, 15):
+        m = timing_ready(); submit_timing(m, command); m.tick(); request = m.sequence
+        m.submit(4); m.tick()
+        assert m.status("result") == 5 and m.status("active_request_sequence") == request
+        assert m.status("state") == 4 and m.timing()["sequence"] == 0
+        assert m.word("model_stage_calls") == m.word("model_enable_calls") == 0
+        m.write("model_current_valid", 0); m.tick(); data = m.timing()
+        assert data["request"] == request and data["outcome"] == 2 and data["stage_called"] == 0
+        assert m.status("state") == 0 and m.status("result") == 16 and not m.moe()
+        passed("busy mailbox defers queued timing to the next early callback: " + str(command))
+
+    for variable, value, fmt in [("model_current_valid", 0, "I"),
+                                 ("model_bus_voltage", 12.0, "f"),
+                                 ("model_trip_active", 1, "I"),
+                                 ("model_step_us", 100, "I")]:
+        m = timing_ready(); submit_timing(m); m.tick(); request = m.sequence
+        m.write(variable, value, fmt); m.tick()
+        data = m.timing()
+        assert data["request"] == request and data["outcome"] == 2 and data["stage_called"] == 0
+        assert m.status("result") == 16 and m.status("state") == 0
+        assert m.word("model_stage_calls") == m.word("model_enable_calls") == 0 and not m.moe()
+        assert m.word("g_target_validation_timing_recovery_ticks") == 0
+        passed("queued timing rechecks prerequisites on its actual execution callback: " + variable)
+
+    m = timing_ready(); submit_timing(m); m.tick(2); data = m.timing()
+    # The fake HCC has no valid TIM1 center-aligned configuration: the real probe
+    # must publish PRECONDITION, not convert incomplete setup into a timing PASS.
+    assert data["outcome"] == 2 and data["stage_called"] == 0 and m.status("result") == 16
+    assert m.word("g_target_validation_timing_recovery_ticks") == 0
+    m.write("model_step_us", 100); m.tick()
+    assert m.word("g_target_validation_timing_recovery_ticks") == 0
+    assert m.status("interval_max_cycles") == 17000
+    m.write("model_step_us", 50); m.tick()
+    assert m.word("g_target_validation_timing_recovery_ticks") == 1
+    m.tick()
+    assert m.word("g_target_validation_timing_recovery_ticks") == 2
+    assert m.status("interval_max_cycles") == 17000 and m.timing() == data
+    m.tick(20)
+    assert m.word("model_stage_calls") == m.word("model_enable_calls") == 0 and not m.moe()
+    passed("probe recovery needs two valid intervals and retains the real 100 us interval evidence")
 
 print(f"PASS: {len(cases)} ARM-executed G431 validation cases.")
 print("Fake HCC/time only; does not prove electrical behavior, interrupt latency or hardware L1/L2.")

@@ -673,6 +673,11 @@
                 <FileType>1</FileType>
                 <FilePath>../validation/protection_probe.c</FilePath>
               </File>
+              <File>
+                <FileName>timing_probe.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>../validation/timing_probe.c</FilePath>
+              </File>
           </Files>
         </Group>
       </Groups>

@@ -1,5 +1,9 @@
 #include "target_validation.h"
 
+#if defined(__CC_ARM)
+#pragma Otime
+#endif
+
 #include <float.h>
 #include <stddef.h>
 #include "main.h"
@@ -18,6 +22,7 @@ volatile TargetValidationMailbox g_target_validation_request;
 volatile TargetValidationSnapshot g_target_validation;
 volatile TargetValidationCurrentCapture g_target_validation_capture;
 volatile uint32_t g_target_validation_stop_reason;
+volatile uint32_t g_target_validation_timing_recovery_ticks;
 
 static RealtimeMotorIoFacts s_facts;
 static ControlTime s_last_position_time;
@@ -35,6 +40,7 @@ static uint32_t s_staging_ticks;
 static ProtectionProbeSource s_probe_source;
 static uint32_t s_probe_powered_ticks;
 static uint32_t s_observation_divider;
+static uint32_t s_timing_case;
 static PhaseDutyRequest s_duty;
 static TargetValidationCurrentStatistics s_statistics;
 static float s_m2_b;
@@ -55,12 +61,12 @@ static void restore_interrupts(uint32_t primask)
     }
 }
 
-static bool finite_float(float value)
+__STATIC_FORCEINLINE bool finite_float(float value)
 {
     return (value >= -FLT_MAX) && (value <= FLT_MAX);
 }
 
-static bool current_valid(const PhaseCurrentObservation *current)
+__STATIC_FORCEINLINE bool current_valid(const PhaseCurrentObservation *current)
 {
     return current->acquisition_valid
         && (current->measured_phases == (PHASE_MASK_B | PHASE_MASK_C))
@@ -112,6 +118,7 @@ static void finish_operation(void)
     s_capturing = false;
     s_powered = false;
     s_probe_source = PROTECTION_PROBE_NONE;
+    s_timing_case = 0U;
     g_target_validation.state = TARGET_VALIDATION_STATE_OBSERVE;
     g_target_validation.result = g_target_validation_stop_reason;
 }
@@ -216,6 +223,21 @@ static bool burst_bus_valid(ControlTime now)
         && (bus.voltage_v >= 10.0f) && (bus.voltage_v <= 14.0f);
 }
 
+__STATIC_FORCEINLINE bool timing_bus_valid(ControlTime now)
+{
+    BusObservation bus;
+
+    return bus_observation_get_latest(&bus) && bus.acquisition_valid
+        && (bus.observation_time <= now) && ((now - bus.observation_time) <= BUS_MAX_AGE_TICKS)
+        && (bus.voltage_v >= 0.0f) && (bus.voltage_v < 4.0f);
+}
+
+static bool is_timing_command(uint32_t command)
+{
+    return (command >= TARGET_VALIDATION_COMMAND_TIMING_IMMEDIATE)
+        && (command <= TARGET_VALIDATION_COMMAND_TIMING_CANCEL);
+}
+
 static void consume_command(const PhaseCurrentObservation *current, uint32_t now_cycles)
 {
     TargetValidationMailbox request;
@@ -256,7 +278,8 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
         && (request.command != TARGET_VALIDATION_COMMAND_BREAK_OCP_C)
         && (request.command != TARGET_VALIDATION_COMMAND_BREAK_OCP_AB)
         && (request.command != TARGET_VALIDATION_COMMAND_CLEAR_INJECTION)
-        && (request.command != TARGET_VALIDATION_COMMAND_REARM)) {
+        && (request.command != TARGET_VALIDATION_COMMAND_REARM)
+        && !is_timing_command(request.command)) {
         g_target_validation.result = TARGET_VALIDATION_RESULT_BAD_REQUEST;
         return;
     }
@@ -296,6 +319,32 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
     }
     if (protection_probe_is_held()) {
         g_target_validation.result = TARGET_VALIDATION_RESULT_PROBE_REJECTED;
+        return;
+    }
+    if (is_timing_command(request.command)) {
+        if ((request.power_key != 0U) || (request.duration_us != 0U) || (request.common_duty != 0.0f)) {
+            g_target_validation.result = TARGET_VALIDATION_RESULT_BAD_REQUEST;
+            return;
+        }
+        if (!timing_bus_valid(current->observation_time)) {
+            g_target_validation.result = TARGET_VALIDATION_RESULT_BAD_BUS;
+            return;
+        }
+        if (g_target_validation_timing_recovery_ticks < 2U) {
+            g_target_validation.result = TARGET_VALIDATION_RESULT_TIMING_REJECTED;
+            return;
+        }
+        /* safe_off 使本拍窗口失效；故只排队，下一次 callback 才执行探测。 */
+        stop_operation(TARGET_VALIDATION_RESULT_NONE);
+        s_power_requested = false;
+        s_powered = false;
+        s_capturing = false;
+        s_probe_source = PROTECTION_PROBE_NONE;
+        s_timing_case = request.command;
+        s_operation_active = true;
+        g_target_validation.active_request_sequence = request.sequence;
+        g_target_validation.state = TARGET_VALIDATION_STATE_TIMING;
+        g_target_validation.result = TARGET_VALIDATION_RESULT_NONE;
         return;
     }
     if (request.command == TARGET_VALIDATION_COMMAND_CAPTURE_CURRENT) {
@@ -355,7 +404,7 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
     g_target_validation.active_request_sequence = request.sequence;
     g_target_validation.state = TARGET_VALIDATION_STATE_STAGING;
     g_target_validation.result = TARGET_VALIDATION_RESULT_NONE;
-    /* Preserve this callback's staging window; the previous transaction ended safe-off. */
+    /* 从接收时计总期限；首次 stage 留给下一采样，避免解析请求耗尽本拍窗口。 */
     guard_timer_start(now_cycles, request.duration_us);
 }
 
@@ -407,6 +456,37 @@ static void record_capture(const PhaseCurrentObservation *current, uint32_t inte
     if (count == TARGET_VALIDATION_CURRENT_SAMPLE_COUNT) {
         stop_operation(TARGET_VALIDATION_RESULT_COMPLETE);
     }
+}
+
+static void run_timing_operation(const PhaseCurrentObservation *current, uint32_t interval_cycles)
+{
+    TimingProbeOutcome outcome;
+    HardwareTripSnapshot trip;
+    bool eligible;
+
+    eligible = (g_target_validation_stop_reason == TARGET_VALIDATION_RESULT_NONE)
+        && current_valid(current)
+        && (interval_cycles >= CURRENT_MIN_GAP_US * CYCLES_PER_US)
+        && (interval_cycles <= CURRENT_MAX_GAP_US * CYCLES_PER_US);
+    eligible = eligible && g_platform_bringup.trip_armed && hardware_trip_get_snapshot(&trip)
+        && !trip.condition_active && (trip.causes == HARDWARE_TRIP_CAUSE_NONE)
+        && !protection_probe_is_held();
+    eligible = eligible && timing_bus_valid(current->observation_time);
+    outcome = timing_probe_run(g_target_validation.active_request_sequence, s_timing_case, eligible);
+    g_target_validation.stage_attempts += g_target_validation_timing.stage_called
+        + g_target_validation_timing.second_stage_called;
+    g_target_validation.stage_successes += g_target_validation_timing.stage_accepted
+        + g_target_validation_timing.second_stage_accepted;
+    if ((g_target_validation_timing.entry.bdtr & TIM_BDTR_MOE) != 0U) {
+        g_platform_bringup.moe_violations++;
+        g_platform_bringup.status = 111U;
+    }
+    g_target_validation_timing_recovery_ticks = 0U;
+    stop_operation(outcome == TIMING_PROBE_PASS ? TARGET_VALIDATION_RESULT_COMPLETE
+        : (outcome == TIMING_PROBE_TIMEOUT ? TARGET_VALIDATION_RESULT_TIMING_TIMEOUT
+            : TARGET_VALIDATION_RESULT_TIMING_REJECTED));
+    finish_operation();
+    return;
 }
 
 static void run_operation(const PhaseCurrentObservation *current,
@@ -520,10 +600,29 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     uint32_t entry_cycles = DWT->CYCCNT;
     uint32_t interval_cycles = s_previous_sample ? entry_cycles - s_previous_sample_cycles : 0U;
     uint32_t cycles;
+    bool timing_ran = false;
+    bool operation_was_active = s_operation_active;
+    bool command_pending = (g_target_validation_request.sequence != 0U)
+        && (g_target_validation_request.sequence != s_last_command_sequence);
 
     (void)context;
     g_target_validation.sequence++;
     __DMB();
+    /* SAFE_OFF 先于执行；运行期检查与 stage 先于 Watch 复制/统计。
+     * 新 stage 请求只排队，下一采样重新校验 current/trip/bus 后才提交。
+     * BUSY 不替换普通活动事务，也不能让已使能输出漏掉本拍 fresh stage。 */
+    if (command_pending) {
+        consume_command(current, entry_cycles);
+    }
+    if (s_operation_active && (s_timing_case != 0U)) {
+        /* 探测仅走早期入口；新 mailbox 即使返回 BUSY，本拍也不执行探测。 */
+        if (!command_pending) {
+            run_timing_operation(current, interval_cycles);
+            timing_ran = true;
+        }
+    } else if (operation_was_active || !s_operation_active || s_capturing) {
+        run_operation(current, entry_cycles, interval_cycles);
+    }
     g_target_validation.fast_tick_count++;
     g_target_validation.current = *current;
     if (!current_valid(current)) {
@@ -537,8 +636,13 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
             g_target_validation.interval_max_cycles = interval_cycles;
         }
     }
-    consume_command(current, entry_cycles);
-    run_operation(current, entry_cycles, interval_cycles);
+    if (!current_valid(current) || !s_previous_sample
+        || (interval_cycles < CURRENT_MIN_GAP_US * CYCLES_PER_US)
+        || (interval_cycles > CURRENT_MAX_GAP_US * CYCLES_PER_US)) {
+        g_target_validation_timing_recovery_ticks = 0U;
+    } else if (!timing_ran && !s_operation_active && (g_target_validation_timing_recovery_ticks < 2U)) {
+        g_target_validation_timing_recovery_ticks++;
+    }
     s_last_sample_cycles = entry_cycles;
     s_previous_sample_cycles = entry_cycles;
     s_previous_sample = true;

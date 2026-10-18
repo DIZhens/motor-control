@@ -6,7 +6,6 @@ After READY, a host START file containing GO starts a bounded 25 second observat
 No target command, reset, flash, halt or output enable is issued.
 """
 import argparse
-import hashlib
 import json
 import math
 from pathlib import Path
@@ -35,15 +34,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--direction", choices=["clockwise", "counterclockwise"], default="clockwise")
+    common.add_candidate_arguments(parser)
     args = parser.parse_args()
+    common.configure_candidate(args)
     require(not args.output.exists(), "Refusing to overwrite evidence")
     args.output.mkdir()
     samples = []
     try:
-        freeze = json.loads((common.TARGET / "validation/local-evidence/20261017-duty-check/source-freeze.json").read_text())
-        for name, expected in freeze["files"].items():
-            require(hashlib.sha256((common.TARGET / name).read_bytes()).hexdigest() == expected, "Frozen file changed: " + name)
-        s = ReadOnlySession(args.output)
+        common.verify_source_freeze(args.output)
         expressions = ["sizeof(PlatformBringupDebug)", "&((PlatformBringupDebug*)0)->position_turns",
                        "sizeof(((PlatformBringupDebug*)0)->position_turns)",
                        "&((PlatformBringupDebug*)0)->position_samples"]
@@ -54,6 +52,7 @@ def main():
         (args.output / "position-layout.log").write_text(proc.stdout + proc.stderr, encoding="utf-8")
         values = [int(v, 0) for v in re.findall(r"^\$\d+ = (0x[0-9a-f]+|\d+)\s*$", proc.stdout, re.M)]
         require(proc.returncode == 0 and values == [76, 32, 4, 28], "Unexpected position diagnostic layout")
+        s = ReadOnlySession(args.output)
         first, before, probe = checks.stable_pair(s, "preflight")
         for state in [first, before]:
             checks.check_healthy(state)

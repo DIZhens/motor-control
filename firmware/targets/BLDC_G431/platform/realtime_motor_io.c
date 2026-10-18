@@ -22,11 +22,62 @@ static bool s_sample_ready_bound;
 static bool s_armed;
 static bool s_timing_started;
 static bool s_current_pair_synchronized;
-static bool s_stage_window_open;
-static bool s_staged_this_tick;
-static bool s_stage_pending_boundary;
-static bool s_stage_committed;
-static bool s_power_enabled;
+static volatile bool s_stage_window_open;
+static volatile bool s_staged_this_tick;
+static volatile bool s_stage_pending_boundary;
+static volatile bool s_stage_committed;
+static volatile bool s_power_enabled;
+static volatile uint32_t s_actuation_epoch;
+static volatile uint32_t s_callback_epoch;
+static volatile uint32_t s_pending_epoch;
+static uint32_t s_pending_start_cycles;
+static uint32_t s_pending_count;
+static uint32_t s_callback_start_cycles;
+static uint32_t s_callback_entry_count;
+
+static void restore_interrupts(uint32_t primask)
+{
+    if (primask == 0U) {
+        __enable_irq();
+    }
+}
+
+static bool timing_configuration_valid(void)
+{
+    /* 下述 cycle/count 比值与 UEV 语义仅适用于当前固定配置。 */
+    return (SystemCoreClock == REALTIME_MOTOR_IO_TIMER_CLOCK_HZ)
+        && ((RCC->CFGR & RCC_CFGR_PPRE2) == 0U)
+        && (htim1.Instance->PSC == 0U)
+        && (htim1.Instance->ARR == REALTIME_MOTOR_IO_PWM_PERIOD_COUNTS)
+        && (htim1.Instance->RCR == 0U)
+        && ((htim1.Instance->CR1 & (TIM_CR1_CMS | TIM_CR1_CKD
+                | TIM_CR1_OPM | TIM_CR1_UDIS)) == TIM_COUNTERMODE_CENTERALIGNED1)
+        && ((htim1.Instance->CCMR1 & (TIM_CCMR1_OC1PE | TIM_CCMR1_OC2PE))
+            == (TIM_CCMR1_OC1PE | TIM_CCMR1_OC2PE))
+        && ((htim1.Instance->CCMR2 & TIM_CCMR2_OC3PE) != 0U)
+        && ((htim1.Instance->DIER & TIM_DIER_UIE) == 0U);
+}
+
+__STATIC_FORCEINLINE bool staging_time_available(void)
+{
+    uint32_t before = htim1.Instance->CR1;
+    uint32_t count = htim1.Instance->CNT;
+    uint32_t after = htim1.Instance->CR1;
+    uint32_t elapsed = DWT->CYCCNT - s_callback_start_cycles;
+    uint32_t required = TIM_CR1_CEN | TIM_CR1_DIR | TIM_COUNTERMODE_CENTERALIGNED1;
+    uint32_t mask = TIM_CR1_CEN | TIM_CR1_DIR | TIM_CR1_CMS;
+
+    /* DIR/CNT 单独检查会把耗时一整个 PWM 周期的旧 callback 误认作准时。
+     * 入口 cycle/count 锚点把窗口限定在本次 callback 所属的同一谷底之前。
+     * 先读 cycle 再读入口 CNT，使预算保守；无等待、无计数器清零。 */
+    return ((before & mask) == required) && ((after & mask) == required)
+        && ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) != 0U)
+        && ((CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) != 0U)
+        && (s_callback_entry_count > REALTIME_MOTOR_IO_STAGE_DEADLINE_COUNTS)
+        && (count >= REALTIME_MOTOR_IO_STAGE_DEADLINE_COUNTS)
+        && (count <= s_callback_entry_count)
+        && (elapsed < (s_callback_entry_count - REALTIME_MOTOR_IO_STAGE_DEADLINE_COUNTS));
+}
 
 static float adc_raw_to_phase_current_a(uint32_t raw)
 {
@@ -76,13 +127,28 @@ static void stage_neutral_duty(void)
         REALTIME_MOTOR_IO_NEUTRAL_COMPARE_COUNTS);
 }
 
+/* 调用者已屏蔽可屏蔽中断；MOE 先关，旧 epoch 不允许随后恢复功率。 */
+static void safe_off_locked(void)
+{
+    CLEAR_BIT(htim1.Instance->BDTR, TIM_BDTR_MOE);
+    __DSB();
+    stage_neutral_duty();
+    s_actuation_epoch++;
+    s_stage_window_open = false;
+    s_staged_this_tick = false;
+    s_stage_pending_boundary = false;
+    s_stage_committed = false;
+    s_power_enabled = false;
+}
+
 bool realtime_motor_io_get_facts(RealtimeMotorIoFacts *out_facts)
 {
     if (out_facts == NULL) {
         return false;
     }
 
-    if (htim1.Init.Period != REALTIME_MOTOR_IO_PWM_PERIOD_COUNTS) {
+    if ((htim1.Init.Period != REALTIME_MOTOR_IO_PWM_PERIOD_COUNTS)
+        || !timing_configuration_valid()) {
         return false;
     }
 
@@ -162,7 +228,15 @@ bool realtime_motor_io_start_drive_timing(void)
         return false;
     }
 
-    if ((htim1.Instance->CR1 & TIM_CR1_CEN) != 0U) {
+    if (((htim1.Instance->CR1 & TIM_CR1_CEN) != 0U)
+        || !timing_configuration_valid()) {
+        return false;
+    }
+
+    /* 共享只增的 CPU cycle clock；不依赖台架先启用，也不重置其他使用者。 */
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+    if ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) == 0U) {
         return false;
     }
 
@@ -203,77 +277,108 @@ bool realtime_motor_io_start_drive_timing(void)
     return true;
 }
 
+/* 从 ADC 到下一谷底有有限预算；只对运行期热路径启用速度优化。 */
+#if defined(__CC_ARM)
+#pragma push
+#pragma Otime
+#endif
+
 bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *request)
 {
-    if ((request == NULL) || !s_armed || !s_timing_started) {
+    uint32_t phase_a;
+    uint32_t phase_b;
+    uint32_t phase_c;
+    uint32_t primask;
+    bool accepted = false;
+
+    /* 已取消/关闭的回调无需做浮点转换；有效入口仍在临界区内完整复核。 */
+    if (!s_stage_window_open) {
         return false;
     }
-
-    if (!s_stage_window_open || s_staged_this_tick) {
-        return false;
-    }
-
-    if (!duty_is_valid(request->phase_a_duty)
+    if ((request == NULL) || !duty_is_valid(request->phase_a_duty)
         || !duty_is_valid(request->phase_b_duty)
         || !duty_is_valid(request->phase_c_duty)) {
         return false;
     }
 
-    __HAL_TIM_SET_COMPARE(
-        &htim1,
-        TIM_CHANNEL_1,
-        duty_to_compare(request->phase_a_duty));
-    __HAL_TIM_SET_COMPARE(
-        &htim1,
-        TIM_CHANNEL_2,
-        duty_to_compare(request->phase_b_duty));
-    __HAL_TIM_SET_COMPARE(
-        &htim1,
-        TIM_CHANNEL_3,
-        duty_to_compare(request->phase_c_duty));
+    /* 浮点转换留在临界区外；进去以后重新检查所有可被 safe-off 改变的状态。 */
+    phase_a = duty_to_compare(request->phase_a_duty);
+    phase_b = duty_to_compare(request->phase_b_duty);
+    phase_c = duty_to_compare(request->phase_c_duty);
+    primask = __get_PRIMASK();
+    __disable_irq();
 
-    s_staged_this_tick = true;
-    s_stage_pending_boundary = true;
-
-    return true;
+    if (s_armed && s_timing_started && s_stage_window_open && !s_staged_this_tick
+        && (s_callback_epoch == s_actuation_epoch)
+        && ((htim1.Instance->CR1 & TIM_CR1_UDIS) == 0U)
+        && ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) == 0U)
+        && staging_time_available()) {
+        /* PRIMASK 只阻止软件抢占；UDIS 阻止硬件在三个 preload 写入之间更新。
+         * OC4REF 触发与计数器继续运行。成功路径必须在同一谷底前释放 UDIS。 */
+        SET_BIT(htim1.Instance->CR1, TIM_CR1_UDIS);
+        __DSB();
+        if (staging_time_available()) {
+            htim1.Instance->CCR1 = phase_a;
+            htim1.Instance->CCR2 = phase_b;
+            htim1.Instance->CCR3 = phase_c;
+            __DSB();
+            if (staging_time_available() && s_stage_window_open
+                && (s_callback_epoch == s_actuation_epoch)
+                && ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) == 0U)) {
+                /* 本 Platform 独占 UIF（UIE 关闭），下一次 UEV 才能证明提交生效。 */
+                s_pending_start_cycles = DWT->CYCCNT;
+                s_pending_count = htim1.Instance->CNT;
+                __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_UPDATE);
+                s_pending_epoch = s_actuation_epoch;
+                s_stage_pending_boundary = true;
+                s_staged_this_tick = true;
+                accepted = true;
+            }
+        }
+        if (!accepted) {
+            /* 未完成的请求不能作为部分三相或旧请求在下一次 enable 中出现。 */
+            safe_off_locked();
+        }
+        __DSB();
+        CLEAR_BIT(htim1.Instance->CR1, TIM_CR1_UDIS);
+        __DSB();
+        if (accepted && (!staging_time_available()
+            || ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) != 0U))) {
+            safe_off_locked();
+            accepted = false;
+        }
+    }
+    restore_interrupts(primask);
+    return accepted;
 }
 
 bool realtime_motor_io_power_enable(void)
 {
     uint32_t primask;
-    bool enabled;
-
-    if (!s_armed || !s_timing_started || !s_stage_window_open) {
-        return false;
-    }
-
-    if (!s_stage_committed || !s_staged_this_tick) {
-        return false;
-    }
+    bool enabled = false;
 
     primask = __get_PRIMASK();
     __disable_irq();
 
-    if ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) != 0U) {
-        enabled = false;
-    } else {
+    if (s_armed && s_timing_started && s_stage_window_open
+        && s_stage_committed && s_staged_this_tick
+        && (s_callback_epoch == s_actuation_epoch)
+        && ((htim1.Instance->CR1 & TIM_CR1_UDIS) == 0U)
+        && staging_time_available()
+        && ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) == 0U)) {
         SET_BIT(htim1.Instance->BDTR, TIM_BDTR_MOE);
         __DSB();
 
         enabled = ((htim1.Instance->BDTR & TIM_BDTR_MOE) != 0U)
-            && ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) == 0U);
-
-        if (!enabled) {
-            CLEAR_BIT(htim1.Instance->BDTR, TIM_BDTR_MOE);
-        }
+            && ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) == 0U)
+            && staging_time_available();
     }
-
-    s_power_enabled = enabled;
-
-    if (primask == 0U) {
-        __enable_irq();
+    if (enabled) {
+        s_power_enabled = true;
+    } else {
+        safe_off_locked();
     }
-
+    restore_interrupts(primask);
     return enabled;
 }
 
@@ -284,18 +389,8 @@ void realtime_motor_io_safe_off(void)
     primask = __get_PRIMASK();
     __disable_irq();
 
-    CLEAR_BIT(htim1.Instance->BDTR, TIM_BDTR_MOE);
-    stage_neutral_duty();
-
-    s_stage_window_open = false;
-    s_staged_this_tick = false;
-    s_stage_pending_boundary = false;
-    s_stage_committed = false;
-    s_power_enabled = false;
-
-    if (primask == 0U) {
-        __enable_irq();
-    }
+    safe_off_locked();
+    restore_interrupts(primask);
 }
 
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
@@ -304,27 +399,46 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     ControlTime observation_time;
     uint32_t raw_b;
     uint32_t raw_c;
+    uint32_t primask;
+    uint32_t entry_cr1;
     bool adc2_complete;
 
     if ((hadc != &hadc1) || !s_armed || !s_timing_started) {
         return;
     }
 
-    observation_time = control_time_source_advance_fast_tick();
+    primask = __get_PRIMASK();
+    __disable_irq();
+    s_callback_start_cycles = DWT->CYCCNT;
+    entry_cr1 = htim1.Instance->CR1;
+    s_callback_entry_count = htim1.Instance->CNT;
+    s_callback_epoch = s_actuation_epoch;
+    s_stage_window_open = false;
 
     /*
-     * 上一 fast tick 在 callback 内写入的 CCR preload 至少已经跨过一次
-     * center-aligned update boundary；现在才把它视为可用于 Power Enable
-     * 的 committed fresh actuation。
+     * stage 在 UDIS 内清过 UIF；只凭后续硬件 UEV 认定已生效。
+     * 重复/过早的 callback 不再被误当成已经跨过更新边界。
      */
-    if (s_stage_pending_boundary) {
+    if (s_stage_pending_boundary && (s_pending_epoch == s_actuation_epoch)
+        && ((htim1.Instance->SR & TIM_FLAG_UPDATE) != 0U)
+        && ((entry_cr1 & TIM_CR1_UDIS) == 0U)
+        && ((s_callback_start_cycles - s_pending_start_cycles) >= s_pending_count)) {
         s_stage_pending_boundary = false;
         s_stage_committed = true;
     }
 
     s_staged_this_tick = false;
+    /* 入口在向上半周或翻转附近时，本次 consumer 不获得 stage 权限。 */
+    if (((entry_cr1 & TIM_CR1_DIR) == 0U)
+        || ((htim1.Instance->CR1 & TIM_CR1_DIR) == 0U)) {
+        s_callback_entry_count = 0U;
+    }
+    restore_interrupts(primask);
 
-    raw_c = HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_1);
+    observation_time = control_time_source_advance_fast_tick();
+
+    /* 两路均固定单 injected rank；直接读取 JDR1，免去通用 rank 分派。 */
+    raw_c = hadc1.Instance->JDR1;
 
     adc2_complete = (__HAL_ADC_GET_FLAG(&hadc2, ADC_FLAG_JEOS) != 0U);
     if (!adc2_complete) {
@@ -339,7 +453,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     observation.acquisition_valid = false;
 
     if (adc2_complete && s_current_pair_synchronized) {
-        raw_b = HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_1);
+        raw_b = hadc2.Instance->JDR1;
         __HAL_ADC_CLEAR_FLAG(&hadc2, ADC_FLAG_JEOC | ADC_FLAG_JEOS);
 
         observation.phase_b_a = adc_raw_to_phase_current_a(raw_b);
@@ -351,18 +465,29 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
      * G431 只在 sample-ready consumer 的同步 callback 内开放 staging window。
      * callback 返回后立刻关闭，避免后台代码在不可证明的时刻改写下一周期 PWM。
      */
-    s_stage_window_open = true;
+    primask = __get_PRIMASK();
+    __disable_irq();
+    s_stage_window_open = (s_callback_epoch == s_actuation_epoch)
+        && staging_time_available();
+    restore_interrupts(primask);
     s_sample_ready_handler(s_sample_ready_context, &observation);
     s_stage_window_open = false;
 
     /*
      * RUN 中每个 fast tick 都必须提交 fresh actuation。
-     * 如果功率已经打开而本 tick 没有成功 stage，请求立刻 fail-safe。
+     * 无成功 stage 或 consumer 用尽整个半周期时立刻 fail-safe；HAL 在
+     * callback 返回后才清 JEOS，不能让过长 consumer 吞掉下一次采样。
      */
-    if (s_power_enabled && !s_staged_this_tick) {
+    if (s_power_enabled && (!s_staged_this_tick
+        || ((DWT->CYCCNT - s_callback_start_cycles)
+            >= REALTIME_MOTOR_IO_PWM_PERIOD_COUNTS))) {
         realtime_motor_io_safe_off();
     }
 
     position_observation_fast_tick(observation_time);
     bus_observation_fast_tick(observation_time);
 }
+
+#if defined(__CC_ARM)
+#pragma pop
+#endif

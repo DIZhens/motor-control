@@ -74,7 +74,9 @@ const uint32_t model_offsets[] = {
     offsetof(TargetValidationCurrentStatistics, phase_b),
     offsetof(TargetValidationCurrentStatistics, phase_c),
     sizeof(TargetValidationMailbox),
-    sizeof(PlatformBringupDebug)
+    sizeof(PlatformBringupDebug),
+    offsetof(TargetValidationSnapshot, interval_min_cycles),
+    offsetof(TargetValidationSnapshot, interval_max_cycles)
 };
 
 const uint32_t model_probe_size = sizeof(ProtectionProbeCapture);
@@ -118,6 +120,9 @@ bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *duty)
     }
     s_staged = true;
     s_pending = true;
+    TIM1->CCR1 = (uint32_t)(duty->phase_a_duty * 4250.0f + 0.5f);
+    TIM1->CCR2 = (uint32_t)(duty->phase_b_duty * 4250.0f + 0.5f);
+    TIM1->CCR3 = (uint32_t)(duty->phase_c_duty * 4250.0f + 0.5f);
     return true;
 }
 bool realtime_motor_io_power_enable(void)
@@ -133,6 +138,9 @@ void realtime_motor_io_safe_off(void)
 {
     model_off_calls++;
     TIM1->BDTR &= ~TIM_BDTR_MOE;
+    TIM1->CCR1 = 2125U;
+    TIM1->CCR2 = 2125U;
+    TIM1->CCR3 = 2125U;
     s_window = false;
     s_staged = false;
     s_pending = false;

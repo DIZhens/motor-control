@@ -90,7 +90,8 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  /* 170 MHz / 4 WS: prefetch reduces sequential Flash fetch stalls in the ADC path. */
+  __HAL_FLASH_PREFETCH_BUFFER_ENABLE();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */

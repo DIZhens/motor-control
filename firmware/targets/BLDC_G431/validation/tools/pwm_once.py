@@ -126,11 +126,15 @@ def main():
     mode.add_argument("--inspect-startup", action="store_true")
     mode.add_argument("--preflight", action="store_true")
     mode.add_argument("--execute-once", action="store_true")
+    common.add_candidate_arguments(parser)
     args = parser.parse_args()
+    common.configure_candidate(args)
     action = "inspect-startup" if args.inspect_startup else "execute" if args.execute_once else "preflight"
     require((action == "inspect-startup") == (args.previous_summary is None),
             "Supply previous evidence for preflight/execution; inspect-startup is read-only and requires fresh startup")
     previous = json.loads(args.previous_summary.read_text(encoding="utf-8")) if args.previous_summary else None
+    if previous:
+        require(previous.get("hex_sha256") == common.EXPECTED, "Previous evidence belongs to another image")
     require(not args.output.exists(), "Output directory exists; refusing overwrite or replay")
     args.output.mkdir()
     session = None
