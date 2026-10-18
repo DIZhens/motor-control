@@ -1,0 +1,4 @@
+# Local ARM model checks and candidate-file parsing; Keil is installed separately.
+# Versions verified with Python 3.13.2.
+unicorn==2.1.4
+pyelftools==0.33

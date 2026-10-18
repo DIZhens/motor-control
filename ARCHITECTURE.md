@@ -2,6 +2,8 @@
 
 本文档是本仓库长期架构合同。它只记录需要长期遵守的职责、依赖方向、替换边界、状态所有权和安全语义；具体 API 以对应源码头文件和 `interface/` 合同为准。
 
+文中的 `Single-Motor Encoder Phase-Current FOC Profile V1` 定义长期硬件与实时能力边界，不等于一次交付必须实现本文所有模块、控制模式和通信方式。当前交付 V1 收敛为 G431 单电机、MT6701、FOC 电流内环和速度外环，以 UART 和现成 VOFA 工具完成观测与基本操作；Qt Host 与位置环后续再做。活动阶段的具体目标、期限和验收边界以本地 Git 检查点正文为准，见 `DEVELOPMENT.md`。
+
 ## 1. 项目定位
 
 本仓库实现一套可跨电机控制硬件复用的 BLDC/PMSM 控制系统。
@@ -678,6 +680,8 @@ UART、USB CDC、TCP 可以自然复用字节流 framing；CAN 是帧式链路�
 
 Host 是第一方设备应用，不是通用上位机平台。
 
+以下是后续第一方 Qt Host 的技术基线与边界，不是当前交付 V1 的前置条件。V1 使用现成 VOFA 工具，配置、通道映射和操作说明由 `host/` 保存，设备语义仍由 `interface/` 定义。
+
 首选技术基线：
 
 ```text
@@ -709,5 +713,5 @@ UART / USB / CAN / TCP
 - Transport 不理解 Start、Target、Fault 等 Motor 业务语义；
 - Host 与 Firmware 共同遵守 `interface/`；
 - Host 核心行为应可通过 mock / headless test 验证，不依赖人工点 GUI；
-- Serial Studio、PlotJuggler、Jupyter 可以辅助观测和分析，但不是 Device Contract 权威；
+- VOFA、Serial Studio、PlotJuggler、Jupyter 可以辅助观测和分析，但不是 Device Contract 权威；
 - 不预建插件系统、通用 Dashboard 编辑器、通用协议编辑器或多厂家设备平台。

@@ -4,6 +4,10 @@
 它不是正式 Motor / ControlRuntime，主动命令仅用于电机三相已断开的台架。
 本页汇总当前有限验收、历史证据归属和复用入口，不表示有带电操作排队。
 
+本页对应 Keil 的 `BLDC_control V1` 台架 Target；另一个默认关断的
+`BLDC_G431_Observe` 构建与离线验证见 [runtime/README.md](runtime/README.md)，
+两个入口的镜像与验收证据不互相替代。
+
 ## 当前验收（2026-10-18）
 
 当前时序候选 HEX SHA256：

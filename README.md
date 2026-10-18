@@ -15,50 +15,27 @@
 control/      可移植电机控制算法
 interface/    Firmware / Host 共享的设备与协议合同
 firmware/     MCU 固件、Hardware Capability Contract 与各板 Target
-host/         Qt6 PC Host
+host/         PC 调试工具配置与说明，后续 Qt6 Host
 hardware/     已确认的物理硬件事实
 ```
 
 长期架构见 `ARCHITECTURE.md`，开发、协作和验证方式见 `DEVELOPMENT.md`。
 
-## 当前实现
+## V1 主线
 
-仓库目前处于硬件适配与基础验证阶段。已有自研 STM32G431 板和 ODrive V3.6 / STM32F405 M0 的 Target 工程、公共硬件能力接口及台架验证入口。
+V1 收敛为自研 STM32G431 板、一台电机和 MT6701 编码器的 FOC 电流内环与速度外环，通过 UART 和现成 VOFA 工具观测关键数据、启停、设置速度并查看故障。具体阶段目标、期限、完成条件和下一步由本地 Git 检查点正文保存，恢复方法见 [开发规则](DEVELOPMENT.md)。
 
-- **G431**：完成首板修复后的无电机基础波形、受控保护注入与恢复、静态电流统计和编码器手动转动检查。限于已记录的测量条件；尚未完成带载控制验收，且占空比提交的硬件截止检查仍有实现缺口。见 [验证结果与剩余门槛](firmware/targets/BLDC_G431/VALIDATION.md)。
-- **F405 M0**：已有 Platform 适配和功率关闭的观测入口，当前工程的实机验收尚未完成。见 [Target 说明](firmware/targets/ODRIVE_V36_405_M0/README.md)。
-- **公共应用与 Host**：正式 Motor / ControlRuntime、控制算法、协议实现和 Qt Host 尚未落地；当前 `main()` 运行的是 Target 台架程序。
+Qt Host、位置环、Modbus、CANopen、FreeRTOS 及 F405 同功能验收均在后续范围；保留现有目录与替换边界，出现实际职责时再增加实现。
 
-两个 Target 的实现与验收范围见 [固件入口](firmware/README.md)。少量原始波形及测量限制见 [公开证据索引](firmware/targets/BLDC_G431/validation/evidence/20261018-baseline/README.md)；完整本地日志不随仓库克隆分发。
+## 实现与验证入口
 
-## 后续系统目标
+现有工程包含 G431 和 F405 M0 的 Platform、公共硬件能力合同及台架验证入口。G431 另有默认关断的 Motor / UART 观察入口，已接入 VOFA 编解码和实时边界命令交接，启动请求仍被拒绝；闭环控制、标定和 UART 实机验收尚未完成。上述 V1 范围是交付目标。
 
-主线使用自研 STM32G431 BLDC 控制板和 UART 链路；F405 保留为第二种硬件适配实现，实机验收独立记录。
+- [固件入口](firmware/README.md)：Target、公共应用与构建边界。
+- [G431 默认关断入口](firmware/targets/BLDC_G431/runtime/README.md)：独立构建、UART 和当前执行边界。
+- [G431 验证结果与剩余门槛](firmware/targets/BLDC_G431/VALIDATION.md)：G431 验收结论、镜像与证据的唯一汇总入口。
+- [F405 M0 说明](firmware/targets/ODRIVE_V36_405_M0/README.md)：独立的实现和验证范围。
+- [Host 入口](host/README.md)：V1 的 VOFA 资料职责与后续 Qt Host。
+- [共享接口入口](interface/README.md)：设备语义、UART 命令与观测合同。
 
-后续按三个方面组织可展示成果，具体功能与指标在各阶段开始前确定：
-
-- **嵌入式软件**：确定性采样与控制时序、清晰的接口和状态所有权、故障恢复、可重复构建与针对性测试。
-- **嵌入式硬件**：采样与功率级设计依据、首板调试、保护链路和仪器测量，保留问题定位与修复证据。
-- **电机控制**：编码器反馈、测量校准与 FOC 闭环工程实现，记录限定工况下的控制效果和限制。
-
-后续目标是形成下面的系统链路；此图表示设计目标，不代表当前已实现：
-
-```text
-Qt Host
-   ↓
-Device API
-   ↓
-Protocol
-   ↓
-UART
-   ↓
-STM32 Firmware
-   ↓
-Motor Control
-   ↓
-Telemetry
-   ↓
-Qt Host
-```
-
-已有 F405 Target 保留为第二种硬件适配。USB/CAN/TCP、多设备、CANopen、ESP32 Gateway 和通用插件平台暂不扩展，优先完成单电机系统及其可复现验证。
+完整本地日志不随仓库克隆分发；公开证据及其测量限制从对应 Target 验证页进入。

@@ -31,7 +31,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+#include "target_runtime.h"
+#else
 #include "target_validation.h"
+#endif
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -114,7 +118,11 @@ int main(void)
   MX_USB_PCD_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+  target_runtime_start();
+#else
   target_validation_start();
+#endif
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -124,8 +132,12 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+    target_runtime_service();
+#else
     /* 周期观测保持 10 ms；不在 HAL_Delay 中延后 urgent rescan。 */
     target_validation_service();
+#endif
   }
   /* USER CODE END 3 */
 }
