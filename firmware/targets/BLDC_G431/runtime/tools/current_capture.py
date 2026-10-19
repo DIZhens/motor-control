@@ -118,6 +118,24 @@ def read_hex(path):
     return image
 
 
+def validate_map_load_region(mapping, image):
+    """MAP 的 Size 可为未压缩布局大小；仅明确 COMPRESSED 项提供物理加载长度。"""
+    lines = re.findall(r"(?m)^\s*Load Region\b[^\r\n]*", mapping)
+    require(len(lines) == 1, "MAP 必须恰好包含一个加载区域")
+    region = re.fullmatch(
+        r"\s*Load Region \S+ \(Base:\s*(0x[0-9a-fA-F]+),\s*Size:\s*(0x[0-9a-fA-F]+)"
+        r"(?:,\s*Max:\s*(0x[0-9a-fA-F]+))?(?:,\s*ABSOLUTE)?"
+        r"(?:,\s*COMPRESSED\[(0x[0-9a-fA-F]+)\])?\)\s*", lines[0])
+    require(region is not None, "MAP 加载区域或压缩标记格式非法")
+    base, logical_size = int(region[1], 0), int(region[2], 0)
+    maximum = int(region[3], 0) if region[3] else None
+    physical_size = int(region[4], 0) if region[4] else logical_size
+    require(0 < physical_size <= logical_size and (maximum is None or logical_size <= maximum),
+            "MAP 物理加载长度或区域上界非法")
+    require(bool(image) and (base, physical_size) == (min(image), len(image))
+            and max(image) - min(image) + 1 == len(image), "MAP 加载区域与 HEX/AXF 物理字节不同")
+
+
 def layout_spec():
     spec = {}
     for key, symbol in SYMBOLS.items():
@@ -213,9 +231,7 @@ def verify_artifacts(hex_file, axf, map_file, layout):
                 require(address + index not in loaded, "AXF 加载区域重叠")
                 loaded[address + index] = value
         require(image == loaded, "AXF 加载字节与 HEX 不同，不能混用编译产物")
-        regions = re.findall(r"Load Region \S+ \(Base: (0x[0-9a-fA-F]+), Size: (0x[0-9a-fA-F]+)", mapping)
-        require(len(regions) == 1 and tuple(int(value, 0) for value in regions[0]) == (min(image), len(image))
-                and max(image) - min(image) + 1 == len(image), "MAP 加载区域与 HEX/AXF 不同")
+        validate_map_load_region(mapping, image)
         entries = re.findall(r"Image Entry point\s*:\s*(0x[0-9a-fA-F]+)", mapping)
         require(len(entries) == 1 and int(entries[0], 0) == elf["e_entry"]
                 and (elf["e_entry"] & ~1) in image, "MAP 入口与 AXF 不同")

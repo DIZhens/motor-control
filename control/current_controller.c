@@ -1,6 +1,7 @@
 #include "current_controller.h"
 
 #include "foc_math.h"
+#include "foc_math_internal.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -93,10 +94,9 @@ static bool current_controller_reference_valid(float d, float q, float limit)
 static bool current_controller_phasor(float sine, float cosine,
                                        float *normalized_sine, float *normalized_cosine)
 {
-    FocDq validation;
     float norm;
-    /* 复用基础变换的合法性合同；通过后才本地归一化，不放宽外部相量容差。 */
-    if (!foc_park(0.0f, 0.0f, sine, cosine, &validation)) {
+    /* 与公共变换共用原始相量验证，通过后仅在本次调用内归一化并复用。 */
+    if (!foc_math_phasor_valid(sine, cosine)) {
         return false;
     }
     norm = sqrtf(sine * sine + cosine * cosine);
@@ -170,7 +170,8 @@ bool current_controller_update(CurrentController *controller,
     CURRENT_PROFILE_MARK(1U);
     if (!current_controller_phasor(input->sin_electrical_angle, input->cos_electrical_angle,
                                     &sine, &cosine) ||
-        !foc_park(input->current_alpha_a, input->current_beta_a, sine, cosine, &measured)) {
+        !foc_math_park_internal(input->current_alpha_a, input->current_beta_a,
+                                sine, cosine, false, &measured)) {
         current_controller_reset(controller);
         return false;
     }
@@ -193,7 +194,8 @@ bool current_controller_update(CurrentController *controller,
     requested_q = proportional_q + controller->integral_q_v;
     if (!isfinite(error_d) || !isfinite(error_q) || !isfinite(proportional_d) ||
         !isfinite(proportional_q) || !isfinite(requested_d) || !isfinite(requested_q) ||
-        !foc_inverse_park(requested_d, requested_q, actuation_sine, actuation_cosine, &voltage)) {
+        !foc_math_inverse_park_internal(requested_d, requested_q,
+            actuation_sine, actuation_cosine, false, &voltage)) {
         current_controller_reset(controller);
         return false;
     }
@@ -204,8 +206,8 @@ bool current_controller_update(CurrentController *controller,
         return false;
     }
     CURRENT_PROFILE_MARK(4U);
-    if (!foc_park(modulation.applied_alpha_v, modulation.applied_beta_v,
-                  actuation_sine, actuation_cosine, &applied) ||
+    if (!foc_math_park_internal(modulation.applied_alpha_v, modulation.applied_beta_v,
+                  actuation_sine, actuation_cosine, false, &applied) ||
         !current_controller_next_integral(controller->integral_d_v, error_d,
             controller->config.ki_d_v_per_a_s, controller->config.tracking_gain_per_s,
             requested_d, applied.d, input->interval_s, controller->config.integral_limit_v,

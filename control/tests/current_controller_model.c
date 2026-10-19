@@ -143,3 +143,10 @@ void model_corrupt_history(void)
     model_selected()->integral_q_v = model_history[1];
     model_update();
 }
+
+void model_replace_config(void)
+{
+    /* 公开结构被改写后，update仍必须逐拍检查当前配置，不能依赖init时的缓存。 */
+    model_selected()->config = model_config;
+    model_update();
+}

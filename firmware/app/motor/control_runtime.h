@@ -61,6 +61,8 @@ typedef struct {
     ElectricalAngleConfig electrical_angle; /* 仅在下列标定可信标志为 true 时使用。 */
     bool electrical_calibration_confirmed; /* 极对数、方向、偏置均已确认；资料标称不能置位。 */
     ControlRuntimeControlConfig control; /* 默认关闭；Observe 不调用功率或 PI 路径。 */
+    ElectricalAngleTrig angle_trig; /* 测量/施加角共用的窄后端；NULL使用软件，失败不回退。 */
+    void *angle_trig_context; /* 由装配方持有并串行使用，寿命覆盖Runtime；软件默认实现忽略它。 */
 } ControlRuntimeConfig;
 
 /*
@@ -78,7 +80,7 @@ typedef struct {
     SpeedController speed_controller; /* 速度 PI 积分历史。 */
     CurrentControllerOutput current_output; /* 本拍电压与 duty 数值结果；无效时不得提交。 */
     SpeedControllerOutput speed_output; /* 速度慢环最近一次完整输出，两次更新之间保持。 */
-    FocDq current_dq; /* 同步测量角下的校正 Id/Iq；无物理确认时无效。 */
+    FocDq current_dq; /* RUN复用控制器归一化测量DQ；IDLE独立Park；无物理确认时无效。 */
     ControlRuntimePhase phase; /* 内部跨拍启动/运行流程，不新增公共 Motor 生命周期。 */
     float pending_velocity_rpm; /* 已接受但尚未使能的完整启动目标。 */
     uint32_t speed_counter; /* 速度环自上次计算以来的同步采样拍数。 */

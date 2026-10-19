@@ -1,68 +1,21 @@
 #include "foc_math.h"
+#include "foc_math_internal.h"
 
 #include <math.h>
 #include <stddef.h>
 
 #define FOC_INV_SQRT_THREE 0.5773502691896258f
 #define FOC_SQRT_THREE_OVER_TWO 0.8660254037844386f
-#define FOC_PHASOR_NORM_TOLERANCE 0.001f
 #define FOC_DUTY_ROUNDING_TOLERANCE 0.000001f
-
-static bool phasor_valid(float sine, float cosine)
-{
-    float norm;
-    if (!isfinite(sine) || !isfinite(cosine) || fabsf(sine) > 1.001f ||
-        fabsf(cosine) > 1.001f) {
-        return false;
-    }
-    norm = sine * sine + cosine * cosine;
-    return isfinite(norm) && fabsf(norm - 1.0f) <= FOC_PHASOR_NORM_TOLERANCE;
-}
 
 bool foc_park(float alpha, float beta, float sin_theta, float cos_theta, FocDq *out)
 {
-    float d, q;
-    if (out == NULL) {
-        return false;
-    }
-    out->d = 0.0f;
-    out->q = 0.0f;
-    out->valid = false;
-    if (!isfinite(alpha) || !isfinite(beta) || !phasor_valid(sin_theta, cos_theta)) {
-        return false;
-    }
-    d = alpha * cos_theta + beta * sin_theta;
-    q = -alpha * sin_theta + beta * cos_theta;
-    if (!isfinite(d) || !isfinite(q)) {
-        return false;
-    }
-    out->d = d;
-    out->q = q;
-    out->valid = true;
-    return true;
+    return foc_math_park_internal(alpha, beta, sin_theta, cos_theta, true, out);
 }
 
 bool foc_inverse_park(float d, float q, float sin_theta, float cos_theta, FocAlphaBeta *out)
 {
-    float alpha, beta;
-    if (out == NULL) {
-        return false;
-    }
-    out->alpha = 0.0f;
-    out->beta = 0.0f;
-    out->valid = false;
-    if (!isfinite(d) || !isfinite(q) || !phasor_valid(sin_theta, cos_theta)) {
-        return false;
-    }
-    alpha = d * cos_theta - q * sin_theta;
-    beta = d * sin_theta + q * cos_theta;
-    if (!isfinite(alpha) || !isfinite(beta)) {
-        return false;
-    }
-    out->alpha = alpha;
-    out->beta = beta;
-    out->valid = true;
-    return true;
+    return foc_math_inverse_park_internal(d, q, sin_theta, cos_theta, true, out);
 }
 
 static float clamp_rounding(float duty)

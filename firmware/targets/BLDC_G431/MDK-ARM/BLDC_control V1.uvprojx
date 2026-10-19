@@ -793,6 +793,16 @@
               <FileType>1</FileType>
               <FilePath>../runtime/irq_timing.c</FilePath>
             </File>
+            <File>
+              <FileName>stage_budget.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/stage_budget.c</FilePath>
+            </File>
+            <File>
+              <FileName>stage_budget_runtime.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/stage_budget_runtime.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -1402,7 +1412,7 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>USE_HAL_DRIVER,STM32G431xx,BLDC_G431_OBSERVE_ENTRY,CONTROL_CURRENT_PROFILE</Define>
+              <Define>USE_HAL_DRIVER,STM32G431xx,BLDC_G431_OBSERVE_ENTRY</Define>
               <Undefine></Undefine>
               <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../runtime;../../../app/motor;../../../app/communication;../../../../control</IncludePath>
             </VariousControls>
@@ -1860,6 +1870,16 @@
               <FileName>irq_timing.c</FileName>
               <FileType>1</FileType>
               <FilePath>../runtime/irq_timing.c</FilePath>
+            </File>
+            <File>
+              <FileName>stage_budget.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/stage_budget.c</FilePath>
+            </File>
+            <File>
+              <FileName>stage_budget_runtime.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/stage_budget_runtime.c</FilePath>
             </File>
           </Files>
         </Group>

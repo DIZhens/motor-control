@@ -127,7 +127,8 @@ Stop 清目标、待启动请求和两环积分，保留正常冻结零偏；任
 开启 CORDIC 并生成时钟初始化，但本机模式库不配置计算功能。适配器启动时一次配置
 COSINE、6 cycles、scale 0、两个 32 位输入输出；每拍显式写角度和模长，读 cos 后读 sin。
 有界等待、重入或配置异常均拒绝，外设失败隔离到 MCU 重启，不静默回退软件。
-当前实际控制链没有选择硬件后端。共享栈由 `.ioc` 配置为 4 KB，再生成 startup，
+当前 G431 装配已显式选择该后端，但电角度物理确认和控制许可仍关闭，正常观察不计算
+未标定角度；只有下述隔离试具执行合成控制计算。共享栈由 `.ioc` 配置为 4 KB，再生成 startup，
 用于容纳新增后台调用链、函数指针回调与中断嵌套；静态调用图仍不能证明最坏栈占用。
 
 主机只向 `g_target_runtime_compute_request` 写一次非零新身份。后台是实例、身份消费和
@@ -149,7 +150,7 @@ clean 仍包含仪器化开销、Flash 与外设访问延迟，不是函数净�
 按 170 MHz 配置换算；200 µs 的单例诊断上限只用于拒绝异常读数，不是实际控制预算。
 该诊断不是完整 ISR 或 stage 截止验收，也会延后 UART 轮询，不能同时验收串口高负荷。
 
-当前 Observe 构建额外定义 `CONTROL_CURRENT_PROFILE`，在正式电流控制函数内记录七个
+历史控制器分段候选定义 `CONTROL_CURRENT_PROFILE`，在正式电流控制函数内记录七个
 边界，区分输入校验、相量准备与 Park、PI 与逆 Park、SVPWM、施加 Park 与积分、输出提交。
 算法仅在该编译宏下调用通用私有钩子；默认算法构建没有探针调用，也不引入 Target 头文件。
 后台独占 `controller_profile` 实例：128 次有效调用形成七行统计，32 次预期拒绝只计数；
@@ -168,6 +169,10 @@ CORDIC 独占采用最多四次 exclusive 尝试；普通异常清除 reservatio
 发现 busy 已占用立即拒绝，不等待持有者。四次均失败仍拒绝，不屏蔽中断或回退软件；
 配置、时钟、残留结果及就绪超时继续隔离外设，锁重试不等于重试硬件事务。
 
+当前 Observe 候选已取消 `CONTROL_CURRENT_PROFILE`，控制器内部无上述七个探针调用。
+旧后台工具需要这些统计，因此本候选在请求写入前明确撤销旧 compute 许可；历史窗口
+继续绑定其冻结镜像。当前使用下述提交预算工具，不能把两种测量布局或验收结论互换。
+
 [`tools/compute_probe.py`](tools/compute_probe.py) 默认只冻结并核对同次 HEX/AXF/MAP、
 真实 DWARF 字段、短枚举和对照 schema；旧单后端布局不能套用到新镜像。
 只有显式 `--measure --logic-only-confirmed --vbus-dmm-v <实测值>`
@@ -176,6 +181,36 @@ CORDIC 独占采用最多四次 exclusive 尝试；普通异常清除 reservatio
 
 ```powershell
 .venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tools/compute_probe.py --build-dir <同次构建目录> --expected-hex-sha256 <完整SHA256> --output <新目录>
+```
+
+## 无功率提交预算诊断
+
+`stage_budget.c` 拥有独立 Motor/ControlRuntime 试具；`stage_budget_runtime.c` 仅通过符号
+重命名编译同一正式源码，不复制算法，也不在公共 Runtime 增加诊断业务模式。合成电流、
+位置、12 V 母线、校正参数、标定标志与模拟 RUN/power 输入仅属于该试具，真实业务对象
+保持未标定、控制关闭。测量/施加角使用实际 CORDIC；刷新拍先执行真实 HCC latest 读取，
+再提供合成数值。SSI 与母线采集仍按原 Platform 尾部调度，不把异步采集全耗时算入前段。
+
+试具的初始化、两点合成校零和历史构造在 Drive Timing 启动前执行；ADC 准备拍只复制
+固定模板。新请求由 ADC 单写者消费，准备拍不计量；随后最多 80 拍覆盖普通快拍、速度
+更新、观测刷新及调制限幅。原锚点、当前方向、CNT、DWT 和真实 HCC stage 返回值均保留。
+使能端口永远拒绝，正常结束或首个失败均实际 safe-off，冻结完整统计或失败拍原始读数。
+Stop 优先取消；其他命令拒绝并中止窗口。重复身份不重放，失败不自动重试。
+
+Target 先做原有保护与命令检查，再运行该诊断；真实 OFF 观察保持逐拍运行，安排在诊断
+stage 后，防止跳过采样或伪造真实 Runtime 时间历史。该尾部是诊断附加开销，不能据此
+声称完整正式 RUN ISR/WCET。六行是不同分类与嵌套区间，不能相加。固定窗口通过也不
+构成最坏执行时间或实物闭环验收；本轮实测提交超时，详见 [验证页](../VALIDATION.md)。
+
+[`tools/stage_budget.py`](tools/stage_budget.py) 默认只冻结和核对同次 HEX/AXF/MAP 及真实
+DWARF；仅显式 `--measure --logic-only-confirmed --vbus-dmm-v <参考读数>` 执行一次请求。
+前检要求真实 IDLE/OFF，前后核对 Flash、CPU、guard、时基和低母线，后检记录真实状态
+与故障。FAILED 仍保存完整结果、
+首因与后健康，不变成 PASS；超时或应答丢失不补发、复位或清故障。
+MAP 压缩 RW 时核对明确的 `COMPRESSED[...]` 物理加载长度，HEX 与 ELF 仍逐字节相同。
+
+```powershell
+.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tools/stage_budget.py --build-dir <同次构建目录> --expected-hex-sha256 <完整SHA256> --output firmware/targets/BLDC_G431/validation/local-evidence/<新目录>
 ```
 
 ## 已知电流诊断采集
@@ -234,6 +269,8 @@ python firmware/targets/BLDC_G431/runtime/tests/verify_compute_probe_model.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_cordic_math.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_controller_profile.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_irq_timing.py
+python firmware/targets/BLDC_G431/runtime/tests/verify_stage_budget.py
+python firmware/targets/BLDC_G431/runtime/tests/test_stage_budget_tool.py
 python firmware/targets/BLDC_G431/runtime/tests/test_compute_probe_tool.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py
@@ -253,8 +290,8 @@ ADC 丢失、旧快照失效、低优先级代码被 ADC 抢占的交错，以�
 单地址一次写、应答丢失不补发和采后复核。模型不代替 UART 链路、
 实机速度精度或 ISR WCET；软件与实机结论分别记录在 Target 验证页。
 既有 UART、手转反馈、逻辑供电零偏及后台计算计时各有有限实测；软件/CORDIC 对照的
-当前执行身份和范围见验证页。下一步依据分段结果决定是否替换实际后端，并推进已知
-电流增益/方向对照，随后安排受控电角度标定和 FOC。
+当前执行身份和范围见验证页。当前提交预算实测未通过，下一步先收敛整条计算/提交路径，
+电流增益/方向对照可独立准备；通过时序及实物确认后再安排受控电角度标定和 FOC。
 各轮镜像与实测范围、既有台架证据仍从
 [VALIDATION.md](../VALIDATION.md) 进入，按具体修改影响选择复测。
 

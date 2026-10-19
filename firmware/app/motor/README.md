@@ -4,6 +4,20 @@
 拥有反馈、估计、待执行命令和控制流水线。后台读取协议无关的 `MotorSnapshot` 副本，
 不直接修改实时算法历史。长期边界见 [总体架构](../../../ARCHITECTURE.md)。
 
+## 控制反馈与角度后端
+
+`ControlRuntimeConfig.angle_trig` 与上下文由装配方固定持有；NULL 使用软件实现，
+测量角与施加角共用所选后端，失败立即使角度无效，不静默回退。Target 硬件适配器仍在
+Target 内，公共 Runtime 不依赖 HAL。后端选择不改变电流、电角度和时序的物理确认门槛。
+
+RUN 的 Id/Iq 直接采用本拍成功电流控制器输出，复用其已归一化测量角，避免再做一次
+观测 Park；IDLE、待启动及 Stop 仍独立计算观测 DQ。RUN 在控制器返回前只检查原始反馈
+及新鲜度，随后由控制器完成变换检查，失败同拍关断并清历史。合法有限输入导致旋转溢出
+时，RUN 归入 CONTROL 数值计算失败；IDLE 仍撤销观测有效性并拒绝 Start。
+
+专属 Runtime ARM 模型见 `firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py`。
+数值闭环与模型保护通过不表示真实提交截止或实物标定通过。
+
 ## 有限静态定向核心
 
 `rotor_alignment.h/.c` 是 Motor 内部可选的有限试验计算器，尚未装配到实际功率路径，

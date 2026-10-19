@@ -5,6 +5,7 @@
 
 #include "current_capture.h"
 #include "compute_comparison.h"
+#include "stage_budget.h"
 
 /* Observe 入口的锁存诊断；当前没有清除或功率使能路径。 */
 enum {
@@ -37,6 +38,9 @@ extern volatile ObserveCurrentCaptureResult g_target_runtime_current_capture;
 extern volatile uint32_t g_target_runtime_compute_request;
 extern volatile uint32_t g_target_runtime_compute_sequence;
 extern volatile ObserveComputeComparisonResult g_target_runtime_compute_result;
+
+/* 独立试具的有限提交预算窗口；只写一次新身份，不表示实物标定或真实RUN。 */
+extern volatile uint32_t g_target_runtime_stage_request;
 
 /* 一次装配，默认关断；不包含 stage、enable 或保护注入命令。 */
 void target_runtime_start(void);

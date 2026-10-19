@@ -15,7 +15,7 @@ from elftools.elf.elffile import ELFFile
 
 from current_capture import (CubeBackend, DEFAULT_CLI, DEFAULT_GDB, DHCSR, FLASH_START,
                              FLASH_SIZE, RAM_START, RAM_END, TIM1_BASE, PreparedBuild,
-                             digest, read_hex, require, save, word)
+                             digest, read_hex, require, save, validate_map_load_region, word)
 
 
 CASE_NAMES = ["普通计算", "速度输出保持", "独立施加角", "电流电压限幅", "坏电流拒绝", "坏母线拒绝"]
@@ -176,9 +176,7 @@ def verify_artifacts(hex_file, axf, map_file, layout):
                 require(address + index not in loaded, "AXF 加载字节重叠")
                 loaded[address + index] = value
         require(image == loaded, "HEX 和 AXF 加载字节不同")
-        regions = re.findall(r"Load Region \S+ \(Base: (0x[0-9a-fA-F]+), Size: (0x[0-9a-fA-F]+)", mapping)
-        require(len(regions) == 1 and tuple(int(value, 0) for value in regions[0]) == (min(image), len(image))
-                and max(image) - min(image) + 1 == len(image), "MAP 加载区域与 HEX/AXF 不符")
+        validate_map_load_region(mapping, image)
         entries = re.findall(r"Image Entry point\s*:\s*(0x[0-9a-fA-F]+)", mapping)
         require(len(entries) == 1 and int(entries[0], 0) == elf["e_entry"] and (elf["e_entry"] & ~1) in image,
                 "MAP 入口与 AXF 不符")

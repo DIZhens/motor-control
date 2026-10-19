@@ -334,6 +334,46 @@ with tempfile.TemporaryDirectory(prefix="current-controller-") as directory:
     assert model.values[9:] == [0.0, 0.0]
     passed("配置逐字段拒绝非法范围；零增益合法，空配置清状态，配置别名可安全重初始化")
 
+    for field in range(9):
+        for bad_value in [math.nan, math.inf, -math.inf, -1.0]:
+            model = Model()
+            model.seed_history()
+            changed = list(DEFAULT_CONFIG)
+            changed[field] = bad_value
+            model.write("model_config", changed, "9f")
+            model.call("model_replace_config")
+            model.expect_invalid()
+    model = Model()
+    model.seed_history()
+    history = model.values[9:]
+    model.config = list(map(float32, [3.0, 4.0, 40.0, 50.0, 80.0, 8.0, 3.0, 0.45, 0.002]))
+    model.write("model_config", model.config, "9f")
+    model.call("model_replace_config")
+    assert model.status[0] and model.status[4]
+    model.check_reference(history)
+    passed("init之后直接改写公开配置仍逐字段拒绝坏值并清历史，合法新配置当拍生效而不使用旧缓存")
+
+    for edge in [math.sqrt(0.999), math.sqrt(1.001)]:
+        center = struct.unpack("<I", struct.pack("<f", edge))[0]
+        for bits in range(center - 3, center + 4):
+            cosine = struct.unpack("<f", struct.pack("<I", bits))[0]
+            norm = float32(cosine * cosine)
+            expected = abs(float32(norm - 1.0)) <= float32(0.001)
+            for separate in [False, True]:
+                model = Model()
+                inputs = list(DEFAULT_INPUT)
+                inputs[0:2] = [0.2, -0.3]
+                inputs[5:7] = [0.7, -0.2]
+                if separate:
+                    accepted = model.update(inputs, separate_actuation=True, actuation=[0.0, -cosine])
+                else:
+                    inputs[2:4] = [0.0, cosine]
+                    accepted = model.update(inputs)
+                assert accepted == expected, (bits, separate, norm, model.status)
+                if accepted:
+                    model.check_reference([0.0, 0.0])
+    passed("单位圆上下精确边界附近相邻float按原始norm判定，测量与独立施加角均不因去重而扩大接受域")
+
     for function in ["model_null_controller", "model_null_input"]:
         model = Model()
         assert model.update()

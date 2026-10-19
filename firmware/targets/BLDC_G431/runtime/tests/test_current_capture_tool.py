@@ -463,6 +463,32 @@ class Tests(unittest.TestCase):
             for suffix, payload in original.items():
                 stem.with_suffix(suffix).write_bytes(payload)
 
+    def test_map_physical_load_length_supports_only_explicit_compression(self):
+        build, stem = self.create_artifacts()
+        original = stem.with_suffix(".map").read_text(encoding="utf-8")
+        compressed = original.replace("Size: 0x00000004, Max: 0x20000)",
+                                      "Size: 0x00000008, Max: 0x20000, ABSOLUTE, COMPRESSED[0x00000004])")
+        stem.with_suffix(".map").write_text(compressed, encoding="utf-8")
+        self.assertEqual(tool.verify_artifacts(stem.with_suffix(".hex"), stem.with_suffix(".axf"),
+                                              stem.with_suffix(".map"), self.layout), self.prepared.image)
+        invalid = [compressed.replace("COMPRESSED[0x00000004]", "COMPRESSED[0x00000003]"),
+                   compressed.replace(", COMPRESSED[0x00000004]", ""),
+                   compressed.replace("COMPRESSED[0x00000004]", "COMPRESSED[0x00000000]"),
+                   compressed.replace("COMPRESSED[0x00000004]", "COMPRESSED[0x00000009]"),
+                   compressed.replace("COMPRESSED[0x00000004]", "COMPRESSED[4]"),
+                   compressed.replace("COMPRESSED[0x00000004]", "COMPRESSED[0x00000004], COMPRESSED[0x00000004]"),
+                   compressed.replace("Base: 0x08000000", "Base: 0x08000004"),
+                   compressed.replace("Max: 0x20000", "Max: 0x00000007"),
+                   compressed + "Load Region LR_OTHER (Base: 0x08000000, Size: 0x4)\n"]
+        for mapping in invalid:
+            stem.with_suffix(".map").write_text(mapping, encoding="utf-8")
+            with self.subTest(mapping=mapping[:160]), self.assertRaises(RuntimeError):
+                tool.verify_artifacts(stem.with_suffix(".hex"), stem.with_suffix(".axf"),
+                                      stem.with_suffix(".map"), self.layout)
+        with self.assertRaisesRegex(RuntimeError, "物理字节"):
+            tool.validate_map_load_region("Load Region LR_IROM1 (Base: 0x08000000, Size: 0x3)",
+                                          {0x08000000: 1, 0x08000002: 2, 0x08000003: 3})
+
     def test_prepare_freezes_new_files_and_never_overwrites(self):
         build, stem = self.create_artifacts()
         output = self.root / "prepared"

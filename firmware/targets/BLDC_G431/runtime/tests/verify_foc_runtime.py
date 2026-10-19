@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 
 from elftools.elf.elffile import ELFFile
-from unicorn import Uc, UC_ARCH_ARM, UC_MODE_MCLASS, UC_MODE_THUMB
+from unicorn import Uc, UC_ARCH_ARM, UC_MODE_MCLASS, UC_MODE_THUMB, UC_HOOK_CODE
 from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_SP, UC_CPU_ARM_CORTEX_M4
 
 ARGS = argparse.ArgumentParser(description=__doc__)
@@ -120,6 +120,7 @@ with tempfile.TemporaryDirectory(prefix="g431-foc-runtime-") as temporary_name:
         initializers = [(s["sh_addr"], s.data()) for s in elf.iter_sections()
                         if (s["sh_flags"] & 2) and s["sh_type"] == "SHT_PROGBITS"]
         symbols = {s.name: s["st_value"] for s in elf.get_section_by_name(".symtab").iter_symbols()}
+        symbol_sizes = {s.name: s["st_size"] for s in elf.get_section_by_name(".symtab").iter_symbols()}
 
     class Model:
         def __init__(self, settings=None, valid_init=True):
@@ -160,6 +161,29 @@ with tempfile.TemporaryDirectory(prefix="g431-foc-runtime-") as temporary_name:
 
         def duty(self):
             return struct.unpack("<3f", self.cpu.mem_read(symbols["model_active_duty"], 12))
+
+        def controller_dq(self):
+            return struct.unpack("<2f", self.cpu.mem_read(symbols["model_controller_dq"], 8))
+
+        def trig_turns(self):
+            return struct.unpack("<2f", self.cpu.mem_read(symbols["model_trig_turns"], 8))
+
+        def track_park(self):
+            self.park_calls = 0
+            self.runtime_park_calls = 0
+            runtime_callers = [(symbols[name] & ~1, (symbols[name] & ~1) + symbol_sizes[name])
+                               for name in ["update_current_dq", "control_runtime_step"]
+                               if name in symbols]
+
+            def on_park(cpu, address, size, context):
+                self.park_calls += 1
+                caller = cpu.reg_read(UC_ARM_REG_LR) & ~1
+                if any(begin <= caller <= end for begin, end in runtime_callers):
+                    self.runtime_park_calls += 1
+
+            entry = symbols["foc_park"] & ~1
+            self.cpu.hook_add(UC_HOOK_CODE, on_park, begin=entry, end=entry)
+            self.cpu.ctl_remove_cache(0x08000000, 0x08040000)
 
         def command(self, kind, target=0.0):
             self.write("model_command_type", kind)
@@ -223,6 +247,7 @@ with tempfile.TemporaryDirectory(prefix="g431-foc-runtime-") as temporary_name:
             assert values[0] == 0 and values[4:8] == (0.0, 0.0, 0.0, 0.0), values
             if fault:
                 assert diag[0] == FAULT and diag[1] & fault, diag
+                assert diag[5] == diag[11] == 0 and values[2:4] == (0.0, 0.0)
             else:
                 assert diag[0:2] == (IDLE, 0), diag
 
@@ -375,7 +400,7 @@ with tempfile.TemporaryDirectory(prefix="g431-foc-runtime-") as temporary_name:
     # 实际duty经过下一拍边界，再作为独立对象的ZOH电压；不用控制器输出伪造电流反馈。
     traces = []
     for direction in [1, -1]:
-        model = Model({"model_direction": direction})
+        model = Model({"model_direction": direction, "model_trig_enabled": int(direction == -1)})
         model.ready()
         plant = Pmsm()
         model.start(90.0, plant, trace=True)
@@ -405,6 +430,140 @@ with tempfile.TemporaryDirectory(prefix="g431-foc-runtime-") as temporary_name:
                                         struct.unpack("<f", struct.pack("<f", -0.03))[0])
         traces.append(model.trace)
     CASES.append("真实ARM控制链驱动独立PMSM合成对象，非单位有符号电流修正及双编码器方向下正反变目标跟踪")
+
+    default = Model({"model_trig_mode": 1})
+    injected = Model({"model_trig_enabled": 1})
+    default.ready()
+    injected.ready()
+    default.start()
+    injected.start()
+    for index in range(120):
+        for model in [default, injected]:
+            model.write("model_current_b", 0.02 + 0.08 / 1.25)
+            model.write("model_current_c", -0.03 - 0.04 / -0.8)
+            model.step()
+        assert default.diag() == injected.diag()
+        assert default.values() == injected.values()
+        assert default.duty() == injected.duty()
+        assert injected.controller_dq() == injected.values()[2:4]
+        assert injected.word("model_trig_step_calls") == 2
+        assert injected.word("model_trig_context_ok") == 1
+        assert injected.trig_turns() == injected.values()[10:12]
+    assert default.word("model_trig_calls") == 0
+    assert injected.word("model_trig_calls") > 0
+    CASES.append("NULL后端保持软件路径，自定义软件后端的两角/context/调用次数正确且Runtime输出逐位一致")
+
+    for mode in [1, 2, 3]:
+        for failed_call in [1, 2]:
+            model = Model({"model_trig_enabled": 1})
+            model.ready()
+            model.start()
+            model.step(3)
+            assert model.diag()[5] == model.diag()[11] == 1
+            stages = model.word("model_stage_count")
+            model.write("model_trig_mode", mode)
+            model.write("model_trig_fail_call", failed_call)
+            model.step()
+            model.off(FEEDBACK)
+            assert model.word("model_stage_count") == stages
+            assert model.word("model_trig_step_calls") == 2
+            model.step()
+            assert model.word("model_trig_step_calls") == 0
+    for phase_ticks in [0, 1, 2]:
+        model = Model({"model_trig_enabled": 1})
+        model.ready()
+        if phase_ticks:
+            model.command(0, 90.0)
+            model.step(phase_ticks)
+        model.write("model_trig_mode", 1)
+        model.write("model_trig_fail_call", 2)
+        if phase_ticks == 0:
+            model.command(0, 90.0)
+            model.step()
+            assert model.diag()[:4] == (IDLE, 0, NOT_READY, OFF)
+            assert model.word("model_enable_count") == 0
+        else:
+            model.step()
+            model.off(FEEDBACK)
+            assert model.word("model_enable_count") == 0
+    CASES.append("测量或施加后端拒绝/非有限/非单位均不fallback，RUN立即清DQ关断，启动未就绪或待启动故障语义保持")
+
+    model = Model({"model_trig_enabled": 1, "model_trig_scale": 1.0002})
+    model.ready()
+    model.write("model_current_b", 0.02 + 0.1 / 1.25)
+    model.write("model_current_c", -0.03 - 0.2 / -0.8)
+    model.track_park()
+    model.step()
+    idle_dq = model.values()[2:4]
+    assert model.runtime_park_calls == 1 and model.diag()[11] == 1
+    model.start()
+    model.park_calls = 0
+    model.runtime_park_calls = 0
+    model.step()
+    assert model.diag()[5] == model.diag()[11] == 1
+    assert model.controller_dq() == model.values()[2:4]
+    assert abs(model.values()[2] - idle_dq[0]) > 1e-6
+    # 只核对Runtime本身没有额外Park，不约束控制器内部是否复用私有变换实现。
+    assert model.runtime_park_calls == 0
+    model.park_calls = 0
+    model.runtime_park_calls = 0
+    model.command(1, 201.0)
+    model.step()
+    assert model.diag()[:3] == (RUN, 0, BAD_TARGET)
+    assert model.controller_dq() == model.values()[2:4] and model.runtime_park_calls == 0
+    model.park_calls = 0
+    model.runtime_park_calls = 0
+    model.command(2)
+    model.step()
+    model.off()
+    assert model.runtime_park_calls == 1 and model.diag()[5] == model.diag()[11] == 1
+    assert model.diag()[6] == 0
+    CASES.append("RUN只采用控制器归一化测量DQ并消除Runtime重复Park；IDLE及Stop同拍保留独立Park，拒绝目标不丢反馈")
+
+    model = Model({"model_enabled": 0, "model_trig_enabled": 1,
+                   "model_voltage_ratio": float("nan"), "model_speed_divider": 0})
+    model.ready()
+    model.step()
+    assert model.word("model_trig_step_calls") == 1
+    assert model.diag()[5] == model.diag()[11] == 0
+    assert model.values()[11] == 0.0
+    model.command(0, 90.0)
+    model.step(3)
+    assert model.diag()[:4] == (IDLE, 0, NOT_READY, OFF)
+    assert model.word("model_stage_count") == model.word("model_enable_count") == 0
+    model.write("model_trig_mode", 1)
+    model.step()
+    assert model.diag()[:2] == (IDLE, 0) and model.word("model_trig_step_calls") == 1
+    model = Model({"model_electrical_confirmed": 0, "model_trig_enabled": 1, "model_trig_mode": 1})
+    model.ready()
+    assert model.word("model_trig_calls") == 0
+    CASES.append("控制disabled仍忽略无关控制配置且不产生DQ或功率；只计算测量角，电角度未标定时不调用注入后端")
+
+    extreme_settings = {"model_gain_enabled": 0, "model_current_trip_a":
+                        float.fromhex("0x1.fffffep127"), "model_position_turns": 1 / 84}
+    model = Model(extreme_settings)
+    model.ready()
+    model.write("model_current_b", 0.02)
+    model.write("model_current_c", -3.3e38)
+    model.step()
+    assert model.diag()[10] == 1 and model.diag()[5] == model.diag()[11] == 0
+    assert model.diag()[:2] == (IDLE, 0)
+    model.command(0, 90.0)
+    model.step()
+    assert model.diag()[:4] == (IDLE, 0, NOT_READY, OFF)
+    assert model.word("model_stage_count") == model.word("model_enable_count") == 0
+    model = Model(extreme_settings)
+    model.ready()
+    model.start()
+    model.step(2)
+    assert model.diag()[5] == 1
+    stages = model.word("model_stage_count")
+    model.write("model_current_b", 0.02)
+    model.write("model_current_c", -3.3e38)
+    model.step()
+    model.off(CONTROL)
+    assert model.word("model_stage_count") == stages
+    CASES.append("有限相电流及Clarke有效但Park溢出：IDLE保持无有效DQ/拒绝Start，RUN由controller报CONTROL并同拍清DQ/积分关断且不stage")
 
     if OPTIONS.trace_output:
         output = OPTIONS.trace_output.resolve()

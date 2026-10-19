@@ -145,6 +145,22 @@ const uint32_t model_compute_timing_offsets[] = {
 const uint32_t model_controller_profile_layout[] = {
     sizeof(ObserveControllerProfileResult), offsetof(ObserveControllerProfileResult, timing)
 };
+/* 集成检查只读真实观察实例；不借用隔离试具的 RUN/标定状态。 */
+const uint32_t model_runtime_offsets[] = {
+    offsetof(ControlRuntime, phase),
+    offsetof(ControlRuntime, config) + offsetof(ControlRuntimeConfig, control)
+        + offsetof(ControlRuntimeControlConfig, enabled),
+    offsetof(ControlRuntime, config) + offsetof(ControlRuntimeConfig, control)
+        + offsetof(ControlRuntimeControlConfig, current_calibration_confirmed),
+    offsetof(ControlRuntime, config) + offsetof(ControlRuntimeConfig, control)
+        + offsetof(ControlRuntimeControlConfig, timing_confirmed),
+    offsetof(ControlRuntime, config) + offsetof(ControlRuntimeConfig, electrical_calibration_confirmed),
+    offsetof(ControlRuntime, current_time_available), offsetof(ControlRuntime, last_current_time),
+    offsetof(ControlRuntime, observation_counter)
+};
+const uint32_t model_stage_budget_layout[] = {
+    sizeof(G431StageBudgetResult), offsetof(G431StageBudgetResult, rows)
+};
 ControlRuntime model_unpermitted_runtime;
 Motor model_unpermitted_motor;
 uint32_t model_unpermitted_init_ok;
@@ -244,6 +260,13 @@ bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *request)
     (void)request;
     model_stage_count++;
     return true;
+}
+
+/* 寄存器模型仅提供确定的旧锚点；真实cycle验收由实机诊断完成。 */
+void realtime_motor_io_stage_anchor(uint32_t *cycles, uint32_t *entry_count)
+{
+    *cycles = DWT->CYCCNT - 100U;
+    *entry_count = 4200U;
 }
 
 bool realtime_motor_io_power_enable(void)

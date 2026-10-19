@@ -203,6 +203,21 @@ with tempfile.TemporaryDirectory(prefix="foc-math-") as directory:
             assert model.operation(name, [1.0, 2.0, sine, cosine])[0]
     passed("NaN/Inf 及坏单位圆清除旧输出；单位圆容差内可用且不静默归一化")
 
+    for edge in [math.sqrt(0.999), math.sqrt(1.001)]:
+        center = struct.unpack("<I", struct.pack("<f", edge))[0]
+        for bits in range(center - 3, center + 4):
+            cosine = struct.unpack("<f", struct.pack("<I", bits))[0]
+            expected = abs(float32(float32(cosine * cosine) - 1.0)) <= float32(0.001)
+            for name in ["park", "inverse_park"]:
+                accepted, values = model.operation(name, [2.0, -3.0, 0.0, cosine])
+                assert accepted == expected, (bits, name, values)
+                if accepted:
+                    close_values = [float32(2.0 * cosine), float32(-3.0 * cosine)]
+                    assert values == close_values
+                else:
+                    assert values == [0.0, 0.0]
+    passed("公共变换的单位圆精确边界相邻float保持原判定和未归一化幅值，私有复用未放宽外部入口")
+
     maximum = float.fromhex("0x1.fffffep127")
     for name in ["park", "inverse_park"]:
         assert not model.operation(name, [maximum, maximum, math.sqrt(0.5), math.sqrt(0.5)])[0]

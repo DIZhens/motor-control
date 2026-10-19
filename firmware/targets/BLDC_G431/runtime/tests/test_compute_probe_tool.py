@@ -562,6 +562,25 @@ class Tests(unittest.TestCase):
             for suffix, payload in saved.items():
                 stem.with_suffix(suffix).write_bytes(payload)
 
+    def test_compressed_map_matches_physical_hex_and_rejects_ambiguous_regions(self):
+        _, stem = self.create_artifacts()
+        original = stem.with_suffix(".map").read_text(encoding="utf-8")
+        compressed = original.replace("Size: 0x00000004, Max: 0x20000)",
+                                      "Size: 0x00000008, Max: 0x20000, ABSOLUTE, COMPRESSED[0x00000004])")
+        stem.with_suffix(".map").write_text(compressed, encoding="utf-8")
+        self.assertEqual(tool.verify_artifacts(stem.with_suffix(".hex"), stem.with_suffix(".axf"),
+                                              stem.with_suffix(".map"), self.layout), self.prepared.image)
+        for mapping in [compressed.replace("COMPRESSED[0x00000004]", "COMPRESSED[0x00000003]"),
+                        compressed.replace(", COMPRESSED[0x00000004]", ""),
+                        compressed + "Load Region LR_OTHER (Base: 0x08000000, Size: 0x4)\n"]:
+            stem.with_suffix(".map").write_text(mapping, encoding="utf-8")
+            with self.subTest(mapping=mapping[:150]), self.assertRaises(RuntimeError):
+                tool.verify_artifacts(stem.with_suffix(".hex"), stem.with_suffix(".axf"), stem.with_suffix(".map"), self.layout)
+        stem.with_suffix(".map").write_text(compressed, encoding="utf-8")
+        stem.with_suffix(".axf").write_bytes(elf_fixture(self.layout, b"\1\2\3\5"))
+        with self.assertRaisesRegex(RuntimeError, "加载字节不同"):
+            tool.verify_artifacts(stem.with_suffix(".hex"), stem.with_suffix(".axf"), stem.with_suffix(".map"), self.layout)
+
     def test_prepare_freezes_artifacts_and_refuses_overwrite_or_wrong_hash(self):
         build, stem = self.create_artifacts()
         with patch.object(tool, "derive_layout", return_value=self.layout):

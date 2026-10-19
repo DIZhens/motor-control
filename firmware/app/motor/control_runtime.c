@@ -66,6 +66,8 @@ static void update_position(ControlRuntime *runtime, ControlTime now)
 static void update_electrical_angle(ControlRuntime *runtime, ControlTime now)
 {
     float age_s;
+    ElectricalAngleTrig trig = runtime->config.angle_trig != NULL ?
+        runtime->config.angle_trig : electrical_angle_sincos_software;
 
     if (!runtime->config.electrical_calibration_confirmed
         || (runtime->motor->faults != 0U)
@@ -79,12 +81,14 @@ static void update_electrical_angle(ControlRuntime *runtime, ControlTime now)
     age_s = (float)(now - runtime->last_position_time)
         / (float)runtime->config.control_time_ticks_per_second;
     /* 编码器采集较慢；每个 fast tick 按采集年龄外推，不把1ms旧角保持到下一次发布。 */
-    (void)electrical_angle_update(&runtime->electrical_angle,
-        runtime->mechanical_position_turns, runtime->position_estimator.velocity_rpm, age_s);
+    (void)electrical_angle_update_with_trig(&runtime->electrical_angle,
+        runtime->mechanical_position_turns, runtime->position_estimator.velocity_rpm, age_s,
+        trig, runtime->config.angle_trig_context);
     if (runtime->config.control.enabled) {
-        (void)electrical_angle_update(&runtime->actuation_angle,
+        (void)electrical_angle_update_with_trig(&runtime->actuation_angle,
             runtime->mechanical_position_turns, runtime->position_estimator.velocity_rpm,
-            age_s + runtime->config.control.actuation_prediction_time_s);
+            age_s + runtime->config.control.actuation_prediction_time_s,
+            trig, runtime->config.angle_trig_context);
     } else {
         electrical_angle_reset(&runtime->actuation_angle);
     }
@@ -213,6 +217,10 @@ static void latch_control_fault(ControlRuntime *runtime, uint32_t faults)
 static void update_current_dq(ControlRuntime *runtime)
 {
     memset(&runtime->current_dq, 0, sizeof(runtime->current_dq));
+    /* RUN测量真值由本拍控制器成功结果产生，不能先用另一份Park充当反馈门槛。 */
+    if (runtime->config.control.enabled && runtime->phase == CONTROL_RUNTIME_RUNNING) {
+        return;
+    }
     if (calibration_confirmed(runtime) && runtime->motor->faults == 0U
         && runtime->current_measurement.state == CURRENT_MEASUREMENT_READY
         && runtime->current_measurement.output.valid && runtime->electrical_angle.output.valid) {
@@ -232,7 +240,8 @@ static bool feedback_ready(const ControlRuntime *runtime, bool sample_time_valid
         && runtime->electrical_angle.output.valid && runtime->actuation_angle.output.valid
         && runtime->current_measurement.state == CURRENT_MEASUREMENT_READY
         && runtime->current_measurement.failure == CURRENT_MEASUREMENT_FAILURE_NONE
-        && runtime->current_measurement.output.valid && runtime->current_dq.valid
+        && runtime->current_measurement.output.valid
+        && (runtime->phase == CONTROL_RUNTIME_RUNNING || runtime->current_dq.valid)
         && runtime->bus_valid
         && runtime->bus.voltage_v >= runtime->config.control.min_bus_voltage_v
         && runtime->bus.voltage_v <= runtime->config.control.max_bus_voltage_v;
@@ -340,6 +349,10 @@ static void run_control(ControlRuntime *runtime, ControlTime now)
         latch_control_fault(runtime, CONTROL_RUNTIME_FAULT_CONTROL);
         return;
     }
+    /* 与控制计算使用同一份归一化测量角，不重复Park或保留上拍有效值。 */
+    runtime->current_dq.d = runtime->current_output.id_a;
+    runtime->current_dq.q = runtime->current_output.iq_a;
+    runtime->current_dq.valid = true;
     duty.phase_a_duty = runtime->current_output.duty_a;
     duty.phase_b_duty = runtime->current_output.duty_b;
     duty.phase_c_duty = runtime->current_output.duty_c;

@@ -18,6 +18,7 @@
 #include "cordic_math.h"
 #include "irq_timing.h"
 #include "controller_profile.h"
+#include "../platform/realtime_motor_io_diagnostic.h"
 
 #define CYCLES_PER_US (170U)
 #define SAMPLE_MIN_US (25U)
@@ -32,6 +33,7 @@ typedef struct {
     uint32_t incorporated_guard_faults; /* 已纳入 Motor 快照的故障位，用于识别尚未合并的监视原因。 */
     bool has_sample; /* 是否已有真实采样；启动阶段的初始快照为 false。 */
     bool compute_probe_permitted; /* ADC 同拍确认 IDLE/OFF、控制配置关闭且无故障；后台仍须复核心跳和 MOE。 */
+    bool stage_probe_permitted; /* 当拍只允许隔离试具的无功率计时，不授予真实控制许可。 */
 } RuntimePublication;
 
 volatile uint32_t g_target_runtime_guard_faults;
@@ -42,10 +44,12 @@ volatile ObserveCurrentCaptureResult g_target_runtime_current_capture;
 volatile uint32_t g_target_runtime_compute_request;
 volatile uint32_t g_target_runtime_compute_sequence;
 volatile ObserveComputeComparisonResult g_target_runtime_compute_result;
+volatile uint32_t g_target_runtime_stage_request;
 
 /* 启动阶段在时基开启前写入；运行后仅由 sample_ready 更新 Motor。 */
 static Motor s_motor;
 static ControlRuntime s_control_runtime;
+static G431CordicMath s_cordic_math;
 /* 3000 rpm 只用于位置差分排歧，不构成电机运行许可；当前没有使能路径。 */
 static const ControlRuntimeConfig s_control_config = {
     20000U, 1U, 20U, 100U, 100U, { 3000.0f, 0.01f },
@@ -56,7 +60,7 @@ static const ControlRuntimeConfig s_control_config = {
     /* 极对数、方向和电角度偏置尚未实测，保持电角度未配置、未确认。 */
     { 0U, 0, 0.0f, 0.0f, 0.0f }, false,
     /* 实机增益、角度与时序尚未验收；当前装配保持控制链及功率许可关闭。 */
-    { 0 }
+    { 0 }, g431_cordic_sincos, &s_cordic_math
 };
 static volatile RuntimePublication s_publication;
 static volatile uint32_t s_publication_sequence;
@@ -75,8 +79,8 @@ static uint32_t s_current_request_seen;
 
 /* 计时诊断只由后台写入，ADC 与 guard 不修改实例或结果。 */
 static ObserveComputeComparison s_compute_probe;
-static G431CordicMath s_cordic_math;
 static bool s_cordic_ready;
+static uint32_t s_stage_request_seen;
 static uint32_t s_compute_request_seen;
 static bool s_compute_stop_this_service; /* 同轮收到 Stop 后，即使 ADC 已消费也不接受计时请求。 */
 
@@ -103,11 +107,54 @@ static bool finite_float(float value)
 /* 只由 ADC 所有者读取实时对象；许可变化须立即发布，不能沿用 100 Hz 的旧母线值。 */
 static bool compute_probe_adc_permitted(bool has_sample)
 {
-    return has_sample && (s_motor.state == MOTOR_STATE_IDLE) && (s_motor.faults == 0U)
+#if !defined(CONTROL_CURRENT_PROFILE)
+    /* 旧工具要求完整内部探针统计；当前无探针候选在写请求前明确拒绝。 */
+    (void)has_sample;
+    return false;
+#else
+    return has_sample && g_target_stage_budget_active == 0U
+        && g_target_runtime_stage_request == s_stage_request_seen
+        && (s_motor.state == MOTOR_STATE_IDLE) && (s_motor.faults == 0U)
         && (s_control_runtime.phase == CONTROL_RUNTIME_OFF)
         && !s_control_runtime.config.control.enabled && s_control_runtime.bus_valid
         && finite_float(s_control_runtime.bus.voltage_v)
         && (s_control_runtime.bus.voltage_v >= 0.0f) && (s_control_runtime.bus.voltage_v <= 3.6f);
+#endif
+}
+
+/* 原观察对象仍保持OFF；只给隔离试具读取/计算/真实stage的许可。 */
+static bool stage_budget_adc_permitted(bool has_sample)
+{
+    return has_sample && s_cordic_ready && s_motor.state == MOTOR_STATE_IDLE
+        && s_motor.faults == 0U && s_control_runtime.phase == CONTROL_RUNTIME_OFF
+        && !s_control_runtime.config.control.enabled && s_control_runtime.bus_valid
+        && finite_float(s_control_runtime.bus.voltage_v)
+        && s_control_runtime.bus.voltage_v >= 0.0f && s_control_runtime.bus.voltage_v <= 3.6f
+        && g_target_runtime_guard_faults == 0U && (TIM1->BDTR & TIM_BDTR_MOE) == 0U
+        && !s_command_pending && !s_stop_pending && !s_reject_pending
+        && s_current_capture.result.state != OBSERVE_CURRENT_CAPTURE_ACTIVE
+        && g_target_runtime_current_request == s_current_request_seen
+        && s_compute_probe.result.state != OBSERVE_COMPUTE_PROBE_ACTIVE
+        && g_target_runtime_compute_request == s_compute_request_seen
+        && SystemCoreClock == 170000000U
+        && (CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) != 0U
+        && (DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) != 0U;
+}
+
+static bool stage_budget_stamp(void *context, G431StageBudgetStamp *stamp)
+{
+    (void)context;
+    if (stamp == NULL || SystemCoreClock != 170000000U
+        || (CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) == 0U
+        || (DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) == 0U) {
+        return false;
+    }
+    realtime_motor_io_stage_anchor(&stamp->callback_start_cycles, &stamp->callback_entry_count);
+    stamp->timer_cr1 = TIM1->CR1;
+    stamp->timer_count = TIM1->CNT;
+    stamp->timer_bdtr = TIM1->BDTR;
+    stamp->cycles = DWT->CYCCNT;
+    return true;
 }
 
 bool target_runtime_timing_permitted(void)
@@ -129,6 +176,7 @@ static void publish(ControlTime now, bool has_sample)
     next.incorporated_guard_faults = s_motor.faults;
     next.has_sample = has_sample;
     next.compute_probe_permitted = compute_probe_adc_permitted(has_sample);
+    next.stage_probe_permitted = stage_budget_adc_permitted(has_sample);
     s_publication_sequence++;
     __DMB();
     s_publication = next;
@@ -197,7 +245,8 @@ static bool capture_current(const PhaseCurrentObservation *current,
     const CurrentMeasurement *measurement = &s_control_runtime.current_measurement;
     uint32_t request = g_target_runtime_current_request;
     bool changed = false;
-    bool permitted = !stop_requested && power_disabled
+    bool permitted = !stop_requested && power_disabled && g_target_stage_budget_active == 0U
+        && g_target_runtime_stage_request == s_stage_request_seen
         && (s_control_runtime.phase == CONTROL_RUNTIME_OFF)
         && (s_motor.state == MOTOR_STATE_IDLE) && (s_motor.faults == 0U)
         && (measurement->state == CURRENT_MEASUREMENT_READY)
@@ -255,6 +304,8 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     bool rejected;
     bool command_available;
     bool business_changed;
+    bool stage_prepared = false;
+    uint32_t stage_request;
     bool power_disabled = (TIM1->BDTR & TIM_BDTR_MOE) == 0U;
 
     (void)context;
@@ -285,6 +336,34 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
         faults |= TARGET_RUNTIME_FAULT_UNEXPECTED_POWER;
     }
     command_available = take_command(&command, &rejected);
+    stage_request = g_target_runtime_stage_request;
+    if (command_available && (g_target_stage_budget_active != 0U
+        || (stage_request != 0U && stage_request != s_stage_request_seen))
+        && (rejected || command.type != MOTOR_COMMAND_STOP)) {
+        /* 诊断期间只接受Stop；普通命令终止窗口后仍按拒绝事件交给真实Motor。 */
+        rejected = true;
+    }
+    if (stage_request != 0U && stage_request != s_stage_request_seen) {
+        s_stage_request_seen = stage_request;
+        if (g_target_stage_budget_active != 0U) {
+            g431_stage_budget_cancel(G431_STAGE_BUDGET_FAILURE_BUSY);
+        } else {
+            (void)g431_stage_budget_prepare(stage_request,
+                faults == 0U && !command_available && stage_budget_adc_permitted(true));
+        }
+        stage_prepared = true;
+    }
+    if (!stage_prepared && g_target_stage_budget_active != 0U) {
+        if (command_available || faults != 0U || !stage_budget_adc_permitted(true)) {
+            g431_stage_budget_cancel(command_available && !rejected
+                && command.type == MOTOR_COMMAND_STOP
+                ? G431_STAGE_BUDGET_FAILURE_ABORTED : G431_STAGE_BUDGET_FAILURE_NOT_READY);
+        } else {
+            (void)g431_stage_budget_step(current->observation_time, true);
+        }
+    }
+    /* 隔离试具先到真实stage截止；原OFF观察位于诊断尾部，始终逐拍推进。
+     * 该尾部是诊断附加开销，不冒充正式RUN的完整ISR耗时。 */
     business_changed = control_runtime_step(&s_control_runtime, current->observation_time,
         current, power_disabled,
         faults, rejected ? NULL : &command, command_available);
@@ -292,6 +371,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     business_changed |= capture_current(current, power_disabled,
         command_available && !rejected && (command.type == MOTOR_COMMAND_STOP));
     business_changed |= compute_probe_adc_permitted(true) != s_publication.compute_probe_permitted;
+    business_changed |= stage_budget_adc_permitted(true) != s_publication.stage_probe_permitted;
     s_publication_divider++;
     if (business_changed || (s_publication_divider >= PUBLICATION_DIVIDER)) {
         if (s_publication_divider >= PUBLICATION_DIVIDER) {
@@ -355,6 +435,9 @@ void target_runtime_start(void)
     /* 每个异常槽位只有该 handler 写入，嵌套 IRQ 不会覆盖另一路计数。 */
     memset((void *)g_target_runtime_irq_entries, 0, sizeof(g_target_runtime_irq_entries));
     s_cordic_ready = g431_cordic_math_init(&s_cordic_math);
+    g_target_runtime_stage_request = 0U;
+    s_stage_request_seen = 0U;
+    g431_stage_budget_init(g431_cordic_sincos, &s_cordic_math, stage_budget_stamp, NULL);
     g_target_runtime_compute_request = 0U;
     g_target_runtime_compute_sequence = 0U;
     s_compute_request_seen = 0U;
@@ -441,6 +524,8 @@ static bool compute_probe_permitted(void)
         || !finite_float(publication.snapshot.bus_voltage_v)
         || (publication.snapshot.bus_voltage_v < 0.0f) || (publication.snapshot.bus_voltage_v > 3.6f)
         || s_command_pending || s_stop_pending || s_reject_pending || s_compute_stop_this_service
+        || g_target_stage_budget_active != 0U
+        || g_target_runtime_stage_request != s_stage_request_seen
         || (g_target_runtime_guard_faults != 0U) || ((TIM1->BDTR & TIM_BDTR_MOE) != 0U)
         || (SystemCoreClock != 170000000U)
         || ((CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) == 0U)

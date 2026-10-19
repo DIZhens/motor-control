@@ -35,6 +35,8 @@ CURRENT_WAITING, CURRENT_CALIBRATING, CURRENT_READY, CURRENT_FAILED = range(1, 5
 CURRENT_ABORTED, CURRENT_ZERO_UNCONFIRMED = 1, 2
 CAPTURE_IDLE, CAPTURE_ACTIVE, CAPTURE_COMPLETE, CAPTURE_FAILED = range(4)
 CAPTURE_NOT_READY, CAPTURE_ABORTED, CAPTURE_INVALID, CAPTURE_TIMING, CAPTURE_NUMERIC, CAPTURE_BUSY = range(1, 7)
+STAGE_IDLE, STAGE_READY, STAGE_ACTIVE, STAGE_COMPLETE, STAGE_FAILED = range(5)
+STAGE_NOT_READY, STAGE_ABORTED, STAGE_BUSY, STAGE_CLOCK = range(1, 5)
 CASES = []
 
 
@@ -46,6 +48,18 @@ def run_checked(arguments: list[str], directory: Path) -> None:
     result = subprocess.run(arguments, cwd=directory, capture_output=True, text=True)
     output = result.stdout + result.stderr
     assert result.returncode == 0 and "warning" not in output.lower(), output
+
+
+def read_image(path: Path) -> tuple:
+    with path.open("rb") as stream:
+        elf = ELFFile(stream)
+        segments = [(section["p_vaddr"], section.data()) for section in elf.iter_segments()
+                    if section["p_type"] == "PT_LOAD"]
+        initializers = [(section["sh_addr"], section.data()) for section in elf.iter_sections()
+                        if (section["sh_flags"] & 2) and section["sh_type"] == "SHT_PROGBITS"]
+        symbols = {symbol.name: symbol["st_value"]
+                   for symbol in elf.get_section_by_name(".symtab").iter_symbols()}
+        return segments, initializers, symbols
 
 
 with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
@@ -75,6 +89,8 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                    TARGET / "runtime/compute_comparison.c",
                    TARGET / "runtime/irq_timing.c",
                    TARGET / "runtime/controller_profile.c",
+                   TARGET / "runtime/stage_budget.c",
+                   TARGET / "runtime/stage_budget_runtime.c",
                    REPOSITORY / "firmware/app/motor/motor.c",
                    REPOSITORY / "firmware/app/motor/control_runtime.c",
                    REPOSITORY / "control/position_estimator.c",
@@ -94,24 +110,20 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
          "--entry=model_start", "--keep=model.o(*)", "-o", str(executable), *objects],
         temporary,
     )
-    with executable.open("rb") as stream:
-        elf = ELFFile(stream)
-        segments = [(section["p_vaddr"], section.data()) for section in elf.iter_segments()
-                    if section["p_type"] == "PT_LOAD"]
-        initializers = [(section["sh_addr"], section.data()) for section in elf.iter_sections()
-                        if (section["sh_flags"] & 2) and section["sh_type"] == "SHT_PROGBITS"]
-        symbols = {symbol.name: symbol["st_value"]
-                   for symbol in elf.get_section_by_name(".symtab").iter_symbols()}
+    segments, initializers, symbols = read_image(executable)
 
     class Model:
-        def __init__(self, settings: dict | None = None, start: bool = True) -> None:
+        def __init__(self, settings: dict | None = None, start: bool = True,
+                     image: tuple | None = None) -> None:
+            image_segments, image_initializers, self.symbols = (
+                (segments, initializers, symbols) if image is None else image)
             self.cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB | UC_MODE_MCLASS)
             self.cpu.ctl_set_cpu_model(UC_CPU_ARM_CORTEX_M4)
             for base, size in [(0x08000000, 0x40000), (0x20000000, 0x8000),
                                (0x40001000, 0x1000), (0x40012000, 0x2000),
                                (0xE0001000, 0x1000), (0xE000E000, 0x1000)]:
                 self.cpu.mem_map(base, size)
-            for address, data in segments + initializers:
+            for address, data in image_segments + image_initializers:
                 self.cpu.mem_write(address, data)
             self.memory_write(0xE000ED88, 0x00F00000)
             self.memory_write(TIM6 + 0x28, 169)
@@ -127,26 +139,30 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             self.cpu.hook_add(UC_HOOK_MEM_READ, self.uart_read, begin=USART1, end=USART1 + 0x2F)
             self.cpu.hook_add(UC_HOOK_MEM_WRITE, self.uart_write, begin=USART1, end=USART1 + 0x2F)
             self.offsets = struct.unpack(
-                "<5I", self.cpu.mem_read(symbols["model_motor_offsets"], 20))
+                "<5I", self.cpu.mem_read(self.symbols["model_motor_offsets"], 20))
             self.current_offsets = struct.unpack(
-                "<10I", self.cpu.mem_read(symbols["model_current_offsets"], 40))
+                "<10I", self.cpu.mem_read(self.symbols["model_current_offsets"], 40))
             sizes = struct.unpack(
-                "<3I", self.cpu.mem_read(symbols["model_current_field_sizes"], 12))
+                "<3I", self.cpu.mem_read(self.symbols["model_current_field_sizes"], 12))
             self.current_formats = [{1: "B", 2: "H", 4: "I"}[size] for size in sizes]
             self.angle_offsets = struct.unpack(
-                "<5I", self.cpu.mem_read(symbols["model_angle_offsets"], 20))
+                "<5I", self.cpu.mem_read(self.symbols["model_angle_offsets"], 20))
             self.capture_offsets = struct.unpack(
-                "<10I", self.cpu.mem_read(symbols["model_capture_offsets"], 40))
+                "<10I", self.cpu.mem_read(self.symbols["model_capture_offsets"], 40))
             capture_sizes = struct.unpack(
-                "<3I", self.cpu.mem_read(symbols["model_capture_field_sizes"], 12))
+                "<3I", self.cpu.mem_read(self.symbols["model_capture_field_sizes"], 12))
             self.capture_size = capture_sizes[0]
             self.capture_formats = [{1: "B", 2: "H", 4: "I"}[size] for size in capture_sizes[1:]]
             self.compute_offsets = struct.unpack(
-                "<13I", self.cpu.mem_read(symbols["model_compute_offsets"], 52))
+                "<13I", self.cpu.mem_read(self.symbols["model_compute_offsets"], 52))
             self.compute_timing_offsets = struct.unpack(
-                "<5I", self.cpu.mem_read(symbols["model_compute_timing_offsets"], 20))
+                "<5I", self.cpu.mem_read(self.symbols["model_compute_timing_offsets"], 20))
             self.controller_profile_layout = struct.unpack(
-                "<2I", self.cpu.mem_read(symbols["model_controller_profile_layout"], 8))
+                "<2I", self.cpu.mem_read(self.symbols["model_controller_profile_layout"], 8))
+            self.runtime_offsets = struct.unpack(
+                "<8I", self.cpu.mem_read(self.symbols["model_runtime_offsets"], 32))
+            self.stage_budget_layout = struct.unpack(
+                "<2I", self.cpu.mem_read(self.symbols["model_stage_budget_layout"], 8))
             for name, value in (settings or {}).items():
                 self.write(name, value)
             if start:
@@ -160,26 +176,26 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             return struct.unpack("<I", self.cpu.mem_read(address, 4))[0]
 
         def word(self, name: str) -> int:
-            return self.memory_word(symbols[name])
+            return self.memory_word(self.symbols[name])
 
         def control_time(self) -> int:
-            return struct.unpack("<Q", self.cpu.mem_read(symbols["model_control_time"], 8))[0]
+            return struct.unpack("<Q", self.cpu.mem_read(self.symbols["model_control_time"], 8))[0]
 
         def write(self, name: str, value: int | float, fmt: str = "I") -> None:
-            self.cpu.mem_write(symbols[name], struct.pack("<" + fmt, value))
+            self.cpu.mem_write(self.symbols[name], struct.pack("<" + fmt, value))
 
         def motor(self) -> tuple[int, int, int, int, float]:
             values = []
             for index, offset in enumerate(self.offsets):
                 fmt = "f" if index == 4 else "I"
                 values.append(struct.unpack("<" + fmt,
-                                            self.cpu.mem_read(symbols["s_motor"] + offset, 4))[0])
+                                            self.cpu.mem_read(self.symbols["s_motor"] + offset, 4))[0])
             return tuple(values)
 
         def current(self, runtime_name: str = "s_control_runtime") -> dict:
             # 读取真实集成实例，而不是复制一套测试用校准实现。
             def read(index: int, fmt: str):
-                address = symbols[runtime_name] + self.current_offsets[index]
+                address = self.symbols[runtime_name] + self.current_offsets[index]
                 values = struct.unpack("<" + fmt,
                                        self.cpu.mem_read(address, struct.calcsize("<" + fmt)))
                 return values[0] if len(values) == 1 else values
@@ -198,7 +214,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             self.assert_default_off()
 
         def capture_bytes(self) -> bytes:
-            return bytes(self.cpu.mem_read(symbols["g_target_runtime_current_capture"], self.capture_size))
+            return bytes(self.cpu.mem_read(self.symbols["g_target_runtime_current_capture"], self.capture_size))
 
         def capture(self) -> dict:
             block = self.capture_bytes()
@@ -224,7 +240,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
 
         def compute(self) -> dict:
             offsets = self.compute_offsets
-            data = bytes(self.cpu.mem_read(symbols["g_target_runtime_compute_result"], offsets[7]))
+            data = bytes(self.cpu.mem_read(self.symbols["g_target_runtime_compute_result"], offsets[7]))
             read = lambda offset, fmt: struct.unpack_from("<" + fmt, data, offset)[0]
             timing = self.compute_timing_offsets
             def segments(base):
@@ -256,7 +272,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
 
         def irq_timing(self) -> dict:
             sequence = self.word("g_target_irq_timing_sequence")
-            data = bytes(self.cpu.mem_read(symbols["g_target_irq_timing_result"], 84))
+            data = bytes(self.cpu.mem_read(self.symbols["g_target_irq_timing_result"], 84))
             assert sequence % 2 == 0
             words = struct.unpack("<21I", data)
             return {"schema": words[0], "request": words[1], "state": words[2],
@@ -267,7 +283,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         def controller_profile(self) -> dict:
             size, offset = self.controller_profile_layout
             sequence = self.word("g_observe_controller_profile_sequence")
-            data = bytes(self.cpu.mem_read(symbols["g_observe_controller_profile_result"], size))
+            data = bytes(self.cpu.mem_read(self.symbols["g_observe_controller_profile_result"], size))
             assert sequence % 2 == 0
             words = struct.unpack_from("<6I", data)
             timing = self.compute_timing_offsets
@@ -277,9 +293,55 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                     "calls": words[3], "valid": words[4], "rejected": words[5],
                     "rows": rows, "sequence": sequence, "bytes": data}
 
+        def stage_budget(self) -> dict:
+            size, offset = self.stage_budget_layout
+            sequence = self.word("g_target_stage_budget_sequence")
+            data = bytes(self.cpu.mem_read(self.symbols["g_target_stage_budget_result"], size))
+            assert sequence % 2 == 0 and sequence == self.word("g_target_stage_budget_sequence")
+            words = struct.unpack_from("<21I", data)
+            rows = [struct.unpack_from("<4I", data, offset + row * 16) for row in range(6)]
+            return {"schema": words[0], "request": words[1], "state": words[2],
+                    "failure": words[3], "count": words[4], "stage_calls": words[5],
+                    "stage_accepted": words[6], "enable_attempts": words[7],
+                    "rows": rows, "active": self.word("g_target_stage_budget_active"),
+                    "sequence": sequence, "bytes": data}
+
+        def runtime_status(self) -> dict:
+            def read(index: int, fmt: str):
+                address = self.symbols["s_control_runtime"] + self.runtime_offsets[index]
+                return struct.unpack("<" + fmt, self.cpu.mem_read(address, struct.calcsize("<" + fmt)))[0]
+            return {"phase": read(0, "I"), "control_enabled": bool(read(1, "B")),
+                    "current_confirmed": bool(read(2, "B")), "timing_confirmed": bool(read(3, "B")),
+                    "angle_confirmed": bool(read(4, "B")), "time_available": bool(read(5, "B")),
+                    "last_current_time": read(6, "Q"), "observation_counter": read(7, "I")}
+
+        def assert_stage_unpowered(self) -> None:
+            self.assert_default_off()
+            status = self.runtime_status()
+            assert status["phase"] == 0
+            assert not any(status[key] for key in ["control_enabled", "current_confirmed",
+                                                  "timing_confirmed", "angle_confirmed"]), status
+            result = self.stage_budget()
+            assert result["stage_calls"] == result["stage_accepted"] == result["enable_attempts"] == 0
+            assert result["count"] == 0 and result["rows"] == [(0, 0, 0, 0)] * 6
+            self.assert_angle_invalid()
+
+        def prepare_stage(self) -> None:
+            self.memory_write(0xE000EDFC, 1 << 24)
+            self.memory_write(0xE0001000, 1)
+            self.write("model_bus_voltage", 2.7, "f")
+            self.sample(20)
+
+        def request_stage(self, request: int = 1) -> dict:
+            self.write("g_target_runtime_stage_request", request)
+            self.sample()
+            result = self.stage_budget()
+            self.assert_stage_unpowered()
+            return result
+
         def angle(self, runtime_name: str = "s_control_runtime") -> dict:
             def read(index: int, fmt: str):
-                address = symbols[runtime_name] + self.angle_offsets[index]
+                address = self.symbols[runtime_name] + self.angle_offsets[index]
                 return struct.unpack("<" + fmt,
                                      self.cpu.mem_read(address, struct.calcsize("<" + fmt)))[0]
 
@@ -287,7 +349,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                     "valid": bool(read(3, self.current_formats[2])),
                     "velocity_valid": bool(read(4, self.current_formats[2])),
                     "velocity": struct.unpack("<f", self.cpu.mem_read(
-                        symbols[runtime_name] + self.word("model_velocity_offset"), 4))[0]}
+                        self.symbols[runtime_name] + self.word("model_velocity_offset"), 4))[0]}
 
         def assert_angle_invalid(self, runtime_name: str = "s_control_runtime") -> None:
             angle = self.angle(runtime_name)
@@ -301,7 +363,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
 
         def angle_position(self, turns: float, observed_at: int | None = None) -> None:
             # 独立 Runtime 的合成 source；按其真实分频计数交付新观测。
-            counter_address = symbols["model_angle_runtime"] + self.word("model_observation_counter_offset")
+            counter_address = self.symbols["model_angle_runtime"] + self.word("model_observation_counter_offset")
             next_read = self.control_time() + 20 - self.memory_word(counter_address)
             self.write("model_position_available", 1)
             self.write("model_position_turns", turns, "f")
@@ -373,7 +435,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                                           end=DWT_CYCCNT + 3 if interrupt_clock else interrupt_write),
                          self.cpu.hook_add(UC_HOOK_CODE, pause_after_clock)]
             try:
-                self.cpu.emu_start(symbols[name] | 1, 0x0803F000, count=instruction_budget)
+                self.cpu.emu_start(self.symbols[name] | 1, 0x0803F000, count=instruction_budget)
                 for hook in hooks:
                     self.cpu.hook_del(hook)
                 if interrupt_clock or interrupt_write is not None:
@@ -1640,6 +1702,175 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         assert result["sweep"] == 0 and result["counts"] == result["hardware_counts"] == [16] * 6
         model.assert_default_off()
     passed("正式配对已完成后，全周首点的后端失败或相位错误仍拒绝COMPLETE，完整计时不能替代精度对照")
+
+    model = Model()
+    model.prepare_stage()
+    assert model.stage_budget()["state"] == STAGE_IDLE
+    assert model.motor() == (IDLE, 0, NONE, 0, 0.0)
+    ready = model.request_stage(91)
+    assert ready["schema"] == 1 and ready["request"] == 91
+    assert ready["state"] == STAGE_READY and ready["failure"] == 0 and ready["active"] == 1
+    assert model.runtime_status()["last_current_time"] == model.control_time() == 21
+    model.service()
+    assert model.stage_budget() == ready  # 后台不能代替 ADC 推进或执行 stage。
+    model.sample()
+    failed = model.stage_budget()
+    assert failed["request"] == 91 and failed["state"] == STAGE_FAILED
+    assert failed["failure"] == STAGE_CLOCK and failed["active"] == 0
+    assert failed["sequence"] == ready["sequence"] + 2
+    assert model.runtime_status()["last_current_time"] == model.control_time() == 22
+    # 本模型不伪造有效计时正例：TIM1 缺少下数时基，下一拍必须先失败 CLOCK。
+    model.memory_write(TIM1, 1 | 16 | 32)
+    model.memory_write(TIM1 + 0x24, 4000)
+    model.sample(3)
+    assert model.stage_budget() == failed
+    model.write("g_target_runtime_stage_request", 0)
+    model.sample()
+    model.write("g_target_runtime_stage_request", 91)
+    model.sample()
+    assert model.stage_budget() == failed
+    # 终态不因后来的现场故障改写首因，也不自动重开同身份。
+    model.write("g_target_runtime_guard_faults", FAULT_TRIP)
+    model.sample()
+    assert model.stage_budget() == failed
+    model.assert_stage_unpowered()
+    passed("stage新身份仅ADC准备READY而不stage，下一拍无有效TIM1锚点冻结CLOCK；重复身份、零后重放和后续故障均不改首因")
+
+    model = Model()
+    model.prepare_stage()
+    ready = model.request_stage(3)
+    assert ready["state"] == STAGE_READY
+    failed = model.request_stage(4)
+    assert failed["state"] == STAGE_FAILED and failed["failure"] == STAGE_BUSY
+    assert failed["request"] == 3 and failed["active"] == 0
+    model.sample(3)
+    assert model.stage_budget() == failed
+    assert model.motor() == (IDLE, 0, NONE, 0, 0.0)
+    passed("stage活动时新nonce按BUSY终止旧窗口，冻结仍标旧身份且不会把旧结果冠名或自动重开新请求")
+
+    model = Model()
+    model.prepare_stage()
+    ready = model.request_stage()
+    model.receive(b"start:90\nclear\nstop\nstart:120\n")
+    assert model.stage_budget() == ready and model.motor()[3] == 0
+    safe_offs = model.word("model_safeoff_count")
+    model.sample()
+    stopped = model.stage_budget()
+    assert stopped["state"] == STAGE_FAILED and stopped["failure"] == STAGE_ABORTED
+    assert stopped["request"] == 1 and stopped["active"] == 0
+    assert model.motor() == (IDLE, 0, ACCEPTED, 1, 0.0)
+    assert model.word("model_safeoff_count") == safe_offs + 2  # 试具取消与真实 Motor Stop 各自执行关断。
+    model.sample(3)
+    assert model.stage_budget() == stopped and model.motor()[2:4] == (ACCEPTED, 1)
+    model.assert_stage_unpowered()
+    passed("READY期间Stop优先撤销排队普通命令，冻结ABORTED且真实Motor同拍消费Stop，不执行stage或enable")
+
+    for ordinary_command in [b"clear\n", b"start:90\n"]:
+        for simultaneous_request in [False, True]:
+            model = Model()
+            model.prepare_stage()
+            if not simultaneous_request:
+                assert model.request_stage()["state"] == STAGE_READY
+            else:
+                model.write("g_target_runtime_stage_request", 1)
+            model.receive(ordinary_command)
+            model.sample()
+            failed = model.stage_budget()
+            assert failed["request"] == 1 and failed["state"] == STAGE_FAILED
+            assert failed["failure"] == STAGE_NOT_READY and failed["active"] == 0
+            assert model.motor() == (IDLE, 0, BAD_COMMAND, 1, 0.0)
+            model.sample(3)
+            assert model.stage_budget() == failed and model.motor()[2:4] == (BAD_COMMAND, 1)
+            model.assert_stage_unpowered()
+    passed("Clear或Start与stage新请求同拍或READY时均作为拒绝事件终止窗口，真实Motor报告BAD_COMMAND且不开放功率")
+
+    for failure in ["bus", "guard", "current_pending", "compute_pending", "clock", "cordic"]:
+        model = Model({"model_cordic_ok": 0} if failure == "cordic" else None)
+        model.prepare_stage()
+        if failure == "bus":
+            model.write("model_bus_voltage", 12.0, "f")
+            model.sample(20)
+        elif failure == "guard":
+            model.write("g_target_runtime_guard_faults", FAULT_CADENCE)
+        elif failure == "current_pending":
+            model.write("g_target_runtime_current_request", 1)
+        elif failure == "compute_pending":
+            model.write("g_target_runtime_compute_request", 1)
+        elif failure == "clock":
+            model.memory_write(0xE0001000, 0)
+        failed = model.request_stage(7)
+        assert failed["state"] == STAGE_FAILED and failed["failure"] == STAGE_NOT_READY, failure
+        assert failed["request"] == 7 and failed["active"] == 0
+        if failure == "bus":
+            model.write("model_bus_voltage", 2.7, "f")
+        elif failure == "compute_pending":
+            model.write("g_target_runtime_compute_request", 0)
+        elif failure == "clock":
+            model.memory_write(0xE0001000, 1)
+        model.sample(20)
+        assert model.stage_budget() == failed, failure
+        model.assert_stage_unpowered()
+        if failure in ["bus", "current_pending", "compute_pending", "clock"]:
+            # 条件恢复只能接受新显式身份，不自动复用失败请求。
+            assert model.request_stage(8)["state"] == STAGE_READY, failure
+    passed("高母线、guard、未消费的电流/计算诊断、禁用时钟和CORDIC失败均前置拒绝stage，条件恢复不自动重试")
+
+    model, reference = Model(), Model()
+    for fixture in [model, reference]:
+        fixture.prepare_stage()
+        fixture.write("model_position_available", 1)
+        fixture.write("model_position_use_fixed_time", 0)
+        fixture.write("model_current_b", 0.02, "f")
+        fixture.write("model_current_c", -0.03, "f")
+        fixture.sample(239)  # 两个真实观察实例均已经进入零偏窗口。
+        assert fixture.current()["state"] == CURRENT_CALIBRATING
+    old_count = model.current()["count"]
+    for index in range(5):
+        if index == 0:
+            model.write("g_target_runtime_stage_request", 11)
+        model.sample()
+        reference.sample()
+        assert model.current() == reference.current()
+        assert model.runtime_status() == reference.runtime_status()
+        assert model.runtime_status()["last_current_time"] == model.control_time()
+        assert model.current()["count"] == old_count + index + 1
+        assert model.current()["offset"] == (0.0, 0.0, 0.0)
+        model.assert_stage_unpowered()
+    assert model.stage_budget()["state"] == STAGE_FAILED
+    assert model.stage_budget()["failure"] == STAGE_CLOCK
+    passed("stage准备、CLOCK失败和冻结后的每拍仍推进真实Runtime采样时间及零偏窗口，与无诊断观察实例逐拍一致")
+
+    # 原57组保留插桩构建；另链接独立无插桩镜像，直接执行实际宏关闭后的分派。
+    plain_command = [argument for argument in command if argument != "-DCONTROL_CURRENT_PROFILE"]
+    plain_objects = list(objects)
+    for source in [TARGET / "runtime/target_runtime.c", TARGET / "runtime/compute_probe.c",
+                   REPOSITORY / "control/current_controller.c"]:
+        obj = temporary / ("plain_" + source.stem + ".o")
+        run_checked(plain_command + ["-c", str(source), "-o", str(obj)], temporary)
+        plain_objects = [str(obj) if Path(old).stem == source.stem else old for old in plain_objects]
+    plain_executable = temporary / "plain_model.axf"
+    run_checked(
+        [str(COMPILER / "armlink.exe"), "--cpu=Cortex-M4.fp", "--scatter", str(scatter),
+         "--entry=model_start", "--keep=model.o(*)", "-o", str(plain_executable), *plain_objects],
+        temporary,
+    )
+    model = Model(image=read_image(plain_executable))
+    model.prepare_stage()
+    model.write("g_target_runtime_compute_request", 13)
+    model.service()
+    denied = model.compute()
+    assert denied["request"] == 13 and denied["state"] == 3 and denied["failure"] == 1
+    assert denied["steps"] == 0 and denied["counts"] == denied["hardware_counts"] == [0] * 6
+    assert model.word("model_cordic_calls") == 0
+    ready = model.request_stage(14)
+    assert ready["request"] == 14 and ready["state"] == STAGE_READY and ready["active"] == 1
+    assert ready["failure"] == 0 and model.controller_profile()["calls"] == 0
+    model.sample()
+    assert model.stage_budget()["state"] == STAGE_FAILED
+    assert model.stage_budget()["failure"] == STAGE_CLOCK
+    assert model.compute() == denied
+    model.assert_stage_unpowered()
+    passed("实际取消CONTROL_CURRENT_PROFILE的独立ARM镜像拒绝旧compute且仍许可stage准备，未偷偷启用内部探针或功率")
 
 print(f"PASS: {len(CASES)} G431 runtime C behavior groups")
 for name in CASES:

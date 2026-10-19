@@ -12,6 +12,7 @@
 #include "realtime_motor_io_config.h"
 #if defined(BLDC_G431_OBSERVE_ENTRY)
 #include "irq_timing.h"
+#include "realtime_motor_io_diagnostic.h"
 #endif
 
 #define CURRENT_ADC_FULL_SCALE_COUNTS (4095.0f)
@@ -37,6 +38,14 @@ static uint32_t s_pending_start_cycles;
 static uint32_t s_pending_count;
 static uint32_t s_callback_start_cycles;
 static uint32_t s_callback_entry_count;
+
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+void realtime_motor_io_stage_anchor(uint32_t *cycles, uint32_t *entry_count)
+{
+    *cycles = s_callback_start_cycles;
+    *entry_count = s_callback_entry_count;
+}
+#endif
 
 static void restore_interrupts(uint32_t primask)
 {
