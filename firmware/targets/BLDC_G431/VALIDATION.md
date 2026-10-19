@@ -8,6 +8,120 @@
 `BLDC_G431_Observe` 构建与离线验证见 [runtime/README.md](runtime/README.md)，
 两个入口的镜像与验收证据不互相替代。
 
+## 控制链集成与合成对象验证
+
+公共 Runtime 已接通增益/方向修正、测量电角度、Park、电流 PI、独立电压施加角和 SVPWM，
+速度 PI 按同一 fast tick 整数分频。Start 先关断旧 epoch、跨拍 neutral stage 和 enable，
+成功后才提交 RUN；Stop 保留冻结零偏、清积分和待启动请求。活动反馈或控制失败关断锁存。
+当前 G431 的控制配置仍关闭，电流、电角度和时序许可未确认，实际装配继续拒绝启动。
+
+实际验证：Motor 8、电流预处理 19、双角电流 PI 21、原 Observe runtime 43、新直接
+FOC Runtime 8 组 ARMCC / Unicorn 检查通过。独立合成 PMSM 在两个编码器方向下完成
+90 → 40 → −70 rpm 变目标，各段末尾误差断言小于 3 rpm；非单位有符号电流系数同样通过链路。
+另覆盖 15 类启动/运行失败关断，及旧 duty、待启动请求和积分不会自动复活。
+
+MATLAB R2021b 使用基础 `ode45`，对真实 ARM C 控制链导出的 27304 拍轨迹选取
+四段各 750 个连续区间累计复算，全部通过。这里的微小数值误差只说明独立积分器一致，
+不是实物精度或闭环性能指标。固定理想 VBUS、关断后的理想零电压，以及合成对象/PI 参数
+均已在[摘要](validation/evidence/foc-runtime-model/summary.json)和[曲线](validation/evidence/foc-runtime-model/response.png)注明；
+不模拟实际回灌、死区、噪声或执行周期，不能据此授权实物反转。
+
+Observe 全量 Rebuild 及最终增量构建均为 0 Error / 0 Warning。最终离线 HEX 为
+`f05766bf945849c8dcab5192eeb0ee88b8e4e473714e2566e57dd6458b8bbea0`，
+已通过同次 HEX/AXF/MAP 与真实 DWARF 布局离线核对；旧台架 HEX 仍为 `8b7fc787…`。
+本轮没有连接 ST-Link、烧录、复位或执行任何实物功率指令；板上仍沿用 `c151e560…`。
+完整控制代码的 stage 截止、ISR 执行预算、实物采样窗口和反馈标定仍须在开放功率前验收。
+
+## Observe 已知电流采集准备
+
+新增 Target 私有的无功率诊断入口：零偏冻结后，显式请求一次 4096 点原始 B/C 窗口，
+锁存均值、极值、无偏样本方差、首末时间和当时冻结的 offset。Stop 或条件失效会中止，
+不包含 stage、enable、重启或校准值应用；Motor 与十通道 UART 语义保持原边界。
+实现和复现入口见 [runtime](runtime/README.md#已知电流诊断采集)。
+
+实际执行 ARMCC / Unicorn 统计模块 11 组、runtime 43 组；主机 fake 测试 22 个方法通过。
+检查包括独立双精度统计参考、4096 点完整性、冻结零偏、BUSY/Stop/异常中止、
+单地址一次写、前检拒绝零写入，以及采后数据和实时健康状态的区分。
+Observe 全量 Rebuild 与最终增量构建均为 0 Error / 0 Warning。
+
+本轮离线 HEX SHA256 为
+`8b918ddf2ff3570ce9b5c2ee77cb466939b9c1587fa80384d6f944285fa4894f`。
+默认离线准备已用真实 HEX/AXF/MAP 绑定 38176 个加载字节，并从同次 AXF 成功派生布局；
+捕获结果为 72 字节，相关枚举实际为 1 字节，request 为 4 字节。
+本轮未连接设备、烧录、复位或注入电流；板上仍为下述已实测的 `c151e560…` 镜像。
+上述软件检查不表示已知电流增益/方向、实机采集入口或 ISR 执行预算已经验收。
+
+## FOC 算法离线准备（2026-10-19）
+
+Park / 逆 Park、圆限幅和居中 SVPWM 通过 12 组 ARMCC / Unicorn 检查；
+d/q 电流 PI 与限幅回算通过 16 组，包含近单位相量修正、独立数值参考与简化 RL 对象阶跃。
+电角度映射与预测通过 10 组，速度 PI 通过 15 组；均执行正式 ARM C，并用独立数值参考对照。
+Runtime 保留原 30 组，增加标定门控、逐拍预测、延迟消费与低通、失效恢复等检查，共 38 组通过。
+这些结果不证明实际电机闭环或实时预算，算法和复现入口见 [control](../../../control/README.md#foc-变换与电流-pi)。
+
+Observe 已加入源码并构建为 0 Error / 0 Warning。Runtime 已接入电角度计算，但实际 Target
+尚未确认极对数、方向和零位，角度保持无效；电流/速度 PI 尚未调用，Start 仍拒绝、Id/Iq 无效。
+该轮离线构建 HEX 为 `4f41457fd3ec2190bd4d4e61a6285ae9f3faa1927a85f02418e92740a8885ee0`，
+未下载到板；板上沿用下节已实测的 `c151e560…`。没有重新烧录、复位或复采旧波形。
+已知电流对照的器材与节点准备见 [电流复核](validation/CURRENT_CHECK.md#后续已知电流对照准备)。
+
+## Observe 电流预处理增量（2026-10-19）
+
+当前已烧录并校验的 Observe HEX SHA256 为
+`c151e5604f8d93610a049650e34f199d007e3ad9077a427cf8472d6bd60af969`。
+新增可移植相电流零偏、缺相重构与 Clarke，并在 ControlRuntime 的同步边界接入；
+所有 Start 仍拒绝进入 RUN，没有功率使能或 Park / Id / Iq 实现。
+
+本轮实际执行 ARMCC / Unicorn 电流测量 11 组与 runtime 30 组，覆盖四种相集合、
+独立数值参考、许可/静止/连续采样门控、失败锁定和冻结偏置。
+Keil 两个 Target 全量 Rebuild 均为 0 Error / 0 Warning，最终 Observe 增量构建同样无错误警告；
+AXF 加载字节与 HEX 一致、未含旧 validation 入口；原台架 HEX 身份保持不变。
+
+现场由操作者确认 OUTPUT 关闭、电池与电机三相断开、ST-Link 逻辑 3V3、编码器连接且转轴静止。
+烧录前 HOTPLUG 校验板上仍为下节反馈镜像，MOE=0、IDLE、无故障，软件母线约 2.65 V；
+下载后校验成功并复位。4096 点窗口完成，校零状态 READY、首因 NONE。
+
+| 实测相 | 本次冻结 offset | 窗口峰峰值 |
+| --- | --- | --- |
+| B | −12.424 mA | 9.146 mA |
+| C | −0.338 mA | 10.289 mA |
+
+两次分离 SWD 读回的窗口均值、极值、offset 和样本数一致，期间控制时间继续推进；
+CPU running、guard/Motor faults=0、IDLE、MOE=0，相电流处理输出有效。
+[本次实测摘要](validation/evidence/20261019-observe-feedback/current-zero-summary.json)
+仅记录冻结统计及有限结论；实时 SWD 电流字段不视为同一拍原子快照。
+本次没有重新发送 UART 请求或复做旧 PWM 抓图，既有证据保留各自镜像归属。
+零偏就绪不证明已知电流增益/方向、实际开关采样窗口、温漂、电角度标定、完整 ISR WCET 或 FOC。
+
+## Observe 反馈增量（2026-10-19）
+
+默认关断入口接入 Motor 内部 ControlRuntime、周期编码器机械速度估计和协议无关快照。
+Start 仍返回 NOT_READY，没有 stage、power enable 或故障 re-arm 调用。
+该轮 Observe HEX SHA256 为
+`236b6dae08d3f9e701076e3d4fd5eea0825de972f7e6a4849e3e39662648bc16`。
+
+ARMCC / Unicorn 检查通过：Motor 8、VOFA 编解码 12、快照适配 6、速度估计 10、
+runtime 21 组。包含真实采集间隔、正反跨圈、重复/过期/无效观测、恢复和无需命令触发的
+有效性发布；已在途旧帧保持完整。Keil 两个 Target 全量 Rebuild 均为 0 Error / 0 Warning，
+Observe 的 AXF 加载字节与 HEX 一致，不含旧 validation 入口；原台架 HEX 保持下述身份。
+
+纯逻辑供电下已烧录并校验上述 Observe 镜像：OUTPUT 关闭，电池和电机三相断开，
+ST-Link 提供逻辑 3V3，CH340 使用 COM7、115200、8N1，转换器 VCC 不接。
+端子 VBUS 的用户万用表读数为 2.68 V，软件约 2.63–2.65 V，确有端子低压，
+来源路径尚未确定，不记为仅有 ADC 偏置，也不视为 12 V 母线验收。
+
+串口静态 3 s 捕获 301 帧，控制时间前进 3.00 s，状态 IDLE、faults=0、
+目标为零、静止速度有效且为零、Id/Iq 为 NaN、valid_flags=487。
+随后逐条发送 Stop / Clear / Start Velocity 120 rpm / Stop，分别收到
+ACCEPTED / ACCEPTED / NOT_READY / ACCEPTED，各窗 39–41 帧，均保持 IDLE、零目标、无故障。
+烧录后及命令检查后 HOTPLUG 读回 MOE=0、CPU running；没有执行功率使能。
+
+VOFA+ 已使用 JustFloat 接收十通道。[手动转轴截图](validation/evidence/20261019-observe-feedback/manual-velocity-vofa.png)
+显示 I2 机械速度曲线具有正、负响应及回到零附近的平台；仅按此范围完成手动反馈验收，
+不推断实际转动方向定义或峰值精度。图中 I0 的混合名称是显示改名错误，I0 仍为时间。
+本轮不证明速度精度、完整 ISR WCET 或 FOC。新增实测步骤见
+[VOFA 操作说明](../../../host/vofa/README.md#首次无功率反馈验收)，不因此重复旧 PWM 抓图。
+
 ## 当前验收（2026-10-18）
 
 当前时序候选 HEX SHA256：

@@ -16,7 +16,7 @@ control/      可移植电机控制算法
 interface/    Firmware / Host 共享的设备与协议合同
 firmware/     MCU 固件、Hardware Capability Contract 与各板 Target
 host/         PC 调试工具配置与说明，后续 Qt6 Host
-hardware/     已确认的物理硬件事实
+hardware/     板级硬件事实与电机、编码器参考资料
 ```
 
 长期架构见 `ARCHITECTURE.md`，开发、协作和验证方式见 `DEVELOPMENT.md`。
@@ -29,13 +29,14 @@ Qt Host、位置环、Modbus、CANopen、FreeRTOS 及 F405 同功能验收均在
 
 ## 实现与验证入口
 
-现有工程包含 G431 和 F405 M0 的 Platform、公共硬件能力合同及台架验证入口。G431 另有默认关断的 Motor / UART 观察入口，已接入 VOFA 编解码和实时边界命令交接，启动请求仍被拒绝；闭环控制、标定和 UART 实机验收尚未完成。上述 V1 范围是交付目标。
+现有工程包含 G431 和 F405 M0 的 Platform、公共硬件能力合同及台架验证入口。G431 另有默认关断的 Motor / UART 观察入口，已接入编码器速度估计、VOFA 和实时边界命令交接，启动请求仍被拒绝；闭环控制和标定尚未完成，具体实测范围见 Target 验证页。上述 V1 范围是交付目标。
 
 - [固件入口](firmware/README.md)：Target、公共应用与构建边界。
 - [G431 默认关断入口](firmware/targets/BLDC_G431/runtime/README.md)：独立构建、UART 和当前执行边界。
 - [G431 验证结果与剩余门槛](firmware/targets/BLDC_G431/VALIDATION.md)：G431 验收结论、镜像与证据的唯一汇总入口。
 - [F405 M0 说明](firmware/targets/ODRIVE_V36_405_M0/README.md)：独立的实现和验证范围。
 - [Host 入口](host/README.md)：V1 的 VOFA 资料职责与后续 Qt Host。
+- [硬件资料入口](hardware/README.md)：控制板事实与独立的电机、编码器资料。
 - [共享接口入口](interface/README.md)：设备语义、UART 命令与观测合同。
 
 完整本地日志不随仓库克隆分发；公开证据及其测量限制从对应 Target 验证页进入。

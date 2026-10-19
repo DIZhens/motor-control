@@ -46,7 +46,8 @@ void motor_latch_fault(Motor *motor, uint32_t flags)
     motor->state = MOTOR_STATE_FAULT;
 }
 
-static MotorCommandResult motor_apply_command(Motor *motor, const MotorCommand *command)
+static MotorCommandResult motor_apply_command(Motor *motor, const MotorCommand *command,
+    bool start_ready, float max_velocity_rpm)
 {
     if (command == NULL) {
         return MOTOR_COMMAND_RESULT_BAD_COMMAND;
@@ -67,8 +68,19 @@ static MotorCommandResult motor_apply_command(Motor *motor, const MotorCommand *
         } else if (motor->state != MOTOR_STATE_RUN) {
             return MOTOR_COMMAND_RESULT_WRONG_STATE;
         }
-        /* 尚无控制计算、反馈门控和标定流程，不能伪造接受或进入 RUN。 */
-        return MOTOR_COMMAND_RESULT_NOT_READY;
+        if (!motor_target_is_finite(max_velocity_rpm) || max_velocity_rpm <= 0.0f) {
+            return MOTOR_COMMAND_RESULT_NOT_READY;
+        }
+        if (command->target_velocity_rpm > max_velocity_rpm
+            || command->target_velocity_rpm < -max_velocity_rpm) {
+            return MOTOR_COMMAND_RESULT_BAD_TARGET;
+        }
+        if (command->type == MOTOR_COMMAND_START_VELOCITY) {
+            /* 接受完整意图不提前提交 RUN；待启动目标由 Runtime 保存。 */
+            return start_ready ? MOTOR_COMMAND_RESULT_ACCEPTED : MOTOR_COMMAND_RESULT_NOT_READY;
+        }
+        motor->target_velocity_rpm = command->target_velocity_rpm;
+        return MOTOR_COMMAND_RESULT_ACCEPTED;
 
     case MOTOR_COMMAND_STOP:
         motor->target_velocity_rpm = 0.0f;
@@ -94,10 +106,29 @@ static MotorCommandResult motor_apply_command(Motor *motor, const MotorCommand *
 
 MotorCommandResult motor_handle_command(Motor *motor, const MotorCommand *command)
 {
+    return motor_handle_control_command(motor, command, false, 0.0f);
+}
+
+MotorCommandResult motor_handle_control_command(Motor *motor, const MotorCommand *command,
+    bool start_ready, float max_velocity_rpm)
+{
     if (motor == NULL) {
         return MOTOR_COMMAND_RESULT_BAD_COMMAND;
     }
     motor->command_count++;
-    motor->command_result = motor_apply_command(motor, command);
+    motor->command_result = motor_apply_command(motor, command, start_ready, max_velocity_rpm);
     return motor->command_result;
+}
+
+bool motor_enter_velocity_run(Motor *motor, float target_velocity_rpm, float max_velocity_rpm)
+{
+    if (motor == NULL || motor->state != MOTOR_STATE_IDLE || motor->faults != 0U
+        || !motor_target_is_finite(target_velocity_rpm)
+        || !motor_target_is_finite(max_velocity_rpm) || max_velocity_rpm <= 0.0f
+        || target_velocity_rpm > max_velocity_rpm || target_velocity_rpm < -max_velocity_rpm) {
+        return false;
+    }
+    motor->target_velocity_rpm = target_velocity_rpm;
+    motor->state = MOTOR_STATE_RUN;
+    return true;
 }

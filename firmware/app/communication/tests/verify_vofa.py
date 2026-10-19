@@ -1,4 +1,4 @@
-"""Compile and execute the actual VOFA C codec with ARMCC and Unicorn; no hardware access."""
+"""使用 ARMCC 和 Unicorn 编译并执行正式 VOFA C 编解码器，不访问硬件。"""
 
 from pathlib import Path
 import math

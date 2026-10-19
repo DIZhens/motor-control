@@ -2,8 +2,9 @@
 #define MOTOR_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
-/* RUN 为后续控制闭环保留；本业务骨架不具备进入 RUN 的实现。 */
+/* RUN 由内部 Runtime 在受控使能成功后提交；默认观察装配仍拒绝启动。 */
 typedef enum {
     MOTOR_STATE_BOOT = 0,
     MOTOR_STATE_IDLE = 1,
@@ -19,6 +20,7 @@ typedef enum {
     MOTOR_COMMAND_CLEAR_FAULT
 } MotorCommandType;
 
+/* 携带明确速度模式与完整目标的 Motor 业务请求。 */
 typedef struct {
     MotorCommandType type;
     float target_velocity_rpm; /* 机械目标 rpm；仅 Start / Update 使用。 */
@@ -41,7 +43,7 @@ typedef struct {
     uint32_t faults; /* 锁存故障；该骨架没有直接清除路径。 */
     MotorCommandResult command_result;
     uint32_t command_count; /* handle 调用数，包含拒绝；按 uint32_t 自然回绕。 */
-    float target_velocity_rpm; /* 已接受目标；当前骨架保持安全零目标。 */
+    float target_velocity_rpm; /* 当前 RUN 的完整目标；尚在启动准备时仍为零。 */
 } Motor;
 
 void motor_init(Motor *motor);
@@ -50,7 +52,22 @@ void motor_finish_boot(Motor *motor);
 /* flags == 0 不产生故障；非零 flags 按位锁存，并清目标、进入 FAULT。 */
 void motor_latch_fault(Motor *motor, uint32_t flags);
 
-/* Start 尚缺控制与标定前置条件；拒绝不写目标，不会进入 RUN 或清故障。 */
+/* 默认观察入口；不授予控制许可，Start 返回 NOT_READY。 */
 MotorCommandResult motor_handle_command(Motor *motor, const MotorCommand *command);
+
+/*
+ * 仅由 Motor 内部 Runtime 调用。start_ready 是当拍反馈/标定/时序许可，
+ * max_velocity_rpm 是本装配的有限正目标上限；不合法上限表示尚未就绪。
+ * Start 接受后仍保持 IDLE 和零活动目标，Runtime 独占保存完整待启动请求。
+ * Update 仅在 RUN 接受，普通拒绝保留已有目标；此函数不操作功率或清故障。
+ */
+MotorCommandResult motor_handle_control_command(Motor *motor, const MotorCommand *command,
+    bool start_ready, float max_velocity_rpm);
+
+/*
+ * Runtime 在本次 Start 的 fresh actuation 已跨边界且 enable 成功后提交 RUN。
+ * 不新增一次外部命令，不代表之后持续功率状态；失败时 Runtime 必须关断并锁故障。
+ */
+bool motor_enter_velocity_run(Motor *motor, float target_velocity_rpm, float max_velocity_rpm);
 
 #endif

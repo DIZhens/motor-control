@@ -1,4 +1,4 @@
-"""Compile and execute the actual default-off Motor C with ARMCC/Unicorn; no hardware."""
+"""使用 ARMCC 和 Unicorn 编译并执行正式 Motor C，验证默认关断行为，不访问硬件。"""
 
 from pathlib import Path
 import math

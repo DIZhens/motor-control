@@ -3,18 +3,30 @@
 
 #include <stdint.h>
 
+#include "current_capture.h"
+
 /* Observe 入口的锁存诊断；当前没有清除或功率使能路径。 */
 enum {
-    TARGET_RUNTIME_FAULT_STARTUP = 1U << 0,
-    TARGET_RUNTIME_FAULT_CURRENT = 1U << 1,
-    TARGET_RUNTIME_FAULT_CADENCE = 1U << 2,
-    TARGET_RUNTIME_FAULT_TRIP = 1U << 3,
-    TARGET_RUNTIME_FAULT_UNEXPECTED_POWER = 1U << 4,
-    TARGET_RUNTIME_FAULT_CLOCK = 1U << 5
+    TARGET_RUNTIME_FAULT_STARTUP = 1U << 0, /* 装配或能力准备失败。 */
+    TARGET_RUNTIME_FAULT_CURRENT = 1U << 1, /* 同步电流采集结果无效。 */
+    TARGET_RUNTIME_FAULT_CADENCE = 1U << 2, /* 采样间隔异常或采样丢失。 */
+    TARGET_RUNTIME_FAULT_TRIP = 1U << 3, /* 保护快照不可用，或存在保护条件、锁存原因。 */
+    TARGET_RUNTIME_FAULT_UNEXPECTED_POWER = 1U << 4, /* 功率应关闭时检测到 MOE 使能。 */
+    TARGET_RUNTIME_FAULT_CLOCK = 1U << 5 /* 时钟配置异常或 DWT 计数未推进。 */
 };
 
 /* TIM6 独立写入；ADC 不再执行时，不能靠旧 Motor 快照判断健康。 */
 extern volatile uint32_t g_target_runtime_guard_faults;
+
+/*
+ * Observe 专用无功率诊断，不属于 Motor 命令或 UART 协议。
+ * 主机仅写 request 一个非零新序号；ADC 边界消费，重复序号不重放。
+ * capture 仅在开始/完成/失败时锁存；读取前后 sequence 相同且为偶数才一致。
+ * ACTIVE 发布不代表完整窗口；只有 COMPLETE 的 4096 点统计可用于电流对照。
+ */
+extern volatile uint32_t g_target_runtime_current_request;
+extern volatile uint32_t g_target_runtime_current_sequence;
+extern volatile ObserveCurrentCaptureResult g_target_runtime_current_capture;
 
 /* 一次装配，默认关断；不包含 stage、enable 或保护注入命令。 */
 void target_runtime_start(void);

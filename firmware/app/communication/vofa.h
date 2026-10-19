@@ -18,6 +18,7 @@ typedef enum {
     VOFA_COMMAND_CLEAR_FAULT
 } VofaCommandType;
 
+/* 从一行输入中解析得到的完整请求，交由业务层校验与执行。 */
 typedef struct {
     VofaCommandType type; /* Start / Update 都明确请求速度模式。 */
     float target_velocity_rpm; /* 机械转速 rpm；Stop / Clear 时为 0。 */

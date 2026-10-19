@@ -14,7 +14,7 @@ V1 使用现成 VOFA 工具，围绕 G431 单电机的 FOC 电流内环与速度
 
 配置与说明在对应能力可用时加入；当前不把计划写成已具备的操作入口。设备命令和观测合同以 [interface/](../interface/README.md) 为准，实机验收从 [G431 验证页](../firmware/targets/BLDC_G431/VALIDATION.md) 进入。
 
-默认关断入口的首次串口设置见 [vofa/README.md](vofa/README.md)；目前为离线验证后的待上板说明，尚无实测导出的 VOFA 工程配置。
+VOFA 程序的本机位置与默认关断入口的首次串口设置见 [vofa/README.md](vofa/README.md)；实际 UART、VOFA 与手转反馈验证范围见 [G431 验证页](../firmware/targets/BLDC_G431/VALIDATION.md)，尚无实测导出的 VOFA 工程配置。
 
 ## 后续 Qt Host
 

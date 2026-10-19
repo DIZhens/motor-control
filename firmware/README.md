@@ -4,14 +4,14 @@ MCU 电机控制固件。
 
 ## 实现边界
 
-两个 Target 默认保留各自的 `validation/` 台架程序；G431 增加单独选择的 `BLDC_G431_Observe` 默认关断入口，调用公共 Motor 和 VOFA 模块。它尚无控制计算、标定和功率使能路径。公共 HCC 头文件已经定义，不等于全部 Target 实现和实机验收均已完成。各 Target 验收结论由对应验证入口维护，本页不重复候选镜像和实测项目。
+两个 Target 默认保留各自的 `validation/` 台架程序；G431 增加单独选择的 `BLDC_G431_Observe` 默认关断入口，调用公共 Motor、反馈和 VOFA 模块。公共 ControlRuntime 已接入受门控的速度/电流控制链与跨拍启停；当前 G431 装配关闭该控制配置，实物标定、实时预算及功率闭环仍待验收。公共 HCC 头文件已经定义，不等于全部 Target 实现和实机验收均已完成。各 Target 验收结论由对应验证入口维护，本页不重复候选镜像和实测项目。
 
 | 区域 | 职责与当前入口 | 验证或实现边界 |
 | --- | --- | --- |
 | `platform_contract/` | 实时电流/驱动、位置、母线、ControlTime 和可选 Hardware Trip 的能力合同 | 逐个 Target 核对实现、失败语义与物理验收 |
 | `targets/BLDC_G431/` | Platform、单次命令台架与验证工具 | [G431 验证结果与剩余门槛](targets/BLDC_G431/VALIDATION.md) |
 | `targets/ODRIVE_V36_405_M0/` | Platform 与功率关闭观测入口 | [F405 M0 说明](targets/ODRIVE_V36_405_M0/README.md)；不属于当前 V1 同功能验收 |
-| `app/` | 纯 C Motor 默认关断业务骨架、VOFA 编解码 | ARM 行为模型已覆盖；不等于 FOC、恢复或 UART 实机验收 |
+| `app/` | Motor 生命周期、受门控实时控制链、VOFA 编解码和快照映射 | 模型与实物分别验收，故障恢复尚未实现 |
 
 公共应用使用 HCC，不直接依赖某一 Target 的 HAL、调试邮箱或保护注入命令。
 两板验证结果互不替代；模型、静态检查、目标编译和实物验证分别记录。
