@@ -43,7 +43,7 @@ with tempfile.TemporaryDirectory(prefix="g431-stage-budget-") as directory:
     objects = []
     for index, source in enumerate(sources):
         obj = temporary / f"source_{index}.o"
-        checked([str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3",
+        checked([str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3", "-Otime",
                  "--split_sections", "-g", "-DSTM32G431xx", "-I", str(RUNTIME),
                  "-I", str(ROOT / "control"), "-I", str(ROOT / "firmware/app/motor"),
                  "-I", str(ROOT / "firmware/platform_contract"),

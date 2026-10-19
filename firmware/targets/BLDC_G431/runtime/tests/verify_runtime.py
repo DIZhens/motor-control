@@ -6,6 +6,7 @@ import os
 import struct
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 
 from elftools.elf.elffile import ELFFile
 from unicorn import Uc, UcError, UC_ARCH_ARM, UC_HOOK_CODE, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE
@@ -62,6 +63,24 @@ def read_image(path: Path) -> tuple:
         return segments, initializers, symbols
 
 
+project = ET.parse(TARGET / "MDK-ARM/BLDC_control V1.uvprojx").getroot()
+observe = next(target for target in project.findall("./Targets/Target")
+               if target.findtext("TargetName") == "BLDC_G431_Observe")
+assert observe.findtext("./TargetOption/TargetArmAds/Cads/Optim") == "4"
+assert observe.findtext("./TargetOption/TargetArmAds/Cads/oTime") == "0"
+hot_groups = {"Application/User/Runtime", "Application/User/Motor", "Control"}
+for group in observe.findall("./Groups/Group"):
+    policy = group.findtext("./GroupOption/GroupArmAds/Cads/oTime")
+    if group.findtext("GroupName") in hot_groups:
+        assert policy == "1", group.findtext("GroupName")
+        assert group.findtext("./GroupOption/GroupArmAds/Cads/Optim") == "0"
+        assert group.findtext("./GroupOption/CommonProperty/IncludeInBuild") == "2"
+    else:
+        assert policy in (None, "2"), group.findtext("GroupName")
+assert hot_groups <= {group.findtext("GroupName") for group in observe.findall("./Groups/Group")}
+passed("Observe仅对Runtime、Motor和Control三个组显式采用速度优化，保留全局与硬件组继承策略")
+
+
 with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     temporary = Path(directory)
     scatter = temporary / "model.sct"
@@ -77,7 +96,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                      REPOSITORY / "firmware/platform_contract",
                      TARGET / "Drivers/CMSIS/Device/ST/STM32G4xx/Include",
                      TARGET / "Drivers/CMSIS/Include"]
-    command = [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3",
+    command = [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3", "-Otime",
                "--split_sections", "-g", "-DSTM32G431xx", "-DBLDC_G431_OBSERVE_ENTRY",
                "-DCONTROL_CURRENT_PROFILE"]
     for path in include_paths:

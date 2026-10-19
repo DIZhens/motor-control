@@ -98,7 +98,7 @@ with tempfile.TemporaryDirectory(prefix="g431-foc-runtime-") as temporary_name:
     scatter.write_text("LR_IROM1 0x08000000 0x40000 {\n ER_IROM1 0x08000000 0x40000 { .ANY (+RO) }\n"
                        " RW_IRAM1 0x20000000 0x10000 { .ANY (+RW +ZI) }\n}\n", encoding="utf-8")
     includes = [ROOT / "firmware/app/motor", ROOT / "control", ROOT / "firmware/platform_contract"]
-    compile_command = [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3",
+    compile_command = [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3", "-Otime",
                        "--split_sections", "-g"]
     for include in includes:
         compile_command += ["-I", str(include)]

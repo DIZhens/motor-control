@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix="position-estimator-") as directory:
     for source in [ROOT / "position_estimator.c", ROOT / "tests/model.c"]:
         obj = temporary / (source.stem + ".o")
         run_checked(
-            [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3",
+            [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3", "-Otime",
              "--split_sections", "-g", "-I", str(ROOT), "-c", str(source), "-o", str(obj)],
             temporary,
         )

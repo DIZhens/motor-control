@@ -90,7 +90,7 @@ with tempfile.TemporaryDirectory(prefix="current-controller-") as directory:
                    ROOT / "tests/current_controller_model.c"]:
         obj = temporary / (source.stem + ".o")
         run_checked(
-            [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3",
+            [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3", "-Otime",
              "--split_sections", "-g", "-I", str(ROOT), "-c", str(source), "-o", str(obj)],
             temporary,
         )
@@ -109,6 +109,10 @@ with tempfile.TemporaryDirectory(prefix="current-controller-") as directory:
                         if (section["sh_flags"] & 2) and section["sh_type"] == "SHT_PROGBITS"]
         symbols = {symbol.name: symbol["st_value"]
                    for symbol in elf.get_section_by_name(".symtab").iter_symbols()}
+
+    # 对应 Target Control 组的实际速度优化选项，确认标准分类没有退回逐项库调用。
+    assert "__ARM_isfinitef" not in symbols, "热控制链重新引入逐项分类库调用"
+    passed("显式 O3/Otime 与 Target Control 组策略一致，标准 finite 分类保持内联")
 
     class Model:
         def __init__(self, config=None):

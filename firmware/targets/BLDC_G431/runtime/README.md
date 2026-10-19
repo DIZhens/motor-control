@@ -21,6 +21,13 @@
 & 'D:\keil5\UV4\UV4.exe' -r 'firmware\targets\BLDC_G431\MDK-ARM\BLDC_control V1.uvprojx' -t BLDC_G431_Observe -o "$env:TEMP\g431-observe-build.log"
 ```
 
+Observe 的 `Control`、`Application/User/Motor`、`Application/User/Runtime` 三个组显式使用
+ARMCC `-O3 -Otime`，其余组保留原继承配置。按速度优化使短数值检查能够内联；源内
+`#pragma Otime` 不能替代本机编译器的翻译单元内联策略。没有开启 fast-math 或改写
+有限值检查、除法和归一化公式。正式 Runtime 与私有同源副本采用相同策略。
+核对实际链接对象的编译记录及机器码，不按目录中残留的同名 `.o` 推断当前镜像。
+相关 ARM 模型显式使用 `-Otime`；模型与无插桩实测仍分别判定，当前提交预算未通过。
+
 `BLDC_G431_OBSERVE_ENTRY` 仅在新 Target 定义；`main()` 和 TIM6 IRQ 的 USER CODE
 选择对应入口。两者共享 CubeMX 配置及 Platform，不改生成区，不同时绑定两个 consumer。
 烧录是独立的现场步骤；编译不自动连接 ST-Link 或下载镜像。
@@ -110,7 +117,7 @@ Stop 清目标、待启动请求和两环积分，保留正常冻结零偏；任
 
 当前 G431 控制配置为零、运行许可关闭，Target 仍把意外 MOE 视为故障；模型中的合法使能
 不表示这个实机入口已开放。尤其三角函数、PI 和 SVPWM 的真实执行时间必须满足当前约
-15 µs 的 stage 前段预算；模型与编译不证明该预算。
+15 µs 的理论最大 stage 前段预算，实际入口延迟还会缩短该窗口；模型与编译不证明该预算。
 
 ## 后台无功率计算计时
 

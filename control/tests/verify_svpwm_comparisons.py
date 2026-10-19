@@ -85,7 +85,7 @@ with tempfile.TemporaryDirectory(prefix="svpwm-comparison-") as directory:
         objects = []
         for index, path in enumerate([source, ROOT / "tests/foc_math_model.c"]):
             obj = temporary / f"{name}_{index}.o"
-            checked([str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3",
+            checked([str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3", "-Otime",
                      "--split_sections", "-g", "-I", str(ROOT), "-c", str(path), "-o", str(obj)],
                     temporary)
             objects.append(str(obj))
