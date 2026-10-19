@@ -80,11 +80,17 @@ ABC 保持实测值、不消除零序。幅值不变 Clarke 约定为
 
 ```powershell
 .venv\Scripts\python.exe -X utf8 control\tests\verify_foc_math.py
+.venv\Scripts\python.exe -X utf8 control\tests\verify_svpwm_comparisons.py
 .venv\Scripts\python.exe -X utf8 control\tests\verify_current_controller.py
 ```
 
 检查包含全周/六扇区/随机独立参考、圆限幅和电压重构、积分回算、失效清历史及多实例。
 简化解耦 RL 数值对象的阶跃收敛仅验证算法实现；没有证明实际电机闭环、带载或 20 kHz ISR WCET。
+
+SVPWM 在有限输入与有界归一化相电压上直接比较最大/最小值，保留原圆限幅、除法、平方根
+及异常清理。比较专用检查临时还原旧库调用片段，逐位核对正负零、极值、扇区和限幅边界、
+坏输入及随机数值，不维护第二份算法实现。电流控制函数仅在 `CONTROL_CURRENT_PROFILE`
+构建中提供七个通用链接钩子；默认无探针，具体计时实例和物理时钟属于调用方。
 
 ## 电角度映射与预测
 

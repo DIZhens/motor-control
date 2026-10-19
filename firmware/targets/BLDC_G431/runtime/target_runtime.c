@@ -16,6 +16,8 @@
 #include "position_observation.h"
 #include "bus_observation.h"
 #include "cordic_math.h"
+#include "irq_timing.h"
+#include "controller_profile.h"
 
 #define CYCLES_PER_US (170U)
 #define SAMPLE_MIN_US (25U)
@@ -106,6 +108,16 @@ static bool compute_probe_adc_permitted(bool has_sample)
         && !s_control_runtime.config.control.enabled && s_control_runtime.bus_valid
         && finite_float(s_control_runtime.bus.voltage_v)
         && (s_control_runtime.bus.voltage_v >= 0.0f) && (s_control_runtime.bus.voltage_v <= 3.6f);
+}
+
+bool target_runtime_timing_permitted(void)
+{
+    return compute_probe_adc_permitted(s_has_sample) &&
+        g_target_runtime_guard_faults == 0U && (TIM1->BDTR & TIM_BDTR_MOE) == 0U &&
+        !s_command_pending && !s_stop_pending && !s_reject_pending && !s_compute_stop_this_service &&
+        SystemCoreClock == 170000000U &&
+        (CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) != 0U &&
+        (DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) != 0U;
 }
 
 static void publish(ControlTime now, bool has_sample)
@@ -246,6 +258,9 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     bool power_disabled = (TIM1->BDTR & TIM_BDTR_MOE) == 0U;
 
     (void)context;
+    if (g_target_irq_timing_active != 0U) {
+        g431_irq_timing_observe_enter(now_cycles);
+    }
     if (s_has_sample && (((uint32_t)(now_cycles - s_last_sample_cycles)
         < SAMPLE_MIN_US * CYCLES_PER_US)
         || ((uint32_t)(now_cycles - s_last_sample_cycles)
@@ -283,6 +298,9 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
             s_publication_divider = 0U;
         }
         publish(current->observation_time, true);
+    }
+    if (g_target_irq_timing_active != 0U) {
+        g431_irq_timing_observe_exit(DWT->CYCCNT);
     }
 }
 
@@ -332,6 +350,8 @@ void target_runtime_start(void)
     }
     s_attempted = true;
     observe_compute_comparison_init(&s_compute_probe);
+    g431_irq_timing_init();
+    observe_controller_profile_init();
     /* 每个异常槽位只有该 handler 写入，嵌套 IRQ 不会覆盖另一路计数。 */
     memset((void *)g_target_runtime_irq_entries, 0, sizeof(g_target_runtime_irq_entries));
     s_cordic_ready = g431_cordic_math_init(&s_cordic_math);
@@ -480,6 +500,11 @@ static void service_compute_probe(void)
         (void)observe_compute_comparison_start(&s_compute_probe, request,
             SystemCoreClock, 200U * CYCLES_PER_US, permitted && s_cordic_ready,
             g431_cordic_sincos, &s_cordic_math);
+        if (s_compute_probe.result.state == OBSERVE_COMPUTE_PROBE_ACTIVE) {
+            (void)observe_controller_profile_start(request, compute_probe_stamp, NULL);
+        } else {
+            observe_controller_profile_freeze(false);
+        }
         publish_compute_probe();
     }
     if (s_compute_probe.result.state != OBSERVE_COMPUTE_PROBE_ACTIVE) {
@@ -492,6 +517,7 @@ static void service_compute_probe(void)
     }
     /* ACTIVE 中的统计保持私有；开始/终态才发布，避免采集端读到半份统计。 */
     if (s_compute_probe.result.state != OBSERVE_COMPUTE_PROBE_ACTIVE) {
+        observe_controller_profile_freeze(s_compute_probe.result.state == OBSERVE_COMPUTE_PROBE_COMPLETE);
         publish_compute_probe();
     }
 }
@@ -523,6 +549,7 @@ static void enqueue(const VofaCommand *request, bool rejected)
     /* Stop 可能已被高优先级 ADC 消费并清掉 pending；在同一后台直接取消诊断。 */
     if (!rejected && (request->type == VOFA_COMMAND_STOP)
         && observe_compute_comparison_abort(&s_compute_probe, OBSERVE_COMPUTE_PROBE_FAILURE_ABORTED)) {
+        observe_controller_profile_freeze(false);
         publish_compute_probe();
     }
 }

@@ -5,6 +5,15 @@
 #include <math.h>
 #include <stddef.h>
 
+/* 仅诊断构建提供有界标记接收端；默认构建不引入调用或板级依赖。 */
+#if defined(CONTROL_CURRENT_PROFILE)
+#include <stdint.h>
+extern void control_current_profile_mark(uint32_t mark);
+#define CURRENT_PROFILE_MARK(mark) control_current_profile_mark(mark)
+#else
+#define CURRENT_PROFILE_MARK(mark) ((void)0)
+#endif
+
 static bool current_controller_config_valid(const CurrentControllerConfig *config)
 {
     return config != NULL &&
@@ -139,6 +148,7 @@ bool current_controller_update(CurrentController *controller,
     float requested_d, requested_q, next_integral_d, next_integral_q;
     float sine, cosine, actuation_sine, actuation_cosine;
     bool integral_limited = false;
+    CURRENT_PROFILE_MARK(0U);
     current_controller_clear_output(output);
     if (controller == NULL) {
         return false;
@@ -157,6 +167,7 @@ bool current_controller_update(CurrentController *controller,
         current_controller_reset(controller);
         return false;
     }
+    CURRENT_PROFILE_MARK(1U);
     if (!current_controller_phasor(input->sin_electrical_angle, input->cos_electrical_angle,
                                     &sine, &cosine) ||
         !foc_park(input->current_alpha_a, input->current_beta_a, sine, cosine, &measured)) {
@@ -173,6 +184,7 @@ bool current_controller_update(CurrentController *controller,
         actuation_sine = sine;
         actuation_cosine = cosine;
     }
+    CURRENT_PROFILE_MARK(2U);
     error_d = input->id_reference_a - measured.d;
     error_q = input->iq_reference_a - measured.q;
     proportional_d = controller->config.kp_d_v_per_a * error_d;
@@ -181,10 +193,18 @@ bool current_controller_update(CurrentController *controller,
     requested_q = proportional_q + controller->integral_q_v;
     if (!isfinite(error_d) || !isfinite(error_q) || !isfinite(proportional_d) ||
         !isfinite(proportional_q) || !isfinite(requested_d) || !isfinite(requested_q) ||
-        !foc_inverse_park(requested_d, requested_q, actuation_sine, actuation_cosine, &voltage) ||
-        !foc_svpwm(voltage.alpha, voltage.beta, input->bus_voltage_v,
-                   controller->config.max_voltage_ratio, &modulation) ||
-        !foc_park(modulation.applied_alpha_v, modulation.applied_beta_v,
+        !foc_inverse_park(requested_d, requested_q, actuation_sine, actuation_cosine, &voltage)) {
+        current_controller_reset(controller);
+        return false;
+    }
+    CURRENT_PROFILE_MARK(3U);
+    if (!foc_svpwm(voltage.alpha, voltage.beta, input->bus_voltage_v,
+                   controller->config.max_voltage_ratio, &modulation)) {
+        current_controller_reset(controller);
+        return false;
+    }
+    CURRENT_PROFILE_MARK(4U);
+    if (!foc_park(modulation.applied_alpha_v, modulation.applied_beta_v,
                   actuation_sine, actuation_cosine, &applied) ||
         !current_controller_next_integral(controller->integral_d_v, error_d,
             controller->config.ki_d_v_per_a_s, controller->config.tracking_gain_per_s,
@@ -197,6 +217,7 @@ bool current_controller_update(CurrentController *controller,
         current_controller_reset(controller);
         return false;
     }
+    CURRENT_PROFILE_MARK(5U);
     candidate.id_a = measured.d;
     candidate.iq_a = measured.q;
     candidate.requested_vd_v = requested_d;
@@ -212,5 +233,6 @@ bool current_controller_update(CurrentController *controller,
     controller->integral_d_v = next_integral_d;
     controller->integral_q_v = next_integral_q;
     *output = candidate;
+    CURRENT_PROFILE_MARK(6U);
     return true;
 }

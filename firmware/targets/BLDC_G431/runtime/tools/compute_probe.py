@@ -25,6 +25,17 @@ ERROR_FIELDS = ["max_sine_error", "max_cosine_error", "max_norm_error", "max_pha
 TIMING_FIELDS = {"count": "I", "min_cycles": "I", "max_cycles": "I", "sum_cycles": "Q",
                  "clean_count": "I", "clean_min_cycles": "I", "clean_max_cycles": "I",
                  "clean_sum_cycles": "Q", "irq_entries": "I"}
+CONTROLLER_SEGMENT_NAMES = ["控制器 mark0 到 mark6", "入口及输入校验", "测量与施加角准备及测量 Park",
+                            "PI 与逆 Park", "SVPWM", "施加 Park 与积分计算", "输出及历史提交"]
+CONTROLLER_FIELDS = {field: "I" for field in ["request_sequence", "state", "failure", "call_count",
+                                            "valid_calls", "rejected_calls"]}
+for index in range(7):
+    CONTROLLER_FIELDS.update({f"timing[{index}].{field}": fmt for field, fmt in TIMING_FIELDS.items()})
+IRQ_NAMES = ["ADC IRQ USER CODE 区间", "既有 cycle 锚点到 consumer", "consumer 同步调用", "Observe sample_ready"]
+IRQ_FIELDS = {field: "I" for field in ["schema_version", "request_sequence", "state", "failure", "irq_count"]}
+for index in range(4):
+    IRQ_FIELDS.update({f"rows[{index}].{field}": "I" for field in
+                       ["count", "min_cycles", "max_cycles", "sum_cycles"]})
 PROBE_FIELDS = {"request_sequence": "I", "state": "I", "failure": "I", "clock_hz": "I",
                  "max_elapsed_cycles": "I", "completed_steps": "I", "next_case": "I"}
 for index in range(CASE_COUNT):
@@ -48,11 +59,23 @@ ENUM_FIELDS = {"result.state", "result.failure", "publication.snapshot.state",
                "result.software.state", "result.software.failure", "result.cordic.state", "result.cordic.failure"}
 SYMBOLS = {"request": "g_target_runtime_compute_request", "sequence": "g_target_runtime_compute_sequence",
            "result": "g_target_runtime_compute_result", "guard": "g_target_runtime_guard_faults",
-           "publication_sequence": "s_publication_sequence", "publication": "s_publication"}
+           "publication_sequence": "s_publication_sequence", "publication": "s_publication",
+           "controllerseq": "g_observe_controller_profile_sequence", "controller": "g_observe_controller_profile_result",
+           "irqseq": "g_target_irq_timing_sequence", "irq": "g_target_irq_timing_result"}
 EXPECTED_ENUMS = {"MOTOR_STATE_IDLE": 1, "OBSERVE_COMPUTE_PROBE_IDLE": 0,
                   "OBSERVE_COMPUTE_PROBE_ACTIVE": 1, "OBSERVE_COMPUTE_PROBE_COMPLETE": 2,
-                  "OBSERVE_COMPUTE_PROBE_FAILED": 3, "OBSERVE_COMPUTE_PROBE_FAILURE_NONE": 0}
+                  "OBSERVE_COMPUTE_PROBE_FAILED": 3, "OBSERVE_COMPUTE_PROBE_FAILURE_NONE": 0,
+                  "OBSERVE_CONTROLLER_PROFILE_IDLE": 0, "OBSERVE_CONTROLLER_PROFILE_ACTIVE": 1,
+                  "OBSERVE_CONTROLLER_PROFILE_COMPLETE": 2, "OBSERVE_CONTROLLER_PROFILE_FAILED": 3,
+                  "OBSERVE_CONTROLLER_PROFILE_FAILURE_NONE": 0,
+                  "G431_IRQ_TIMING_IDLE": 0, "G431_IRQ_TIMING_ACTIVE": 1, "G431_IRQ_TIMING_COMPLETE": 2,
+                  "G431_IRQ_TIMING_FAILED": 3, "G431_IRQ_TIMING_FAILURE_NONE": 0}
+LAYOUT_FIELDS = [("result", "ObserveComputeComparisonResult", RESULT_FIELDS),
+                 ("publication", "RuntimePublication", PUBLICATION_FIELDS),
+                 ("controller", "ObserveControllerProfileResult", CONTROLLER_FIELDS),
+                 ("irq", "G431IrqTimingResult", IRQ_FIELDS)]
 LIMITS = ["独立合成算法状态，诊断 duty 未提交硬件。", "总读数包含测量开销和中断抢占；clean 只表示所覆盖 IRQ 进入计数未变化。",
+          "不同 clean 样本集合的分段均值不可相加；IRQ 区间包含抢占和部分插桩，不含异常入栈出栈及末尾统计。",
           "不是完整快环 ISR 时间或 WCET，也不证明 stage 截止通过。",
           "不改变实物电流、电角度或时序标定许可，不授权功率输出。"]
 
@@ -76,8 +99,9 @@ def layout_spec():
         spec[key], spec[key + "_size"] = "&" + name, "sizeof(" + name + ")"
     spec["bdtr"] = f"&((TIM_TypeDef*){TIM1_BASE})->BDTR"
     spec["case_count"] = "sizeof(((ObserveComputeComparisonResult*)0)->software.cases)/sizeof(ObserveComputeProbeCaseResult)"
-    for prefix, type_name, fields in [("result", "ObserveComputeComparisonResult", RESULT_FIELDS),
-                                      ("publication", "RuntimePublication", PUBLICATION_FIELDS)]:
+    spec["controller_row_count"] = "sizeof(g_observe_controller_profile_result.timing)/sizeof(g_observe_controller_profile_result.timing[0])"
+    spec["irq_row_count"] = "sizeof(g_target_irq_timing_result.rows)/sizeof(g_target_irq_timing_result.rows[0])"
+    for prefix, type_name, fields in LAYOUT_FIELDS:
         for field in fields:
             expression = f"(({type_name}*)0)->{field}"
             spec[prefix + "." + field + ".offset"] = "&" + expression
@@ -96,12 +120,14 @@ def validate_layout(layout):
         regions.append((address, address + size))
     require(all(first[1] <= second[0] for first, second in zip(sorted(regions), sorted(regions)[1:])),
             "诊断符号重叠")
-    require(all(layout[key + "_size"] == 4 for key in ["request", "sequence", "guard", "publication_sequence"]),
+    require(all(layout[key + "_size"] == 4 for key in
+                ["request", "sequence", "guard", "publication_sequence", "controllerseq", "irqseq"]),
             "诊断控制字不是 uint32")
     require(TIM1_BASE <= layout["bdtr"] <= TIM1_BASE + 0x100 and layout["bdtr"] % 4 == 0,
             "TIM1 BDTR 类型地址异常")
     require(layout["case_count"] == CASE_COUNT, "算例数量与本工具不符")
-    for prefix, fields in [("result", RESULT_FIELDS), ("publication", PUBLICATION_FIELDS)]:
+    require(layout["controller_row_count"] == 7 and layout["irq_row_count"] == 4, "附加计时行数与本工具不符")
+    for prefix, _, fields in LAYOUT_FIELDS:
         occupied = set()
         for field, fmt in fields.items():
             offset, size = layout[prefix + "." + field + ".offset"], layout[prefix + "." + field + ".size"]
@@ -217,6 +243,26 @@ def read_result(backend, layout, tag, timeout_s=20.0, clock=time.monotonic):
             require(result["state"] in range(4) and result["failure"] in range(6), "结果状态或失败原因非法")
             return result, raw["result"], version
     raise RuntimeError("结果三次只读复核未取得一致版本")
+
+
+def read_auxiliary(backend, layout, prefix, tag, timeout_s=20.0, clock=time.monotonic):
+    fields = CONTROLLER_FIELDS if prefix == "controller" else IRQ_FIELDS
+    deadline = clock() + timeout_s
+    for attempt in range(3):
+        require(clock() < deadline, "附加结果只读复核超时：" + prefix)
+        raw = backend.read([("seq_before", layout[prefix + "seq"], 4),
+                            (prefix, layout[prefix], layout[prefix + "_size"]),
+                            ("seq_after", layout[prefix + "seq"], 4)],
+                           tag if attempt == 0 else tag + f"-coherent-{attempt + 1}", deadline - clock())
+        version = word(raw["seq_before"])
+        if version == word(raw["seq_after"]) and version % 2 == 0:
+            result = decode(raw[prefix], prefix, fields, layout)
+            require(result["state"] in range(4) and result["failure"] in range(8 if prefix == "controller" else 6),
+                    "附加结果状态或失败原因非法：" + prefix)
+            if prefix == "irq":
+                require(result["schema_version"] == 1, "IRQ 结果 schema 不符")
+            return result, raw[prefix], version
+    raise RuntimeError("附加结果三次只读复核未取得一致版本：" + prefix)
 
 
 def read_health(backend, layout, conditions, tag, timeout_s=20.0, clock=time.monotonic):
@@ -350,6 +396,67 @@ def validate_complete(result):
     return backends, comparison
 
 
+def validate_controller(result, request):
+    require(result["request_sequence"] == request, "控制器分段请求身份不符")
+    require(result["state"] == 2 and result["failure"] == 0, "控制器分段没有完整成功")
+    require((result["call_count"], result["valid_calls"], result["rejected_calls"]) == (160, 128, 32),
+            "控制器有效或拒绝调用次数不完整")
+    segments = []
+    for index, name in enumerate(CONTROLLER_SEGMENT_NAMES):
+        values = {field: result[f"timing[{index}].{field}"] for field in TIMING_FIELDS}
+        segments.append({"name": name, **timing_summary(values, 128)})
+    total, pieces = segments[0], segments[1:]
+    require(all(total[field] == sum(piece[field] for piece in pieces) for field in ["sum_cycles", "irq_entries"]),
+            "控制器相邻边界与总段累计不一致")
+    require(total["clean_count"] <= min(piece["clean_count"] for piece in pieces)
+            and all(piece["max_cycles"] <= total["max_cycles"] and piece["min_cycles"] <= total["min_cycles"]
+                    for piece in pieces), "控制器子段超出总段边界")
+    return {"result": result, "segments": segments,
+            "limit": "mark0 到 mark6 及相邻边界独立计差，包含探针开销；不能当作无探针 WCET。"}
+
+
+def validate_irq(result, request):
+    require(result["schema_version"] == 1 and result["request_sequence"] == request, "IRQ schema 或请求身份不符")
+    require(result["state"] == 2 and result["failure"] == 0 and result["irq_count"] == 256,
+            "IRQ 窗口没有完整成功或次数不完整")
+    rows = []
+    for index, name in enumerate(IRQ_NAMES):
+        values = {field: result[f"rows[{index}].{field}"] for field in
+                  ["count", "min_cycles", "max_cycles", "sum_cycles"]}
+        count, low, high, total = (values[field] for field in ["count", "min_cycles", "max_cycles", "sum_cycles"])
+        require((count == 256 if index == 0 else 0 < count <= 256), "IRQ 各行次数不完整")
+        require(0 < low <= high <= MAX_ELAPSED and count * low <= total <= count * high
+                and (low == high or count >= 2 and (count - 1) * low + high <= total <= (count - 1) * high + low),
+                "IRQ 极值或总和不自洽")
+        rows.append({"name": name, **values, "min_us": low * 1e6 / CLOCK_HZ,
+                     "mean_cycles": total / count, "mean_us": total / count * 1e6 / CLOCK_HZ,
+                     "max_us": high * 1e6 / CLOCK_HZ})
+    require(rows[1]["count"] == rows[2]["count"] == rows[3]["count"], "IRQ injected 嵌套行次数不一致")
+    return {"result": result, "rows": rows,
+            "limit": "含抢占和部分插桩；IRQ USER CODE 区间不含异常入栈出栈及末尾统计，不能推算完整 ISR/WCET。"}
+
+
+def wait_irq_result(backend, layout, request, previous, deadline, clock=time.monotonic, sleep=time.sleep):
+    # IRQ 窗口在主算法冻结后才开始，避免附加 ISR 统计干扰后台算法读数。
+    for attempt in range(101):
+        remaining = deadline - clock()
+        require(remaining > 0.0, "IRQ 窗口只读等待超过 1 秒，不补发请求")
+        snapshot = read_auxiliary(backend, layout, "irq",
+                                  "irq-result" if attempt == 0 else f"irq-result-poll-{attempt + 1}",
+                                  remaining, clock)
+        result = snapshot[0]
+        require(result["state"] != 3, "IRQ 窗口失败，原因编号：" + str(result["failure"]))
+        require(result["failure"] == 0, "IRQ 活动结果失败字段不为零")
+        if result["request_sequence"] == request:
+            if result["state"] == 2:
+                return snapshot
+            require(result["state"] in (0, 1), "IRQ 窗口状态非法")
+        else:
+            require(result == previous, "IRQ 窗口身份被其他请求改写")
+        sleep(min(0.01, max(0.0, deadline - clock())))
+    raise RuntimeError("IRQ 窗口只读次数超过上界，不补发请求")
+
+
 def run_measurement(backend, prepared, conditions, clock=time.monotonic, sleep=time.sleep):
     conditions.validate(measure=True)
     layout = prepared.layout
@@ -359,6 +466,12 @@ def run_measurement(backend, prepared, conditions, clock=time.monotonic, sleep=t
             "实机 Flash 与指定候选不符")
     existing, _, _ = read_result(backend, layout, "pre-result", clock=clock)
     require(existing["state"] != 1, "已有活动计时请求")
+    previous_auxiliary = {}
+    for prefix in ["controller", "irq"]:
+        auxiliary, _, _ = read_auxiliary(backend, layout, prefix, "pre-" + prefix, clock=clock)
+        require(auxiliary["state"] != 1, "已有活动附加计时请求：" + prefix)
+        require(auxiliary["request_sequence"] == existing["request_sequence"], "附加计时旧身份不一致：" + prefix)
+        previous_auxiliary[prefix] = auxiliary
     before = read_health(backend, layout, conditions, "pre-health-1", clock=clock)
     sleep(0.02)
     advanced = read_health(backend, layout, conditions, "pre-health-2", clock=clock)
@@ -386,6 +499,20 @@ def run_measurement(backend, prepared, conditions, clock=time.monotonic, sleep=t
     require(clock() < deadline, "完整结果复核已超时")
     repeated, repeated_payload, repeated_version = read_result(backend, layout, "result-confirm", deadline - clock(), clock)
     require(result == repeated and payload == repeated_payload and version == repeated_version, "冻结结果第二次读取变化")
+    auxiliary_reports = {}
+    for prefix, validate in [("controller", validate_controller), ("irq", validate_irq)]:
+        auxiliary_deadline = deadline if prefix == "controller" else clock() + 1.0
+        if prefix == "irq":
+            auxiliary, auxiliary_payload, auxiliary_version = wait_irq_result(
+                backend, layout, sequence, previous_auxiliary[prefix], auxiliary_deadline, clock, sleep)
+        else:
+            auxiliary, auxiliary_payload, auxiliary_version = read_auxiliary(
+                backend, layout, prefix, prefix + "-result", auxiliary_deadline - clock(), clock)
+        auxiliary_reports[prefix] = validate(auxiliary, sequence)
+        confirmation = read_auxiliary(backend, layout, prefix, prefix + "-confirm", auxiliary_deadline - clock(), clock)
+        require((auxiliary, auxiliary_payload, auxiliary_version) == confirmation,
+                "附加冻结结果第二次读取变化：" + prefix)
+        auxiliary_reports[prefix]["sequence"] = auxiliary_version
     after = read_health(backend, layout, conditions, "post-health-1", clock=clock)
     sleep(0.02)
     latest = read_health(backend, layout, conditions, "post-health-2", clock=clock)
@@ -393,6 +520,7 @@ def run_measurement(backend, prepared, conditions, clock=time.monotonic, sleep=t
     require(after["request"] == latest["request"] == sequence, "完成后请求身份改变")
     return {"status": "后台算法诊断完成", "request_sequence": sequence, "before": before, "after": latest,
             "result": result, "backends": backends, "comparison": comparison,
+            "controller_profile": auxiliary_reports["controller"], "irq_timing": auxiliary_reports["irq"],
             "errors": {field: result[field] for field in ERROR_FIELDS}, "files": prepared.hashes, "write_count": 1,
             "automatic_retry": False, "hardware_qualified": False, "stage_timing_qualified": False,
             "full_isr_wcet": False, "limits": LIMITS}

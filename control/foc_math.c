@@ -104,7 +104,11 @@ bool foc_svpwm(float alpha_v, float beta_v, float vbus_v, float max_voltage_rati
     }
     applied_alpha = alpha_v;
     applied_beta = beta_v;
-    maximum = fmaxf(fabsf(alpha_v), fabsf(beta_v));
+    /* 入口已拒绝非有限值，显式比较不承担 fmaxf 的 NaN 选择语义。 */
+    maximum = fabsf(alpha_v);
+    if (fabsf(beta_v) > maximum) {
+        maximum = fabsf(beta_v);
+    }
     if (maximum > 0.0f) {
         /* 先缩放到最大分量，避免 alpha^2+beta^2 或矢量模本身溢出。 */
         normalized_alpha = alpha_v / maximum;
@@ -127,8 +131,21 @@ bool foc_svpwm(float alpha_v, float beta_v, float vbus_v, float max_voltage_rati
     phase_a = normalized_alpha;
     phase_b = -0.5f * normalized_alpha + FOC_SQRT_THREE_OVER_TWO * normalized_beta;
     phase_c = -0.5f * normalized_alpha - FOC_SQRT_THREE_OVER_TWO * normalized_beta;
-    high = fmaxf(phase_a, fmaxf(phase_b, phase_c));
-    low = fminf(phase_a, fminf(phase_b, phase_c));
+    /* 归一化相电压有界；相等零值的选取不改变最终占空比。 */
+    high = phase_a;
+    low = phase_a;
+    if (phase_b > high) {
+        high = phase_b;
+    }
+    if (phase_c > high) {
+        high = phase_c;
+    }
+    if (phase_b < low) {
+        low = phase_b;
+    }
+    if (phase_c < low) {
+        low = phase_c;
+    }
     common = 0.5f * (high + low);
     duty_a = 0.5f + phase_a - common;
     duty_b = 0.5f + phase_b - common;

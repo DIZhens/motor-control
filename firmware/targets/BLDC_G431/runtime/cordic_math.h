@@ -6,6 +6,8 @@
 
 /* 固定次数是故障边界，不表示 CORDIC 的实测周期数。 */
 #define G431_CORDIC_READY_POLL_LIMIT (64U)
+/* 仅独占reservation被打断时重取；busy已占用时立即拒绝，不等待持有者。 */
+#define G431_CORDIC_ACQUIRE_ATTEMPTS (4U)
 
 typedef struct {
     volatile uint32_t busy; /* 使用独占访问指令获取，拒绝重入而不屏蔽中断。 */
@@ -28,7 +30,8 @@ bool g431_cordic_math_init(G431CordicMath *context);
  * 每次显式写角度和 INT32_MAX 模长，再读 cosine、sine；不依赖复位默认模长。
  * 有界轮询 RRDY，异常仅在结果已就绪时排空，并永久隔离，不复位外设或采样时钟。
  * 当前只供后台无功率对照；禁止其他代码、IRQ 或 DMA 绕过本模块访问 CORDIC。
- * busy 只拒绝重入，不提供任务排队或时限保证；不接受两个输出指向同一地址。
+ * busy非零立即拒绝重入；仅STREX失败时最多4次重取，耗尽后不写外设或修改输出。
+ * 不提供任务排队或时限保证；不接受两个输出指向同一地址。
  */
 bool g431_cordic_sincos(void *context, float turns, float *sine, float *cosine);
 

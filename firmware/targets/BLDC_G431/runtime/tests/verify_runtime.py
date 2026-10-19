@@ -64,7 +64,8 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                      TARGET / "Drivers/CMSIS/Device/ST/STM32G4xx/Include",
                      TARGET / "Drivers/CMSIS/Include"]
     command = [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3",
-               "--split_sections", "-g", "-DSTM32G431xx"]
+               "--split_sections", "-g", "-DSTM32G431xx", "-DBLDC_G431_OBSERVE_ENTRY",
+               "-DCONTROL_CURRENT_PROFILE"]
     for path in include_paths:
         command += ["-I", str(path)]
     objects = []
@@ -72,6 +73,8 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                    TARGET / "runtime/current_capture.c",
                    TARGET / "runtime/compute_probe.c",
                    TARGET / "runtime/compute_comparison.c",
+                   TARGET / "runtime/irq_timing.c",
+                   TARGET / "runtime/controller_profile.c",
                    REPOSITORY / "firmware/app/motor/motor.c",
                    REPOSITORY / "firmware/app/motor/control_runtime.c",
                    REPOSITORY / "control/position_estimator.c",
@@ -142,6 +145,8 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                 "<13I", self.cpu.mem_read(symbols["model_compute_offsets"], 52))
             self.compute_timing_offsets = struct.unpack(
                 "<5I", self.cpu.mem_read(symbols["model_compute_timing_offsets"], 20))
+            self.controller_profile_layout = struct.unpack(
+                "<2I", self.cpu.mem_read(symbols["model_controller_profile_layout"], 8))
             for name, value in (settings or {}).items():
                 self.write(name, value)
             if start:
@@ -248,6 +253,29 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                 self.memory_write(DWT_CYCCNT, self.memory_word(DWT_CYCCNT) + 17)
             self.compute_clock_hook = self.cpu.hook_add(
                 UC_HOOK_MEM_READ, advance_clock, begin=DWT_CYCCNT, end=DWT_CYCCNT + 3)
+
+        def irq_timing(self) -> dict:
+            sequence = self.word("g_target_irq_timing_sequence")
+            data = bytes(self.cpu.mem_read(symbols["g_target_irq_timing_result"], 84))
+            assert sequence % 2 == 0
+            words = struct.unpack("<21I", data)
+            return {"schema": words[0], "request": words[1], "state": words[2],
+                    "failure": words[3], "count": words[4],
+                    "rows": [words[index:index + 4] for index in range(5, 21, 4)],
+                    "sequence": sequence, "bytes": data}
+
+        def controller_profile(self) -> dict:
+            size, offset = self.controller_profile_layout
+            sequence = self.word("g_observe_controller_profile_sequence")
+            data = bytes(self.cpu.mem_read(symbols["g_observe_controller_profile_result"], size))
+            assert sequence % 2 == 0
+            words = struct.unpack_from("<6I", data)
+            timing = self.compute_timing_offsets
+            rows = [tuple(struct.unpack_from("<I", data, offset + row * timing[1] + member)[0]
+                          for member in timing[2:]) for row in range(7)]
+            return {"request": words[0], "state": words[1], "failure": words[2],
+                    "calls": words[3], "valid": words[4], "rejected": words[5],
+                    "rows": rows, "sequence": sequence, "bytes": data}
 
         def angle(self, runtime_name: str = "s_control_runtime") -> dict:
             def read(index: int, fmt: str):
@@ -1370,6 +1398,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         model.service()
         if step < 447:
             assert model.compute() == active
+        assert model.irq_timing()["state"] == 0
     complete = model.compute()
     assert complete["state"] == 2 and complete["failure"] == 0
     assert complete["steps"] == 192 and complete["counts"] == complete["hardware_counts"] == [16] * 6
@@ -1378,12 +1407,27 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     assert complete["errors"][3:] == (0.0, 0.0)
     assert model.word("model_cordic_calls") == 353 and model.word("model_cordic_init_count") == 1
     assert complete["sequence"] % 2 == 0
-    model.sample()
+    # 后台计时已完整冻结，再用一拍准备和后续256拍观测真实IRQ包装。
+    model.sample(257)
     model.service()
     assert model.compute() == complete
     assert model.current()["state"] == CURRENT_WAITING
     model.assert_default_off()
     passed("后台逐轮配对192例及全周257点后冻结，活动快照不变，真实Runtime保持未标定且没有stage或enable")
+
+    irq = model.irq_timing()
+    controller = model.controller_profile()
+    assert irq["request"] == controller["request"] == complete["request"] == 1
+    assert irq["state"] == controller["state"] == 2 and irq["failure"] == controller["failure"] == 0
+    assert irq["schema"] == 1 and irq["count"] == 256
+    assert all(row[0] == 256 and 0 < row[1] <= row[2] <= 34000 and row[3] > 0 for row in irq["rows"])
+    assert (controller["calls"], controller["valid"], controller["rejected"]) == (160, 128, 32)
+    assert controller["rows"] == [(128, 128, 0)] * 7
+    model.sample()
+    model.service()
+    assert model.irq_timing() == irq and model.controller_profile() == controller
+    model.assert_default_off()
+    passed("同一nonce完成算法对照、256拍IRQ四段和160次控制器七段，全部冻结且未开放功率")
 
     model = Model()
     model.prepare_compute()
@@ -1444,6 +1488,9 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         result = model.compute()
         assert model.interruptions == 1 and model.motor()[0:3] == (IDLE, 0, ACCEPTED)
         assert result["state"] == 3
+        controller = model.controller_profile()
+        assert controller["state"] == 3 and controller["failure"] != 0
+        assert controller["calls"] < 160
         if simultaneous_request:
             assert result["request"] == 2 and result["failure"] == 1 and result["steps"] == 0
         else:
@@ -1452,6 +1499,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         model.sample()
         model.service()
         assert model.compute() == frozen
+        assert model.controller_profile() == controller
         model.assert_default_off()
     passed("真实ADC抢占消费Stop后仍取消后台计时，同轮新请求不能利用清掉的pending绕过Stop")
 

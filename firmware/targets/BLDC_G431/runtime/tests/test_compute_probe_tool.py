@@ -22,10 +22,13 @@ def fixture_layout():
     layout = {key: 0 for key in tool.layout_spec()}
     for key, address, size in [("request", 0x20000000, 4), ("sequence", 0x20000004, 4),
                                ("guard", 0x20000008, 4), ("publication_sequence", 0x2000000C, 4),
+                               ("controllerseq", 0x20000010, 4), ("irqseq", 0x20000014, 4),
+                               ("controller", 0x20003000, 512), ("irq", 0x20003200, 128),
                                ("result", 0x20001000, 8192), ("publication", 0x20000300, 64)]:
         layout[key], layout[key + "_size"] = address, size
     layout["bdtr"], layout["case_count"] = tool.TIM1_BASE + 68, tool.CASE_COUNT
-    for prefix, fields in [("result", tool.RESULT_FIELDS), ("publication", tool.PUBLICATION_FIELDS)]:
+    layout["controller_row_count"], layout["irq_row_count"] = 7, 4
+    for prefix, _, fields in tool.LAYOUT_FIELDS:
         offset = 0
         for field, fmt in fields.items():
             size = 1 if prefix + "." + field in tool.ENUM_FIELDS else struct.calcsize("<" + fmt)
@@ -73,6 +76,27 @@ def complete(sequence):
     return result
 
 
+def controller_complete(sequence):
+    result = {"request_sequence": sequence, "state": 2, "failure": 0,
+              "call_count": 160, "valid_calls": 128, "rejected_calls": 32}
+    for index in range(7):
+        scale = 6 if index == 0 else 1
+        result.update({f"timing[{index}].{field}": value for field, value in {
+            "count": 128, "min_cycles": 100 * scale, "max_cycles": 200 * scale, "sum_cycles": 19200 * scale,
+            "clean_count": 128, "clean_min_cycles": 100 * scale, "clean_max_cycles": 200 * scale,
+            "clean_sum_cycles": 19200 * scale, "irq_entries": 0}.items()})
+    return result
+
+
+def irq_complete(sequence):
+    result = {"schema_version": 1, "request_sequence": sequence, "state": 2, "failure": 0, "irq_count": 256}
+    for index in range(4):
+        count = 256 if index == 0 else 128
+        result.update({f"rows[{index}].{field}": value for field, value in {
+            "count": count, "min_cycles": 100, "max_cycles": 200, "sum_cycles": count * 150}.items()})
+    return result
+
+
 class Clock:
     def __init__(self):
         self.value = 0.0
@@ -92,6 +116,7 @@ class FakeBackend:
         self.reads, self.writes = [], []
         self.mutate = lambda tag, raw: None
         self.result_mutate = lambda tag, result: None
+        self.auxiliary_mutate = lambda tag, result: None
         self.active_forever, self.old_forever, self.write_error = False, False, None
 
     def read(self, blocks, tag, timeout_s=20.0):
@@ -111,6 +136,15 @@ class FakeBackend:
             self.result_mutate(tag, result)
             raw = {"seq_before": struct.pack("<I", 2), "seq_after": struct.pack("<I", 2),
                    "result": encode("result", tool.RESULT_FIELDS, result, self.layout)}
+        elif tag.startswith(("pre-controller", "pre-irq", "controller-", "irq-")):
+            prefix = "controller" if "controller" in tag else "irq"
+            result = {"request_sequence": self.old_sequence, "state": 0, "schema_version": 1}
+            if not tag.startswith("pre-"):
+                result = controller_complete(self.request) if prefix == "controller" else irq_complete(self.request)
+            self.auxiliary_mutate(tag, result)
+            fields = tool.CONTROLLER_FIELDS if prefix == "controller" else tool.IRQ_FIELDS
+            raw = {"seq_before": struct.pack("<I", 2), "seq_after": struct.pack("<I", 2),
+                   prefix: encode(prefix, fields, result, self.layout)}
         else:
             base = tag.split("-coherent-")[0]
             publication = {"snapshot.control_time_ticks": {"pre-health-1": 100, "pre-health-2": 200,
@@ -127,7 +161,7 @@ class FakeBackend:
         self.mutate(tag, raw)
         for name, address, size in blocks:
             assert len(raw[name]) == size
-            if name in ["result", "publication", "request"]:
+            if name in ["result", "publication", "request", "controller", "irq"]:
                 assert address == self.layout[name]
         return raw
 
@@ -196,6 +230,10 @@ class Tests(unittest.TestCase):
         self.assertEqual(len(report["comparison"]), 6)
         self.assertEqual(report["backends"]["software"][0]["mean_cycles"], 150)
         self.assertEqual(report["comparison"][0]["segments"][0]["clean_mean_speedup"], 1)
+        self.assertEqual(len(report["controller_profile"]["segments"]), 7)
+        self.assertEqual(report["controller_profile"]["result"]["call_count"], 160)
+        self.assertEqual(report["irq_timing"]["rows"][0]["count"], 256)
+        self.assertEqual(report["irq_timing"]["rows"][1]["mean_cycles"], 150)
         self.assertFalse(report["hardware_qualified"] or report["stage_timing_qualified"] or report["full_isr_wcet"])
         self.assertFalse(report["automatic_retry"])
 
@@ -282,6 +320,102 @@ class Tests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "schema"):
             self.measure()
         self.assertEqual(self.backend.writes, [])
+
+
+    def test_auxiliary_busy_or_foreign_preflight_causes_zero_write(self):
+        for prefix in ["controller", "irq"]:
+            for values in [{"state": 1}, {"request_sequence": 5}, {"state": 4}, {"failure": 9}]:
+                self.backend = FakeBackend(self.prepared)
+                self.backend.auxiliary_mutate = lambda tag, result, prefix=prefix, values=values: result.update(values) if tag == "pre-" + prefix else None
+                with self.subTest(prefix=prefix, values=values), self.assertRaises(RuntimeError):
+                    self.measure()
+                self.assertEqual(self.backend.writes, [])
+        self.backend = FakeBackend(self.prepared)
+        self.backend.auxiliary_mutate = lambda tag, result: result.update(schema_version=2) if tag == "pre-irq" else None
+        with self.assertRaisesRegex(RuntimeError, "schema"):
+            self.measure()
+        self.assertEqual(self.backend.writes, [])
+
+    def test_controller_incomplete_counts_stats_or_identity_fail_closed(self):
+        for field, value in [("state", 1), ("state", 3), ("failure", 1), ("request_sequence", 99),
+                             ("call_count", 159), ("valid_calls", 127), ("rejected_calls", 31),
+                             ("timing[0].count", 127), ("timing[6].count", 0), ("timing[2].sum_cycles", 1),
+                             ("timing[1].clean_count", 129), ("timing[1].clean_sum_cycles", 0),
+                             ("timing[3].max_cycles", 34001), ("timing[3].irq_entries", 1)]:
+            self.backend = FakeBackend(self.prepared)
+            self.backend.auxiliary_mutate = lambda tag, result, field=field, value=value: result.update({field: value}) if tag == "controller-result" else None
+            with self.subTest(field=field), self.assertRaises(RuntimeError):
+                self.measure()
+            self.assertEqual(len(self.backend.writes), 1)
+
+    def test_irq_incomplete_counts_stats_or_identity_fail_closed(self):
+        for field, value in [("schema_version", 0), ("failure", 1), ("request_sequence", 99),
+                             ("irq_count", 255), ("rows[0].count", 255), ("rows[1].count", 0),
+                             ("rows[2].count", 257), ("rows[3].count", 127),
+                             ("rows[2].sum_cycles", 1), ("rows[2].min_cycles", 0),
+                             ("rows[2].max_cycles", 34001)]:
+            self.backend = FakeBackend(self.prepared)
+            self.backend.auxiliary_mutate = lambda tag, result, field=field, value=value: result.update({field: value}) if tag == "irq-result" else None
+            with self.subTest(field=field), self.assertRaises(RuntimeError):
+                self.measure()
+            self.assertEqual(len(self.backend.writes), 1)
+
+    def test_irq_sequential_idle_active_complete_or_failed_timeout_only_reads(self):
+        states = iter([0, 1, 2])
+        def advance(tag, result):
+            if not tag.startswith("irq-result"):
+                return
+            state = next(states)
+            result.update(state=state)
+            if state == 0:
+                result.clear()
+                result.update(schema_version=1, request_sequence=0, state=0)
+        self.backend.auxiliary_mutate = advance
+        report = self.measure()
+        self.assertEqual(report["irq_timing"]["result"]["irq_count"], 256)
+        self.assertEqual(sum(tag.startswith("irq-result") for tag in self.backend.reads), 3)
+        self.assertEqual(len(self.backend.writes), 1)
+        for state in [0, 1, 3]:
+            self.backend, self.clock = FakeBackend(self.prepared), Clock()
+            self.backend.auxiliary_mutate = lambda tag, result, state=state: result.update(state=state, failure=int(state == 3)) if tag.startswith("irq-result") else None
+            with self.subTest(state=state), self.assertRaisesRegex(RuntimeError, "失败|1 秒|次数"):
+                self.measure()
+            self.assertEqual(len(self.backend.writes), 1)
+            polls = sum(tag.startswith("irq-result") for tag in self.backend.reads)
+            self.assertEqual(polls, 1 if state == 3 else 100)
+            self.assertLessEqual(self.clock.value, 1.020001)
+
+    def test_auxiliary_freeze_changes_or_three_conflicts_never_resend(self):
+        for prefix in ["controller", "irq"]:
+            self.backend = FakeBackend(self.prepared)
+            self.backend.auxiliary_mutate = lambda tag, result, prefix=prefix: result.update(failure=1) if tag == prefix + "-confirm" else None
+            with self.subTest(prefix=prefix), self.assertRaisesRegex(RuntimeError, "第二次"):
+                self.measure()
+            self.assertEqual(len(self.backend.writes), 1)
+            self.backend = FakeBackend(self.prepared)
+            self.backend.mutate = lambda tag, raw, prefix=prefix: raw.update(seq_after=struct.pack("<I", 4)) if tag.startswith(prefix + "-result") else None
+            with self.subTest(prefix=prefix), self.assertRaisesRegex(RuntimeError, "三次只读"):
+                self.measure()
+            self.assertEqual(sum(tag.startswith(prefix + "-result") for tag in self.backend.reads), 3)
+            self.assertEqual(len(self.backend.writes), 1)
+
+    def test_controller_mixed_irq_and_no_clean_remain_explicit(self):
+        result = controller_complete(1)
+        for index in [0, 4]:
+            result.update({f"timing[{index}]." + field: value for field, value in {
+                "clean_count": 0, "clean_min_cycles": 0, "clean_max_cycles": 0,
+                "clean_sum_cycles": 0, "irq_entries": 128}.items()})
+        report = tool.validate_controller(result, 1)
+        self.assertIsNone(report["segments"][4]["clean"]["mean_us"])
+        self.assertEqual(report["segments"][4]["irq_entries"], 128)
+
+    def test_controller_shared_boundaries_cannot_disagree_with_total(self):
+        for field, value in [("timing[0].sum_cycles", 115201), ("timing[0].irq_entries", 1),
+                             ("timing[0].clean_count", 0)]:
+            result = controller_complete(1)
+            result[field] = value
+            with self.subTest(field=field), self.assertRaises(RuntimeError):
+                tool.validate_controller(result, 1)
 
     def test_sweep_errors_nested_identity_and_completion_checked(self):
         failures = [("schema_version", 2), ("sweep_count", 256), ("software.completed_steps", 95),

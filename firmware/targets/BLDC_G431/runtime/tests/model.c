@@ -10,6 +10,8 @@
 #include "bus_observation.h"
 #include "current_capture.h"
 #include "cordic_math.h"
+#include "irq_timing.h"
+#include "controller_profile.h"
 
 #include <stddef.h>
 
@@ -139,6 +141,9 @@ const uint32_t model_compute_timing_offsets[] = {
     offsetof(ObserveComputeProbeCaseResult, segments), sizeof(ObserveComputeProbeTiming),
     offsetof(ObserveComputeProbeTiming, count), offsetof(ObserveComputeProbeTiming, clean_count),
     offsetof(ObserveComputeProbeTiming, irq_entries)
+};
+const uint32_t model_controller_profile_layout[] = {
+    sizeof(ObserveControllerProfileResult), offsetof(ObserveControllerProfileResult, timing)
 };
 ControlRuntime model_unpermitted_runtime;
 Motor model_unpermitted_motor;
@@ -408,10 +413,22 @@ void model_angle_command_start(void)
 void model_sample(void)
 {
     PhaseCurrentObservation current = { 0 };
+    bool measure;
+    uint32_t timing_request;
 
     /* 正式 ADC IRQ 入口包装不在此替身内，显式补上其单写计数槽。 */
     g_target_runtime_irq_entries[0]++;
     DWT->CYCCNT += model_tick_cycles;
+    /* 主后台对照先完成，再接受同身份IRQ窗口，避免插桩统计与后台计时互相干扰。 */
+    timing_request = g_target_runtime_compute_result.state == OBSERVE_COMPUTE_PROBE_COMPLETE &&
+        g_target_runtime_compute_result.request_sequence == g_target_runtime_compute_request
+        ? g_target_runtime_compute_request : 0U;
+    measure = g_target_irq_timing_result.state == G431_IRQ_TIMING_ACTIVE ||
+        (timing_request != 0U && timing_request != g_target_irq_timing_result.request_sequence);
+    if (measure) {
+        g431_irq_timing_irq_enter(DWT->CYCCNT, timing_request,
+            target_runtime_timing_permitted());
+    }
     model_control_time += model_current_time_step;
     current.phase_b_a = model_current_b;
     current.phase_c_a = model_current_c;
@@ -421,8 +438,19 @@ void model_sample(void)
     if (s_sample_handler != NULL) {
         model_in_callback = 1U;
         model_callback_count++;
+        if (g_target_irq_timing_active != 0U) {
+            /* 用假DWT锚点补上未链接的Core/Platform包装，真实Observe边界来自正式Target。 */
+            g431_irq_timing_platform_enter(DWT->CYCCNT);
+            g431_irq_timing_consumer_enter(DWT->CYCCNT);
+        }
         s_sample_handler(s_sample_context, &current);
+        if (g_target_irq_timing_active != 0U) {
+            g431_irq_timing_consumer_exit(DWT->CYCCNT);
+        }
         model_in_callback = 0U;
+    }
+    if (measure) {
+        g431_irq_timing_irq_exit(DWT->CYCCNT, target_runtime_timing_permitted());
     }
 }
 

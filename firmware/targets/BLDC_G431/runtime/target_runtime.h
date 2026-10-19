@@ -44,5 +44,7 @@ void target_runtime_start(void);
 void target_runtime_service(void);
 /* 复用已配置的 TIM6_DAC IRQ，仅处理 TIM6 update。 */
 void target_runtime_guard_irq(void);
+/* 仅由 ADC IRQ 所有者读取当拍无功率诊断条件，不作为后台授权接口。 */
+bool target_runtime_timing_permitted(void);
 
 #endif

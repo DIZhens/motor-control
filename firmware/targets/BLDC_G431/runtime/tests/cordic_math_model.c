@@ -2,6 +2,7 @@
 #include "cordic_math.h"
 
 #include <stddef.h>
+#include "stm32g4xx.h"
 
 G431CordicMath model_context;
 G431CordicMath model_second;
@@ -65,4 +66,10 @@ void model_clear_busy(void)
 {
     model_context.busy = 0U;
     publish();
+}
+
+/* 测试在STREX前执行此指令，模拟普通异常进入对本地exclusive monitor的影响。 */
+void model_clear_exclusive(void)
+{
+    __CLREX();
 }

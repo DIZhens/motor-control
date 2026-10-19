@@ -149,6 +149,25 @@ clean 仍包含仪器化开销、Flash 与外设访问延迟，不是函数净�
 按 170 MHz 配置换算；200 µs 的单例诊断上限只用于拒绝异常读数，不是实际控制预算。
 该诊断不是完整 ISR 或 stage 截止验收，也会延后 UART 轮询，不能同时验收串口高负荷。
 
+当前 Observe 构建额外定义 `CONTROL_CURRENT_PROFILE`，在正式电流控制函数内记录七个
+边界，区分输入校验、相量准备与 Park、PI 与逆 Park、SVPWM、施加 Park 与积分、输出提交。
+算法仅在该编译宏下调用通用私有钩子；默认算法构建没有探针调用，也不引入 Target 头文件。
+后台独占 `controller_profile` 实例：128 次有效调用形成七行统计，32 次预期拒绝只计数；
+完成后才冻结整窗。每行分别保留全部与 clean 样本，不能把不同 clean 集合的均值相加。
+正式控制预算验收还需使用对应的无探针构建，不能用插桩结果扣一个估计常数代替。
+
+主算法完整冻结后，同一请求才启动 `irq_timing` 的 256 点被动窗口，避免两类仪器化
+同时争用 CPU。ADC IRQ 是该统计的唯一写者；平台继续使用原来的 cycle 安全锚点，
+没有移动 stage 截止或屏蔽计算中断。四行分别为 IRQ USER CODE 区间、锚点到 consumer、
+consumer 同步调用和 Observe 回调，后三行嵌套而非顺序相加；regular-only ADC IRQ
+只进入第一行。首个 IRQ 用于准备，后续才计点。读数包含抢占与部分插桩，排除异常入栈、
+出栈及末尾统计，且当前控制关闭，因而不证明正式 RUN 下的 ISR 或 stage 预算。
+控制器和 IRQ 各有独立奇偶版本号，只发布启动及终态；任一失败都不能当作完整窗口。
+
+CORDIC 独占采用最多四次 exclusive 尝试；普通异常清除 reservation 时仅重取该锁，
+发现 busy 已占用立即拒绝，不等待持有者。四次均失败仍拒绝，不屏蔽中断或回退软件；
+配置、时钟、残留结果及就绪超时继续隔离外设，锁重试不等于重试硬件事务。
+
 [`tools/compute_probe.py`](tools/compute_probe.py) 默认只冻结并核对同次 HEX/AXF/MAP、
 真实 DWARF 字段、短枚举和对照 schema；旧单后端布局不能套用到新镜像。
 只有显式 `--measure --logic-only-confirmed --vbus-dmm-v <实测值>`
@@ -213,6 +232,8 @@ python firmware/targets/BLDC_G431/runtime/tests/verify_current_capture_model.py
 python firmware/targets/BLDC_G431/runtime/tests/test_current_capture_tool.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_compute_probe_model.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_cordic_math.py
+python firmware/targets/BLDC_G431/runtime/tests/verify_controller_profile.py
+python firmware/targets/BLDC_G431/runtime/tests/verify_irq_timing.py
 python firmware/targets/BLDC_G431/runtime/tests/test_compute_probe_tool.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py

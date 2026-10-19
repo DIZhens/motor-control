@@ -24,6 +24,7 @@
 /* USER CODE BEGIN Includes */
 #if defined(BLDC_G431_OBSERVE_ENTRY)
 #include "target_runtime.h"
+#include "irq_timing.h"
 #else
 #include "target_validation.h"
 #endif
@@ -228,13 +229,32 @@ void ADC1_2_IRQHandler(void)
 {
   /* USER CODE BEGIN ADC1_2_IRQn 0 */
 #if defined(BLDC_G431_OBSERVE_ENTRY)
+  uint32_t timing_request = g_target_runtime_compute_request;
+  bool timing_ready = (g_target_runtime_compute_sequence & 1U) == 0U &&
+      g_target_runtime_compute_result.state == OBSERVE_COMPUTE_PROBE_COMPLETE &&
+      g_target_runtime_compute_result.request_sequence == timing_request;
+  bool timing_window = (g_target_irq_timing_result.state == G431_IRQ_TIMING_ACTIVE) ||
+      (timing_ready && timing_request != 0U &&
+      (timing_request != g_target_irq_timing_result.request_sequence ||
+       g_target_irq_timing_result.state == G431_IRQ_TIMING_ACTIVE));
   g_target_runtime_irq_entries[4]++;
+  if (timing_window) {
+    uint32_t timing_begin = DWT->CYCCNT;
+    g431_irq_timing_irq_enter(timing_begin, timing_ready ? timing_request : 0U,
+        target_runtime_timing_permitted());
+  }
 #endif
 
   /* USER CODE END ADC1_2_IRQn 0 */
   HAL_ADC_IRQHandler(&hadc1);
   HAL_ADC_IRQHandler(&hadc2);
   /* USER CODE BEGIN ADC1_2_IRQn 1 */
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+  if (timing_window) {
+    uint32_t timing_end = DWT->CYCCNT;
+    g431_irq_timing_irq_exit(timing_end, target_runtime_timing_permitted());
+  }
+#endif
 
   /* USER CODE END ADC1_2_IRQn 1 */
 }

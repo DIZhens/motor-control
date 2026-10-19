@@ -33,16 +33,22 @@ static void quarantine(G431CordicMath *context)
 
 static bool acquire(G431CordicMath *context)
 {
-    if (__LDREXW(&context->busy) != 0U) {
-        __CLREX();
-        return false;
+    uint32_t attempt;
+    for (attempt = 0U; attempt < G431_CORDIC_ACQUIRE_ATTEMPTS; attempt++) {
+        if (__LDREXW(&context->busy) != 0U) {
+            __CLREX();
+            return false;
+        }
+        /*
+         * 普通IRQ会清本地exclusive reservation，即使没有其他使用者也可能失败。
+         * 仅该失败有限重取；不等待已占用的busy，不屏蔽中断，也不无限spin。
+         */
+        if (__STREXW(1U, &context->busy) == 0U) {
+            __DMB();
+            return true;
+        }
     }
-    /* 中断使独占访问失败时立即返回，不循环争锁，也不改变 PRIMASK。 */
-    if (__STREXW(1U, &context->busy) != 0U) {
-        return false;
-    }
-    __DMB();
-    return true;
+    return false;
 }
 
 static void release(G431CordicMath *context)

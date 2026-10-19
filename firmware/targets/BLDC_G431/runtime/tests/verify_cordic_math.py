@@ -10,7 +10,7 @@ import tempfile
 
 from elftools.elf.elffile import ELFFile
 from unicorn import Uc, UcError, UC_ARCH_ARM, UC_MODE_MCLASS, UC_MODE_THUMB
-from unicorn import UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE, UC_MEM_WRITE
+from unicorn import UC_HOOK_CODE, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE, UC_MEM_WRITE
 from unicorn.arm_const import (UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_SP,
                               UC_ARM_REG_PRIMASK, UC_CPU_ARM_CORTEX_M4)
 
@@ -83,6 +83,11 @@ with tempfile.TemporaryDirectory(prefix="g431-cordic-math-") as directory:
             self.forced_results = None
             self.keep_ready = False
             self.corrupt_after_result = False
+            self.reservation_losses = 0
+            self.strex_attempts = 0
+            self.reservation_pause = None
+            self.reservation_resume = False
+            self.busy_after_loss = False
             self.cpu.hook_add(UC_HOOK_MEM_READ | UC_HOOK_MEM_WRITE, self.peripheral_access,
                               begin=0x40020000, end=0x40021FFF)
             if initialize:
@@ -139,12 +144,47 @@ with tempfile.TemporaryDirectory(prefix="g431-cordic-math-") as directory:
             self.cpu.reg_write(UC_ARM_REG_SP, 0x2000FFF0)
             self.cpu.reg_write(UC_ARM_REG_LR, 0x0803F001)
             try:
-                self.cpu.emu_start(symbols[name] | 1, 0x0803F000, count=100000)
+                next_pc = symbols[name]
+                while True:
+                    self.cpu.emu_start(next_pc | 1, 0x0803F000, count=100000)
+                    if self.reservation_pause is None:
+                        break
+                    next_pc = self.reservation_pause
+                    self.reservation_pause = None
+                    helper = symbols["model_clear_exclusive"] & ~1
+                    # 仅执行真实CLREX，不恢复整个CPU context，以保留exclusive monitor的清除。
+                    assert bytes(self.cpu.mem_read(helper, 4)) == bytes.fromhex("bf f3 2f 8f")
+                    self.cpu.emu_start(helper | 1, helper + 4, count=1)
+                    assert self.cpu.reg_read(UC_ARM_REG_PC) == helper + 4
+                    if self.busy_after_loss:
+                        self.cpu.mem_write(symbols["model_context"], struct.pack("<I", 1))
+                    self.reservation_resume = True
             except UcError as error:
                 raise AssertionError(f"{name}: {error}; pc={self.cpu.reg_read(UC_ARM_REG_PC):#x}") from error
             assert self.cpu.reg_read(UC_ARM_REG_PC) == 0x0803F000, name
             assert self.cpu.reg_read(UC_ARM_REG_PRIMASK) == before_mask, "不允许屏蔽或开启调用方中断"
             return bool(self.integers("model_result", 1)[0])
+
+        def inject_reservation_losses(self, losses, busy_after_loss=False):
+            self.reservation_losses = losses
+            self.strex_attempts = 0
+            self.busy_after_loss = busy_after_loss
+            def before_strex(cpu, address, size, _):
+                if size != 4:
+                    return
+                first_half = struct.unpack("<H", cpu.mem_read(address, 2))[0]
+                # ARMv7-M STREX T1的首半字为1110 1000 0100 Rn。
+                if first_half & 0xFFF0 != 0xE840:
+                    return
+                if self.reservation_resume:
+                    self.reservation_resume = False
+                    return
+                self.strex_attempts += 1
+                if self.reservation_losses > 0:
+                    self.reservation_losses -= 1
+                    self.reservation_pause = address
+                    cpu.emu_stop()
+            return self.cpu.hook_add(UC_HOOK_CODE, before_strex)
 
         @property
         def words(self):
@@ -227,6 +267,39 @@ with tempfile.TemporaryDirectory(prefix="g431-cordic-math-") as directory:
     model.call("model_clear_busy")
     assert model.compute(0.2) and model.words == (1, 0, 0)
     passed("不同对象不能共享物理单元，busy 拒绝重入且不破坏外层事务，释放后原对象可继续")
+
+    for losses in [1, 2, 3]:
+        model = Model()
+        hook = model.inject_reservation_losses(losses)
+        assert model.compute(0.125)
+        model.cpu.hook_del(hook)
+        assert model.strex_attempts == losses + 1 and model.reservation_losses == 0
+        assert model.words == (1, 0, 0) and len(model.writes) == 2 and model.reads == 2
+        assert all(math.isclose(actual, math.sqrt(0.5), abs_tol=6e-8) for actual in model.outputs)
+    passed("在真实STREX前执行CLREX，单次、两次和三次reservation丢失均在4次上界内恢复且只提交一次外设事务")
+
+    model = Model()
+    hook = model.inject_reservation_losses(10)
+    assert not model.compute(0.125)
+    model.cpu.hook_del(hook)
+    assert model.strex_attempts == 4 and model.reservation_losses == 6
+    assert model.words == (1, 0, 0) and not model.writes and model.outputs == (123.0, -456.0)
+    assert model.compute(0.125) and len(model.writes) == 2
+    passed("持续reservation丢失恰好4次后有界拒绝，不写外设、不改输出或隔离状态；后续显式调用仍可用")
+
+    model = Model()
+    hook = model.inject_reservation_losses(1, busy_after_loss=True)
+    assert not model.compute(0.125)
+    model.cpu.hook_del(hook)
+    assert model.strex_attempts == 1 and model.words == (1, 0, 1)
+    assert not model.writes and model.outputs == (123.0, -456.0)
+    model = Model()
+    model.call("model_mark_busy")
+    hook = model.inject_reservation_losses(10)
+    assert not model.compute(0.125)
+    model.cpu.hook_del(hook)
+    assert model.strex_attempts == 0 and model.reservation_losses == 10 and model.words == (1, 0, 1)
+    passed("首次或重取时发现busy已占用立即拒绝，不消耗剩余STREX重试也不释放其他持有者的busy")
 
     model = Model()
     def interrupted_failure(cpu, access, address, size, value, _):

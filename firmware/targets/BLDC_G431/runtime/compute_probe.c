@@ -3,6 +3,9 @@
 #include <math.h>
 #include <stddef.h>
 #include <string.h>
+#if defined(CONTROL_CURRENT_PROFILE)
+#include "controller_profile.h"
+#endif
 
 static void fail(ObserveComputeProbe *probe, ObserveComputeProbeFailure reason)
 {
@@ -216,6 +219,10 @@ static bool run_case(ObserveComputeProbe *probe, uint32_t case_index,
     if (!profile_end(profile, OBSERVE_COMPUTE_PROBE_SEGMENT_CURRENT)) {
         return false;
     }
+#if defined(CONTROL_CURRENT_PROFILE)
+    /* 控制器内部只存边界；在独立电流段末读之后才提交内部统计。 */
+    observe_controller_profile_finish(output->valid);
+#endif
     if (case_index == OBSERVE_COMPUTE_PROBE_INVALID_CONTROLLER) {
         return !control_ok && !output->valid && output->duty_a == 0.5f &&
             output->duty_b == 0.5f && output->duty_c == 0.5f;

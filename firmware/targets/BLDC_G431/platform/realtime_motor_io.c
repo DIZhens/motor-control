@@ -10,6 +10,9 @@
 #include "control_time_source.h"
 #include "position_observation_internal.h"
 #include "realtime_motor_io_config.h"
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+#include "irq_timing.h"
+#endif
 
 #define CURRENT_ADC_FULL_SCALE_COUNTS (4095.0f)
 #define CURRENT_ADC_VREF_NOMINAL_V (3.3f)
@@ -435,6 +438,11 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     }
     restore_interrupts(primask);
 
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+    if (g_target_irq_timing_active != 0U) {
+        g431_irq_timing_platform_enter(s_callback_start_cycles);
+    }
+#endif
     observation_time = control_time_source_advance_fast_tick();
 
     /* 两路均固定单 injected rank；直接读取 JDR1，免去通用 rank 分派。 */
@@ -470,7 +478,17 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     s_stage_window_open = (s_callback_epoch == s_actuation_epoch)
         && staging_time_available();
     restore_interrupts(primask);
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+    if (g_target_irq_timing_active != 0U) {
+        g431_irq_timing_consumer_enter(DWT->CYCCNT);
+    }
+#endif
     s_sample_ready_handler(s_sample_ready_context, &observation);
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+    if (g_target_irq_timing_active != 0U) {
+        g431_irq_timing_consumer_exit(DWT->CYCCNT);
+    }
+#endif
     s_stage_window_open = false;
 
     /*
