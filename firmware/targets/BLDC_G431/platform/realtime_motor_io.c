@@ -12,6 +12,8 @@
 #include "realtime_motor_io_config.h"
 #if defined(BLDC_G431_OBSERVE_ENTRY)
 #include "irq_timing.h"
+#endif
+#if defined(BLDC_G431_OBSERVE_ENTRY) || defined(BLDC_G431_TIMING_ENTRY)
 #include "realtime_motor_io_diagnostic.h"
 #endif
 
@@ -39,7 +41,7 @@ static uint32_t s_pending_count;
 static uint32_t s_callback_start_cycles;
 static uint32_t s_callback_entry_count;
 
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_OBSERVE_ENTRY) || defined(BLDC_G431_TIMING_ENTRY)
 void realtime_motor_io_stage_anchor(uint32_t *cycles, uint32_t *entry_count)
 {
     *cycles = s_callback_start_cycles;

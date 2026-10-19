@@ -14,6 +14,7 @@
 | --- | --- | --- |
 | `BLDC_control V1` | 原 `validation/target_validation.c`，保持原台架工具 ABI | `BLDC_control V1/` |
 | `BLDC_G431_Observe` | 本目录 `target_runtime.c` + `app/motor`、`app/communication`、`control` | `build/observe/` |
+| `BLDC_G431_Timing` | 本目录 `timing_entry.c` + `runtime_timing.c`，专用无功率计时 | `build/timing/` |
 
 选择 Target 后使用 Rebuild。CLI 示例（`UV4.exe` 路径按本机安装调整）：
 
@@ -28,8 +29,10 @@ ARMCC `-O3 -Otime`，其余组保留原继承配置。按速度优化使短数�
 核对实际链接对象的编译记录及机器码，不按目录中残留的同名 `.o` 推断当前镜像。
 相关 ARM 模型显式使用 `-Otime`；模型与无插桩实测仍分别判定，当前提交预算未通过。
 
-`BLDC_G431_OBSERVE_ENTRY` 仅在新 Target 定义；`main()` 和 TIM6 IRQ 的 USER CODE
-选择对应入口。两者共享 CubeMX 配置及 Platform，不改生成区，不同时绑定两个 consumer。
+`BLDC_G431_OBSERVE_ENTRY` 与 `BLDC_G431_TIMING_ENTRY` 分别只在对应 Target 定义；
+`main()` 和 IRQ 的 USER CODE 选择互斥入口。三者共享 CubeMX 配置及 Platform，
+不改生成区，不同时绑定两个 consumer。Timing 专属组在另外两个 Target 中排除，
+Timing 中排除旧 Runtime、Communication 和 Validation 组。
 烧录是独立的现场步骤；编译不自动连接 ST-Link 或下载镜像。
 
 ## 执行职责
@@ -220,6 +223,50 @@ MAP 压缩 RW 时核对明确的 `COMPRESSED[...]` 物理加载长度，HEX 与 
 .venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tools/stage_budget.py --build-dir <同次构建目录> --expected-hex-sha256 <完整SHA256> --output firmware/targets/BLDC_G431/validation/local-evidence/<新目录>
 ```
 
+## 独立的无功率调用与IRQ计时
+
+`BLDC_G431_Timing` 只用于区分计算、真实提交与外围开销。它绑定一个采样 consumer，
+保留真实电流采样、SSI、母线采集、硬件保护和独立 TIM6 守卫，每拍最多执行一次
+私有同源 Runtime；不再追加 Observe 的 OFF Runtime，不装配 UART 业务或功率使能。
+正式 `app/motor/control_runtime.c` 与算法源没有为此修改。
+
+`runtime_timing.c` 启动时构造固定合成历史，准备拍只复制模板，随后测量 80 个真实 ADC 拍。
+32 位请求为 `(nonce << 2) | mode`，nonce 非零；同一完整请求不重放，活动时新请求只中止
+旧窗口。显式新 nonce 才能另开窗口，故障与超时均不自动重试。
+
+| 模式 | 被直接 DWT 读数包围的唯一调用 | 成功统计的含义 |
+| --- | --- | --- |
+| `stage`（1） | 真实 `realtime_motor_io_stage_phase_duty()`，交替不等三相合法 duty | 80 次真实调用、80 次接受，无 Runtime、sink 或 enable |
+| `compute`（2） | 同源 `control_runtime_step()`，合成 RUN、电流和反馈 | 80 次计算，8 次速度更新、4 次观测刷新；80 次数值 sink，真实 stage/enable 均为零 |
+
+sink 只检查归一化 duty 的有限值与正常包络，不能被解释为硬件提交接受。compute 模式
+不以原 1700 counts 截止或 25 µs 半周拒绝纯计算测量；原 Platform 策略和硬件配置保持
+原值，真实 MOE 始终须为零。合成标定、RUN 和 12 V 输入不是现场测量或控制许可。
+
+结果布局为 248 B，9 行分别记录：直接调用、原 Platform 锚点至调用返回、IRQ 首末 USER
+标记、锚点至调用入口、调用返回至末标记、速度拍、观测刷新拍、普通快拍和慢拍。
+许可、模板绑定、合成输入和额外 MMIO stamp 在直接调用区间外；调用区间仍含 DWT
+及调用本身的测量开销。各行包含分类与嵌套区间，不能相加推算函数净成本。
+
+IRQ 标记区间包含 HAL、健康 publication 及 Platform SSI/母线尾部；末标记后的统计、
+终态 safe-off、248 B 结果发布和异常入出栈未计入。准备拍不属于 80 点。regular-only IRQ
+不充当控制拍，缺失或未配对 IRQ 标记不能 COMPLETE。标记区间小于 50 µs 不等于整个
+ISR 已满足该预算，也不是未插桩 WCET。完整结果与独立健康后检须分别判定。
+
+真实健康快照为 64 B，按 100 Hz 或许可/故障变化发布；不伪装成 Motor IDLE 快照。
+独立心跳仍逐拍更新，TIM6 故障单独锁存。前后检查 CPU、MOE、guard、推进的时基、
+低母线及有效参考位置；末标记前再读权威 Hardware Trip，不能只凭拍首许可发布完成。
+
+[`tools/runtime_timing.py`](tools/runtime_timing.py) 默认只冻结并核对同次 HEX/AXF/MAP
+和 DWARF。实测须明确 `--measure --mode stage|compute --logic-only-confirmed
+--vbus-dmm-v <参考读数>`，每次只写一个完整请求。工具不烧录、复位、清故障或补发；
+失败保留首因、原始读数与后健康。现场只由 ST-Link 提供逻辑供电，母线电源、电池、
+电机三相及外部注入源断开。有限诊断结果不授予带电 FOC 许可。
+
+```powershell
+.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tools/runtime_timing.py --build-dir <同次Timing产物目录> --expected-hex-sha256 <完整SHA256> --output firmware/targets/BLDC_G431/validation/local-evidence/<新目录>
+```
+
 ## 已知电流诊断采集
 
 `current_capture.h/.c` 是此 Target 的无功率诊断统计器，不属于 Motor 命令、控制算法或
@@ -278,6 +325,9 @@ python firmware/targets/BLDC_G431/runtime/tests/verify_controller_profile.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_irq_timing.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_stage_budget.py
 python firmware/targets/BLDC_G431/runtime/tests/test_stage_budget_tool.py
+python firmware/targets/BLDC_G431/runtime/tests/verify_runtime_timing.py
+python firmware/targets/BLDC_G431/runtime/tests/verify_timing_entry.py
+python firmware/targets/BLDC_G431/runtime/tests/test_runtime_timing_tool.py
 python firmware/targets/BLDC_G431/runtime/tests/test_compute_probe_tool.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py

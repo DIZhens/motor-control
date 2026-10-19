@@ -4,9 +4,55 @@
 它不是正式 Motor / ControlRuntime，主动命令仅用于电机三相已断开的台架。
 本页汇总当前有限验收、历史证据归属和复用入口，不表示有带电操作排队。
 
-本页对应 Keil 的 `BLDC_control V1` 台架 Target；另一个默认关断的
-`BLDC_G431_Observe` 构建与离线验证见 [runtime/README.md](runtime/README.md)，
-两个入口的镜像与验收证据不互相替代。
+本页汇总 Keil 台架、默认关断观察与专用无功率计时入口；后两者的构建及执行边界见
+[runtime/README.md](runtime/README.md)。各入口的镜像与验收证据不互相替代。
+
+## 独立调用计时：部分窗口，仍不具备带电实时预算
+
+专用 `BLDC_G431_Timing` HEX 为
+`4bb96c712cf295df24c5316d247c525226ebdf22f3ba514019438449e0feb91d`。
+每拍仅调用一次私有同源 Runtime，真实提交与纯计算分开测量，没有重复执行 Observe
+的 OFF Runtime。PWM、ADC、SSI 配置、1700 counts 截止及原 25 µs 保护均未改变。
+操作者重新确认纯 ST-Link 逻辑供电、OUTPUT 关闭，电池/三相/外部注入断开，SSI 接线
+保留；DMM 2.7 V 沿用旧参考，本轮没有新增万用表测量。
+
+最初镜像下载后位置许可无效，因此没有写测试请求。只读数据出现 SPI OVR；计时入口
+空闲时仍在 IRQ 尾部查询保护，去掉这段重复查询后，新启动的位置前检恢复有效。
+该修订仅影响 Timing 条件分支。末端实时保护检查在活动窗口中保留，失败拍也先保存
+本拍 IRQ 差值再冻结，防止与上一成功拍读数混用。
+
+最终镜像只发送一次 stage 请求和一次独立 compute 请求，两者均未重发：
+
+| 测量 | 实际结果 |
+| --- | --- |
+| stage-only | 首拍真实调用 1、接受 0、enable 0；原截止正确拒绝 |
+| 该次被拒绝的 HCC 调用 | 603 cycles / 3.547 µs，不能代表成功事务成本 |
+| stage 前诊断段 | 1694 cycles / 9.965 µs；原锚点至返回共 2297 / 13.512 µs |
+| stage 原窗口 | 入口 CNT=3829，距截止 2129 cycles / 12.524 µs；返回 CNT=1413 |
+| compute-only | 完成 13/80 拍：12 普通快拍、1 速度拍；sink 13、真实 stage/enable 均 0 |
+| 普通快拍直接 Runtime 调用 | 4713–4778 cycles / 27.724–28.106 µs |
+| 速度更新拍直接 Runtime 调用 | 5394 cycles / 31.729 µs，仅 1 拍 |
+| compute IRQ 首末 USER 标记 | 7816–8451 cycles / 45.976–49.712 µs，仅已记录的 13 拍 |
+
+compute 在下一次执行前因真实位置许可失效而冻结 NOT_READY，未完成观测刷新或限幅
+覆盖。后检查仍为 CPU running、采样时基推进、入口 faults=0、独立 guard=0、MOE=0，
+但位置与诊断许可无效。只读 SPI handle 的 ErrorCode=4，即 HAL_SPI_ERROR_OVR。
+该附加测量负载下 SSI 服务尚不稳定；没有把 13 拍写成完整 80 拍通过，也没有重启掩盖后态。
+
+直接调用区间不含模板复制、合成输入和额外 stamp，但仍有调用及 DWT 开销，compute
+使用数值 sink，不包含真实 HCC 成功提交。IRQ 区间包含 HAL、健康检查及 Platform 尾部，
+排除末标记后的统计、终态发布和异常返回，不能据 49.712 µs 宣称整个 ISR 小于 50 µs。
+诊断前段约 9.7–10 µs 也不能冒充正式 RUN 的固定开销。即便移除这段诊断，已测纯计算
+自身仍超过 25 µs 半周，不能靠删掉 10 µs 预留证明当前整链能及时提交。
+
+新增模块 ARM 模型 20 组、入口集成 13 组、Host 替身 21 项通过；已有 Observe 65 组与
+Platform 87 组通过。三个 Target 原生构建均无错误警告，最终 Timing 修订增量亦无错误
+警告。Observe HEX 仍为 `6073e8c7…`，旧台架仍为 `efdc97e3…`，两者与原基线逐字节一致。
+Timing 最终加载 45728 B，RW+ZI=8984 B（含栈）。没有要求重跑旧波形。
+
+[窗口原值、镜像与源码身份](validation/evidence/runtime-timing/summary.json)保留完整归属。
+下一步先收敛诊断尾部与 SSI 中断服务的影响，再针对计算成本选择改法；尚未引入流水线、
+改变采样相位或放宽截止，也没有进入带电 FOC。
 
 ## 热路径速度优化后的提交预算：仍未通过
 

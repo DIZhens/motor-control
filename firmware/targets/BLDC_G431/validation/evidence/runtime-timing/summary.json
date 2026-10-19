@@ -1,0 +1,829 @@
+{
+  "schema_version": 1,
+  "target": "BLDC_G431_Timing",
+  "date": "2026-10-20",
+  "parent_checkpoint": "24faf2ed1104131c80c1e29e445c41b614beeaa8",
+  "scope": "专用无功率调用计时；保持原PWM/ADC、1700截止、25us保护和功率关闭。",
+  "artifacts": {
+    "BLDC_G431_Timing.hex": "4bb96c712cf295df24c5316d247c525226ebdf22f3ba514019438449e0feb91d",
+    "BLDC_G431_Timing.axf": "235165a1d761dacab290a81cfcc103d14767985ff3cf3960432efdf7165ec3a7",
+    "BLDC_G431_Timing.map": "e35015b8dc2a97666f6666dd84eb2f68f1a25f0c4b5504f3e5e1e706a2a2b2ca"
+  },
+  "loaded_flash_bytes": 45728,
+  "native_size": {
+    "code": 44502,
+    "ro_data": 958,
+    "rw_data": 268,
+    "zi_data": 8716,
+    "ram_including_stack": 8984
+  },
+  "native_builds": {
+    "Timing": "全量及最终增量0E0W",
+    "Observe": "增加Timing组后全量0E0W；HEX仍6073e8c75c0c71815946fcfdaca97be317c4e3aea10bbb38903a977f22972a86",
+    "Legacy": "增加Timing组后全量0E0W；HEX仍efdc97e387e1f64a02e473dc141c7dd8e345ddd37fb67852e34ccbf16f64b1e7"
+  },
+  "physical_conditions": {
+    "logic_supply_user_reconfirmed": true,
+    "output_off": true,
+    "battery_phases_external_injection_disconnected": true,
+    "encoder_wiring_unchanged": true,
+    "dmm_reference_v": 2.7,
+    "dmm_measured_this_run": false
+  },
+  "candidate_history": {
+    "01": "下载校验成功但位置许可无效，未发送计时请求；读取到SPI OVR。",
+    "02": "只离线构建与审查，未烧录、未发请求。",
+    "03": "只对新增Timing空闲IRQ分支及失败拍IRQ记录修订；下载校验后各发送一次stage和compute，均未补发。"
+  },
+  "stage": {
+    "status": "FAILED",
+    "primary_failure": "firmware:STAGE",
+    "request_write_attempts": 1,
+    "automatic_retry": false,
+    "result_reread_unchanged": true,
+    "result": {
+      "schema_version": 1,
+      "request_word": 5,
+      "mode": 1,
+      "state": 4,
+      "failure": 6,
+      "expected_samples": 80,
+      "completed_samples": 0,
+      "real_stage_calls": 1,
+      "real_stage_accepted": 0,
+      "sink_calls": 0,
+      "enable_attempts": 0,
+      "speed_updates": 0,
+      "observation_refreshes": 0,
+      "fast_samples": 0,
+      "slow_samples": 0,
+      "limited_samples": 0,
+      "last_shadow_faults": 0,
+      "last_work_cycles": 603,
+      "last_anchor_cycles": 2297,
+      "last_irq_cycles": 3726,
+      "last_timer_count": 1413,
+      "last_entry_count": 3829,
+      "last_cr1": 177,
+      "last_bdtr": 50344960,
+      "over_stage_deadline_samples": 0,
+      "over_consumer_budget_samples": 0
+    },
+    "post_health_first": {
+      "coherent": true,
+      "words": {
+        "guard_before": 0,
+        "bdtr_before": 50344960,
+        "cpu_before": 16842752,
+        "seq_before": 3906,
+        "seq_after": 3906,
+        "request": 5,
+        "active": 0,
+        "guard_after": 0,
+        "bdtr_after": 50344960,
+        "cpu_after": 16842752
+      },
+      "health": {
+        "schema_version": 1,
+        "sample_count": 390221,
+        "time_low": 390221,
+        "time_high": 0,
+        "last_sample_cycles": 944491534,
+        "last_sample_interval_cycles": 8449,
+        "faults": 0,
+        "guard_trips": 0,
+        "drive_started": 1,
+        "current_valid": 1,
+        "power_disabled": 1,
+        "bus_valid": 1,
+        "bus_voltage_v": 2.6536786556243896,
+        "position_valid": 1,
+        "permitted": 1,
+        "reserved": 0
+      },
+      "issues": [],
+      "time": 390221,
+      "sample_count": 390221,
+      "request": 5
+    },
+    "post_health_last": {
+      "coherent": true,
+      "words": {
+        "guard_before": 0,
+        "bdtr_before": 50344960,
+        "cpu_before": 16842752,
+        "seq_before": 3946,
+        "seq_after": 3946,
+        "request": 5,
+        "active": 0,
+        "guard_after": 0,
+        "bdtr_after": 50344960,
+        "cpu_after": 16842752
+      },
+      "health": {
+        "schema_version": 1,
+        "sample_count": 394221,
+        "time_low": 394221,
+        "time_high": 0,
+        "last_sample_cycles": 978491534,
+        "last_sample_interval_cycles": 8449,
+        "faults": 0,
+        "guard_trips": 0,
+        "drive_started": 1,
+        "current_valid": 1,
+        "power_disabled": 1,
+        "bus_valid": 1,
+        "bus_voltage_v": 2.645538330078125,
+        "position_valid": 1,
+        "permitted": 1,
+        "reserved": 0
+      },
+      "issues": [],
+      "time": 394221,
+      "sample_count": 394221,
+      "request": 5
+    },
+    "issues": []
+  },
+  "compute": {
+    "status": "FAILED",
+    "primary_failure": "firmware:NOT_READY",
+    "request_write_attempts": 1,
+    "automatic_retry": false,
+    "result_reread_unchanged": true,
+    "result": {
+      "schema_version": 1,
+      "request_word": 10,
+      "mode": 2,
+      "state": 4,
+      "failure": 1,
+      "expected_samples": 80,
+      "completed_samples": 13,
+      "real_stage_calls": 0,
+      "real_stage_accepted": 0,
+      "sink_calls": 13,
+      "enable_attempts": 0,
+      "speed_updates": 1,
+      "observation_refreshes": 0,
+      "fast_samples": 12,
+      "slow_samples": 1,
+      "limited_samples": 0,
+      "last_shadow_faults": 0,
+      "last_work_cycles": 4778,
+      "last_anchor_cycles": 6428,
+      "last_irq_cycles": 7966,
+      "last_timer_count": 3322,
+      "last_entry_count": 3289,
+      "last_cr1": 161,
+      "last_bdtr": 50344960,
+      "over_stage_deadline_samples": 13,
+      "over_consumer_budget_samples": 13
+    },
+    "post_health_first": {
+      "coherent": true,
+      "words": {
+        "guard_before": 0,
+        "bdtr_before": 50344960,
+        "cpu_before": 16842752,
+        "seq_before": 10920,
+        "seq_after": 10920,
+        "request": 10,
+        "active": 0,
+        "guard_after": 0,
+        "bdtr_after": 50344960,
+        "cpu_after": 16842752
+      },
+      "health": {
+        "schema_version": 1,
+        "sample_count": 1091463,
+        "time_low": 1091463,
+        "time_high": 0,
+        "last_sample_cycles": 2610081285,
+        "last_sample_interval_cycles": 8500,
+        "faults": 0,
+        "guard_trips": 0,
+        "drive_started": 1,
+        "current_valid": 1,
+        "power_disabled": 1,
+        "bus_valid": 1,
+        "bus_voltage_v": 2.645538330078125,
+        "position_valid": 0,
+        "permitted": 0,
+        "reserved": 0
+      },
+      "issues": [
+        "缺少计时健康许可：permitted",
+        "缺少计时健康许可：position_valid"
+      ],
+      "time": 1091463,
+      "sample_count": 1091463,
+      "request": 10
+    },
+    "post_health_last": {
+      "coherent": true,
+      "words": {
+        "guard_before": 0,
+        "bdtr_before": 50344960,
+        "cpu_before": 16842752,
+        "seq_before": 10956,
+        "seq_after": 10956,
+        "request": 10,
+        "active": 0,
+        "guard_after": 0,
+        "bdtr_after": 50344960,
+        "cpu_after": 16842752
+      },
+      "health": {
+        "schema_version": 1,
+        "sample_count": 1095063,
+        "time_low": 1095063,
+        "time_high": 0,
+        "last_sample_cycles": 2640681285,
+        "last_sample_interval_cycles": 8500,
+        "faults": 0,
+        "guard_trips": 0,
+        "drive_started": 1,
+        "current_valid": 1,
+        "power_disabled": 1,
+        "bus_valid": 1,
+        "bus_voltage_v": 2.6536786556243896,
+        "position_valid": 0,
+        "permitted": 0,
+        "reserved": 0
+      },
+      "issues": [
+        "缺少计时健康许可：permitted",
+        "缺少计时健康许可：position_valid"
+      ],
+      "time": 1095063,
+      "sample_count": 1095063,
+      "request": 10
+    },
+    "issues": [
+      "缺少计时健康许可：permitted",
+      "缺少计时健康许可：position_valid"
+    ]
+  },
+  "partial_compute_rows": [
+    {
+      "count": 13,
+      "min_cycles": 4713,
+      "max_cycles": 5394,
+      "sum_cycles": 62665,
+      "name": "直接调用",
+      "min_us": 27.723529411764705,
+      "max_us": 31.729411764705883,
+      "mean_us": 28.355203619909503
+    },
+    {
+      "count": 13,
+      "min_cycles": 6402,
+      "max_cycles": 7044,
+      "sum_cycles": 84154,
+      "name": "Platform锚点至调用返回",
+      "min_us": 37.65882352941176,
+      "max_us": 41.43529411764706,
+      "mean_us": 38.078733031674204
+    },
+    {
+      "count": 13,
+      "min_cycles": 7816,
+      "max_cycles": 8451,
+      "sum_cycles": 103215,
+      "name": "IRQ首末USER标记",
+      "min_us": 45.976470588235294,
+      "max_us": 49.71176470588235,
+      "mean_us": 46.703619909502265
+    },
+    {
+      "count": 13,
+      "min_cycles": 1650,
+      "max_cycles": 1689,
+      "sum_cycles": 21489,
+      "name": "Platform锚点至调用入口",
+      "min_us": 9.705882352941176,
+      "max_us": 9.935294117647059,
+      "mean_us": 9.723529411764705
+    },
+    {
+      "count": 13,
+      "min_cycles": 1148,
+      "max_cycles": 1673,
+      "sum_cycles": 15449,
+      "name": "调用返回至IRQ末标记",
+      "min_us": 6.752941176470588,
+      "max_us": 9.841176470588236,
+      "mean_us": 6.990497737556562
+    },
+    {
+      "count": 1,
+      "min_cycles": 5394,
+      "max_cycles": 5394,
+      "sum_cycles": 5394,
+      "name": "速度更新拍调用",
+      "min_us": 31.729411764705883,
+      "max_us": 31.729411764705883,
+      "mean_us": 31.729411764705883
+    },
+    {
+      "count": 0,
+      "min_cycles": 0,
+      "max_cycles": 0,
+      "sum_cycles": 0,
+      "name": "观测刷新拍调用",
+      "min_us": 0.0,
+      "max_us": 0.0,
+      "mean_us": null
+    },
+    {
+      "count": 12,
+      "min_cycles": 4713,
+      "max_cycles": 4778,
+      "sum_cycles": 57271,
+      "name": "普通快拍调用",
+      "min_us": 27.723529411764705,
+      "max_us": 28.105882352941176,
+      "mean_us": 28.074019607843134
+    },
+    {
+      "count": 1,
+      "min_cycles": 5394,
+      "max_cycles": 5394,
+      "sum_cycles": 5394,
+      "name": "慢拍调用",
+      "min_us": 31.729411764705883,
+      "max_us": 31.729411764705883,
+      "mean_us": 31.729411764705883
+    }
+  ],
+  "ssi_diagnosis": {
+    "hal_spi_error_code": 4,
+    "meaning": "HAL_SPI_ERROR_OVR",
+    "spi_registers_log_sha256": "06d50faec364ff68e5f33df1c784fc7c7f7429e544079b68b558a74f27f0af57",
+    "observation": "空闲分支修订后位置前检恢复有效；compute窗口期间再次失效并终止。",
+    "causality_limit": "当前诊断前段、尾部检查和末标记后统计均会占CPU；尚未量化各项对SSI溢出的因果及正式RUN时序。"
+  },
+  "tests": {
+    "runtime_timing_arm_groups": 20,
+    "timing_entry_arm_groups": 13,
+    "host_fake_tests": 21,
+    "existing_observe_arm_groups": 65,
+    "platform_arm_cases": 87
+  },
+  "limits": [
+    "stage首拍拒绝，603cycles只对应被拒绝HCC调用，不是成功三相提交成本或最大临界区证明。",
+    "compute仅完成13/80拍：12普通快拍、1速度拍，无观测刷新和限幅覆盖；统计属于有限部分窗口。",
+    "compute采用显式数值sink，真实stage和enable均为0；合成RUN/12V/校准不代表实际闭环。",
+    "IRQ仅首末USER标记区间；末标记后的统计、发布及异常开销不含，max49.712us不证明完整ISR<50us或WCET。",
+    "纯计算直接调用普通拍27.724..28.106us、速度拍31.729us，已超过原首拍距谷底剩余时间；不能靠移除10us预留证明当前整链能及时提交。",
+    "未放宽保护、未改PWM/ADC/SSI配置，未运行电机或复测旧波形。"
+  ],
+  "next_boundary": "先收敛诊断/SSI中断服务影响，随后只针对控制计算成本选择改法；不先引入流水线或放宽截止。",
+  "raw_evidence": {
+    "validation\\local-evidence\\20261020-runtime-timing-03\\stage\\result.json": "3c02e49bca367e87f7f391ccfa2a21c1fd36745735ffee5fd0b78b1f6967ae4b",
+    "validation\\local-evidence\\20261020-runtime-timing-03\\compute\\result.json": "314c9025b416a6d888696d635f158218bb91b5040635c46f1b05e4442ed90cb0",
+    "validation\\local-evidence\\20261020-runtime-timing-03\\postflash\\health.json": "b11ee847372440e2e6378d335e58c44f33853f0ae9680aade2d2ddc5db07ea12",
+    "validation\\local-evidence\\20261020-runtime-timing-03\\machine-review.json": "62de1e6f9deb873b5f0874594b0dba0bbcd49b8e2bb01c2300c3e1ef9fb8da9d"
+  },
+  "source_identity": {
+    "files": {
+      "control/current_controller.c": {
+        "raw_sha256": "c2cb31f56f452e91d7d4258194423463b4a44d7c9f45b1d6ad9cf2c12a15b23a",
+        "git_blob": "8600e52c68461695ce38d951664deff94bc77e42"
+      },
+      "control/current_controller.h": {
+        "raw_sha256": "a8388cd156ce374c689b70e7a6033cd37cdd3a512689f01628b26145670bcff8",
+        "git_blob": "23f4678d05164e26a760bb0aca7aec9937f686dd"
+      },
+      "control/current_measurement.c": {
+        "raw_sha256": "5ad4a7fe1f0d5a372add75e75e42d0f2c8fcf1a16a515171891e8f5992504659",
+        "git_blob": "ad049b3b30cbcc01872785d24cb61b4b266ccfa4"
+      },
+      "control/current_measurement.h": {
+        "raw_sha256": "bcd9858734024d3ff4e7ea12324f228e7e040d7ce1bbae2333c11cb66ec9bb52",
+        "git_blob": "598e6a1a58984055199e3ddcc21bbbec33d9c31a"
+      },
+      "control/electrical_angle.c": {
+        "raw_sha256": "a8b0b54b8c2d9eb961a15dd60e6b5a55f9c2feb764adec5f2dbee065da92efd3",
+        "git_blob": "717492e389ded88e54137c812e944b94218f62a9"
+      },
+      "control/electrical_angle.h": {
+        "raw_sha256": "5dd2364ae16bc4918ca7a1680c1080027dcee0868db945414b0b31ed1d66a8d3",
+        "git_blob": "adae9618c5b1299fd8defb751f2d684e709e46ca"
+      },
+      "control/foc_math.c": {
+        "raw_sha256": "63d6757f090e9b8b0952d83e7c2341d39748ac0be87631012441016a74cf5b0d",
+        "git_blob": "b0e9dcae7ab0ec43f9f6dfdbfe3287c9339370ae"
+      },
+      "control/foc_math.h": {
+        "raw_sha256": "6df29a5c014e6454cdf1e43dcdd633567171e538082584ec504113eb7512fcfd",
+        "git_blob": "469711f26d20e3554c75370e2f612c6df7d72f66"
+      },
+      "control/foc_math_internal.h": {
+        "raw_sha256": "da2619ce0f85d519001b720c02279328d7ec9cabf01546d3f6af9bcc54494339",
+        "git_blob": "d815ace6e5ab4f8ccae91ee64e74d3bf2281a1f9"
+      },
+      "control/position_estimator.c": {
+        "raw_sha256": "3584712a7a1f251675c943ebba86b4b995fb30c16b68dfa4c0aadcd2eac57551",
+        "git_blob": "1e20be9b6879771ae8be9bf60fdc4d544b2e3f2b"
+      },
+      "control/position_estimator.h": {
+        "raw_sha256": "beccbae484c334998af8914362fbca3417745ebf437896df7adaa8f71c652ca7",
+        "git_blob": "40a1c1e4f6b468bd2572d6808eb14f0a9406799e"
+      },
+      "control/speed_controller.c": {
+        "raw_sha256": "6b60c9ad474d2999418c2ec46e97a33d75f5142a1813c8258b23e76fdc0b0d1f",
+        "git_blob": "944d92c2ec9ed38f8d855dd019a2b993d3eb56db"
+      },
+      "control/speed_controller.h": {
+        "raw_sha256": "f460f132e61c3f0bfdbd89fa27a08a6ba6864b00a7e9e4ca02b8d523b08282c1",
+        "git_blob": "3f7de34fd9547b4d30bf8966ef55af28b83af42f"
+      },
+      "control/tests/current_controller_model.c": {
+        "raw_sha256": "ab8073b6950943a70421786da2fe95b49eadd671239b0fbececc5876835f66a6",
+        "git_blob": "4de9f8a4d940962800a49b82353595c8368e000a"
+      },
+      "control/tests/current_measurement_model.c": {
+        "raw_sha256": "a7c7070e42ef197a789064b1929daeed8c77b4353484f1410c0520a47379fffd",
+        "git_blob": "2b895b9200de1808bba1796ae03275af6432f2a6"
+      },
+      "control/tests/electrical_angle_model.c": {
+        "raw_sha256": "189b795f349d7ff1a8b69eaffacfbb3658e91d23b96aa601153ff145abe97035",
+        "git_blob": "d2770ec2778d70b21bd264dbd38bcefbd41ec80e"
+      },
+      "control/tests/foc_math_model.c": {
+        "raw_sha256": "3e83b6e1a3d442e5d8ee5e6c644cd2e1f4d978bf5a8aa350a6f0c34dba506399",
+        "git_blob": "96583aeb97772f70dce53285bbbc9fc125c325aa"
+      },
+      "control/tests/model.c": {
+        "raw_sha256": "b6d07d6dc58246e8c0a7af796e5de4f3a2aeebdc29a86f9350a700f4d40be514",
+        "git_blob": "abedeaf74927759afba39f70f9f40dce62bcabd4"
+      },
+      "control/tests/speed_controller_model.c": {
+        "raw_sha256": "99f1356debd71a5ae406c483c3f7ee661b5d9cde39787bde6be4df703ce9c2d6",
+        "git_blob": "96fe11fc53fa9ed5d048e8c88befab60377ee584"
+      },
+      "control/tests/verify_current_controller.py": {
+        "raw_sha256": "29b551f976589ee95f7e84555cf9bfad73d66166ba29858dd6775e68fb72d265",
+        "git_blob": "f0b03829220b03af5d0780db5a3b2b139c29c6f8"
+      },
+      "control/tests/verify_current_measurement.py": {
+        "raw_sha256": "e8023b683ec0e9ee0b3726ab752394aea2c6394d200fbfe77d3a2122f10449a9",
+        "git_blob": "408412e394e9d3c5981cae0e4c967f38f607de4e"
+      },
+      "control/tests/verify_electrical_angle.py": {
+        "raw_sha256": "68abc2e38e1c6a9ce64751fff2135a161046ea9baf25f6127009f4889ef2e6fe",
+        "git_blob": "0a23c7383e32b87712bd6450f68e7bbf30180f1d"
+      },
+      "control/tests/verify_foc_math.py": {
+        "raw_sha256": "c4cadc701bd508386350d954c4b8f7e7def443a0c66b7d61180239f342906235",
+        "git_blob": "c4b0f046781aeb6dd97c1dbf4bb22d096c8e5145"
+      },
+      "control/tests/verify_position_estimator.py": {
+        "raw_sha256": "9d5593bbc2b460d3efdaab0dee4b10e0d1612af63fd60b7e39b309b96ac7c3fd",
+        "git_blob": "dd92f1f4a55962ebeee88515d01a2e6e0c68b89e"
+      },
+      "control/tests/verify_speed_controller.py": {
+        "raw_sha256": "a85ff095b72d4e4650d5235cd7e7cb75d722791c58fb5f0ac9a214a7ecfab059",
+        "git_blob": "669c0bdcdd5d4d97250c874a6ac4c97273b61a1c"
+      },
+      "control/tests/verify_svpwm_comparisons.py": {
+        "raw_sha256": "12123454e3cbd175fb25a5c2c87a33efc73ed53a5456ff3eac3ad23f8885bd3f",
+        "git_blob": "6e2de63725951270e007039a3bf02ec95a8283c0"
+      },
+      "firmware/app/motor/control_runtime.c": {
+        "raw_sha256": "40052c11ebd73dd2e04aadcb805632392bce5c95508c9727445f81f52e7af171",
+        "git_blob": "64969939ca1ae54ae53f17801fb8e64fbc176bd3"
+      },
+      "firmware/app/motor/control_runtime.h": {
+        "raw_sha256": "91c43067c4cbebc22160fadca338960a208f4ccb65ab8e64062ddea10c5cc5ef",
+        "git_blob": "6a9b5eee568004bf43bc736567fb94ae420a9337"
+      },
+      "firmware/app/motor/motor.c": {
+        "raw_sha256": "61143f69ca71d005f49a600677c40d5a3c296cb7e38dff8b0da67e273b56809f",
+        "git_blob": "7e7b047fcd6cfe7f2e66cd1ded90b8ecd8e7b019"
+      },
+      "firmware/app/motor/motor.h": {
+        "raw_sha256": "dfa485243eb4891e1dd8523669df6fb9e793c7632b118b18baf014675c3d2a87",
+        "git_blob": "7b9787b303f2f2e81d77ff3af522633148472cda"
+      },
+      "firmware/app/motor/motor_snapshot.h": {
+        "raw_sha256": "dd4d606942c2f82aec3f75094909da4c2b5c60c1cfd7579f5b0c1e734e39caa9",
+        "git_blob": "0628d42c8f0b85d409de9c82cf747f7ee8170771"
+      },
+      "firmware/app/motor/rotor_alignment.c": {
+        "raw_sha256": "0b98edc84b304be54bb62bf399fa2941c883dde7d0210290064325c7b95fe325",
+        "git_blob": "9b06aeb17cbb8a3f8aff1437fb737b746031e3ea"
+      },
+      "firmware/app/motor/rotor_alignment.h": {
+        "raw_sha256": "b40ad51442b9c64e468b93e51bc1845535b461e74f9446348670cd4e88b656e2",
+        "git_blob": "a345a8357eabe5b2b6219d507192b0331e4099b1"
+      },
+      "firmware/app/motor/tests/model.c": {
+        "raw_sha256": "e70b591e5953974232bcdd722d74aa1066e1ac8374e6468dd5cd1b1841ebf6a9",
+        "git_blob": "631c0e68bca788e11ba025601bb42be00ad40da6"
+      },
+      "firmware/app/motor/tests/rotor_alignment_model.c": {
+        "raw_sha256": "decca42e9e6512c0a09ed2434fd014b9343270bc2899e5280cd8910dd6bb1ba3",
+        "git_blob": "ce1b0bab962a288a87a25a64a4dc693a31aa618f"
+      },
+      "firmware/app/motor/tests/verify_motor.py": {
+        "raw_sha256": "853aa2389b3985089821f07fd7c42900c08a98d61e618e5da892411fe8032ace",
+        "git_blob": "6865c698c08212323928380ecf8dc7a3bf1e0155"
+      },
+      "firmware/app/motor/tests/verify_rotor_alignment.py": {
+        "raw_sha256": "c4bfe7d514f910b120d77241a96b2474227ddde57cf5d8db3e12a0002378596d",
+        "git_blob": "e96f6d33053687fb2e8c353088c30bb4d612364a"
+      },
+      "firmware/platform_contract/bus_observation.h": {
+        "raw_sha256": "80fac6d7068dc9e542f0022434f79c888b536283935279ef843a2364a07d9b08",
+        "git_blob": "8ee8336dca720a9fb0e408d6147cb6cad72cc3d4"
+      },
+      "firmware/platform_contract/control_time.h": {
+        "raw_sha256": "4ae37e0c7962cee3c8b911f8a5c954c604a42f4e08102762b7f6401c203ee397",
+        "git_blob": "ccc01ca7178aac52b3a3ba4cc3c592002fd2b9a1"
+      },
+      "firmware/platform_contract/hardware_trip.h": {
+        "raw_sha256": "4e60788b2dc669d8379684153b1a51d08c9b7d58124cb19c55df0649b081f845",
+        "git_blob": "2bc9967e303613d7d4c2a53088f2f27fedd59d6d"
+      },
+      "firmware/platform_contract/position_observation.h": {
+        "raw_sha256": "5c0b5ccd51d34be3cdc5d5fe998522c1a7910e5e7d48a068e8447f7aed253ab6",
+        "git_blob": "7ae9016abcdd74170c5542a9f217988f96f545e0"
+      },
+      "firmware/platform_contract/realtime_motor_io.h": {
+        "raw_sha256": "4b1284ff98852eb29e48c3747bb926fd03ef8f8a77499cb7f9a23f0c5989d73e",
+        "git_blob": "6b72544168ffa9490c18b604e3315cb0f9bd00bd"
+      },
+      "firmware/targets/BLDC_G431/BLDC_control V1.ioc": {
+        "raw_sha256": "1656ba99d4f816f691611752f78d3f925c2bca79cf8bf12236e19db97c56d981",
+        "git_blob": "aab9a76374f287f9b51161e3217b7a7a86337ec7"
+      },
+      "firmware/targets/BLDC_G431/Core/Src/main.c": {
+        "raw_sha256": "63a201a5c3ce6fd0af79885f405ed93c7eda0de3cc4817d91f080634d98da4e6",
+        "git_blob": "98fdc4af19eb880e32b7fefa09e2e57550abba24"
+      },
+      "firmware/targets/BLDC_G431/Core/Src/stm32g4xx_it.c": {
+        "raw_sha256": "2e23ce5565eecfae899a8c1d638d7a192861b97e1c7f2df8e1df2b6bd5ba0775",
+        "git_blob": "8618f979aaca2583892f4e6f73759f13ff241ec8"
+      },
+      "firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1.uvprojx": {
+        "raw_sha256": "842c32e52124358d717e0fab6b887d98a8adfa7dfd601e9f4a79b3e65374da06",
+        "git_blob": "5d0aca3531f520a509a3dc49689673dd65bdfdc3"
+      },
+      "firmware/targets/BLDC_G431/platform/bus_observation.c": {
+        "raw_sha256": "6deff1428746ec68a6b5edf58dc0477aeff241d5948095fbbbe600e6fce087bf",
+        "git_blob": "2ce559d7c820b0657c7a97b75844fd9001e35e14"
+      },
+      "firmware/targets/BLDC_G431/platform/bus_observation_internal.h": {
+        "raw_sha256": "e42880f195c2a186d05a4002623fc000d4b3c32eda5324eaa3ea46954e6a4276",
+        "git_blob": "0e08a4ffe2b78d2d55ac0defcb7e714e42c398d7"
+      },
+      "firmware/targets/BLDC_G431/platform/control_time_source.c": {
+        "raw_sha256": "0f0cf087572a1db8fa86b4d5e1ae0673985e0e2913c89ffa8c2024ededbeb3c9",
+        "git_blob": "c51c526cc766ff2bc0ba34f1645c6d5b9a2958bd"
+      },
+      "firmware/targets/BLDC_G431/platform/control_time_source.h": {
+        "raw_sha256": "bcba20c7c76f407b7c8eb081dec8d1c688781c6f16d8df4bf7679cccb8a8a6fd",
+        "git_blob": "da7e9bc7981403dbc7a754e51cf3d798a86ed3f7"
+      },
+      "firmware/targets/BLDC_G431/platform/hardware_trip.c": {
+        "raw_sha256": "4b6cad45815fba437c61f0440233aaf7920be9e416e7b7f9c9e5b4513e9ea948",
+        "git_blob": "818b12cd4e3e3be2bed8076c91e42f13f33fd157"
+      },
+      "firmware/targets/BLDC_G431/platform/hardware_trip_config.h": {
+        "raw_sha256": "9a95974eb0d1c1a803bf4a6b9a98954ebd2e90fc4cfe2417d17174579ff13e42",
+        "git_blob": "4f4aebfe3fc8427aefbc4d39f97d42d274476296"
+      },
+      "firmware/targets/BLDC_G431/platform/position_observation.c": {
+        "raw_sha256": "f52737ca8ee3017344b9fe3f00469886fb7e83643872b8d51ca943809daad899",
+        "git_blob": "2f277cbc731f9a0bbb6fc2823b57c714d381b135"
+      },
+      "firmware/targets/BLDC_G431/platform/position_observation_internal.h": {
+        "raw_sha256": "b4f7fbee0700e7f248c48197c00e1904625ba645113eccf51a30bcd85c80c462",
+        "git_blob": "df655cdcdfff49ac5e7f269590eb0e8d4f1b5021"
+      },
+      "firmware/targets/BLDC_G431/platform/realtime_motor_io.c": {
+        "raw_sha256": "1273c76335e4a804a52609916398b80ce53c42fd1d1c2ea248601d3ee1cbe165",
+        "git_blob": "7d6b90ef675144a3726f2991c86b91a9c310f705"
+      },
+      "firmware/targets/BLDC_G431/platform/realtime_motor_io_config.h": {
+        "raw_sha256": "ad86afcff16228bd9304e05d1de2ac471d421a21f7ef38b55a5096bebe608f0b",
+        "git_blob": "f4a0222c61b7ef4b7d50804b25beca2dbc9777d9"
+      },
+      "firmware/targets/BLDC_G431/platform/realtime_motor_io_diagnostic.h": {
+        "raw_sha256": "e7db0f743ed1ba9cd78518368781c6d444f81aef04dfd50755346b3e5f0ac263",
+        "git_blob": "3b1a9a40000be9254bd3548806831dd8c36e6f6f"
+      },
+      "firmware/targets/BLDC_G431/runtime/compute_comparison.c": {
+        "raw_sha256": "2b340eab1d6ff32acc5fc2f2365e8543dda76d6dea524d4aff88954311af20d7",
+        "git_blob": "ee7972f89306fdfc42ae5e044ccf441c07f325c8"
+      },
+      "firmware/targets/BLDC_G431/runtime/compute_comparison.h": {
+        "raw_sha256": "88e47761ea150bc51e673aaa3c195d65b1a17b8d24567eb4c6defe089d3ba15a",
+        "git_blob": "944d64e9f8c59fa1c3df252eb66e0d9f5bbc3d7a"
+      },
+      "firmware/targets/BLDC_G431/runtime/compute_probe.c": {
+        "raw_sha256": "81ad11ec6d611b28cfa1cecdadff1d13e39b309daeb754bcc2be78ae3453cb79",
+        "git_blob": "8a2ebca6ffa47f4c35897f9cc5f885c26fc2c9f3"
+      },
+      "firmware/targets/BLDC_G431/runtime/compute_probe.h": {
+        "raw_sha256": "9db94eda95358f85924bdf8ed071174c30540fdfd10e806e09c94327428733c4",
+        "git_blob": "5fe6adfcc11d39ee8161a201856101ca3d040d4b"
+      },
+      "firmware/targets/BLDC_G431/runtime/controller_profile.c": {
+        "raw_sha256": "80d3e350c1ab1cd0ddc939e23cfe4b37bf3be8f0fd94af1768cc4b728611bcf4",
+        "git_blob": "bb75672ef1a5081bc9518cceeb0a6f8f2a7ae3ef"
+      },
+      "firmware/targets/BLDC_G431/runtime/controller_profile.h": {
+        "raw_sha256": "c8f15d50678679f16844a1915188c7084c0ac828d35a2c2ef75ea406579f4ee4",
+        "git_blob": "83eca27fbf478e373fd74bd2d191b1a9ee555106"
+      },
+      "firmware/targets/BLDC_G431/runtime/cordic_math.c": {
+        "raw_sha256": "8b3216f29bad1cad11a69c48ee69355d184ec0500c30ee155c563db6fabed74f",
+        "git_blob": "2a3d525d51ed8901e83531d9d4b09d6685db6495"
+      },
+      "firmware/targets/BLDC_G431/runtime/cordic_math.h": {
+        "raw_sha256": "c8bfa20397723c1183873bd9129c61fdd032b6efac0a359f9b9c18aabd846dd2",
+        "git_blob": "a93629205884ffd1d14c464166b9f3c74a053881"
+      },
+      "firmware/targets/BLDC_G431/runtime/current_capture.c": {
+        "raw_sha256": "b8962726ef08996efbace6c54f71f0cffd4f6abec8547433a2938fc2b61dbf42",
+        "git_blob": "9ea96fda8a37a537ccc6a7a269e9bdf11dc78015"
+      },
+      "firmware/targets/BLDC_G431/runtime/current_capture.h": {
+        "raw_sha256": "0b3ba1949b83c0ae532cdf8e936a2a762d53f12f06960c83ec9cd71f05cde0d1",
+        "git_blob": "258a8b12955e099fc52151e119e3cbf01f7cce98"
+      },
+      "firmware/targets/BLDC_G431/runtime/irq_timing.c": {
+        "raw_sha256": "d4040ca08ae405ad970001b7fceab4f862d7d62180293282b86b915e7b5e8c84",
+        "git_blob": "c369506277d63b46fd288d7c1ea7a441002354f7"
+      },
+      "firmware/targets/BLDC_G431/runtime/irq_timing.h": {
+        "raw_sha256": "a8e2f62107a8e58ce2919e35c7fd183266915432d5455711bee08732cff2a975",
+        "git_blob": "2902b79e185bc6e5228a656af3d9a4722104de13"
+      },
+      "firmware/targets/BLDC_G431/runtime/runtime_timing.c": {
+        "raw_sha256": "2609aa0326dab84c893cce89012af9cde907dcef0e2054250e7a72b986494019",
+        "git_blob": "300bcb2e16e7481930ff316510cb241f0024ab11"
+      },
+      "firmware/targets/BLDC_G431/runtime/runtime_timing.h": {
+        "raw_sha256": "4a53cae6558d8cb92abc0a4152e05ada2d76f475b3ea06f22038bea9be2ac51a",
+        "git_blob": "5b122fcc1c9be9204119fcab0cd52201e21a81ff"
+      },
+      "firmware/targets/BLDC_G431/runtime/runtime_timing_runtime.c": {
+        "raw_sha256": "66d1c0d77bb458be2f6a8ffc57f2fbc86a57ca6c2a1bd2f326609825f00500dc",
+        "git_blob": "a7b041cb27e8343eafda160cb775dc1e183fe004"
+      },
+      "firmware/targets/BLDC_G431/runtime/stage_budget.c": {
+        "raw_sha256": "5db579dfb26a6a7fda8e009ecd695658feeae79174b046b15d82f38fdb6ca4f0",
+        "git_blob": "71886d54cb71485ac78a9122a0b41924ddac6756"
+      },
+      "firmware/targets/BLDC_G431/runtime/stage_budget.h": {
+        "raw_sha256": "b051ad5fc6b0ab31d34693311396b64bafb383e3bfb4358a310a8699526da319",
+        "git_blob": "f193712052396ac2e2936513d3ebd24a174d5cf9"
+      },
+      "firmware/targets/BLDC_G431/runtime/stage_budget_runtime.c": {
+        "raw_sha256": "692a02a828354e8df8a5f31137ed04631d08d5e7d57828f5ab16850515c72628",
+        "git_blob": "554a06d3bebfecb4f9a7772b194d3b68dc0b9577"
+      },
+      "firmware/targets/BLDC_G431/runtime/target_runtime.c": {
+        "raw_sha256": "28229cdaeb91fb5d9ee8ad456df49d4ae9862f2b59b38a4f454b1217ad478d15",
+        "git_blob": "da80e4adf2038d56edc387725125c22d034f8698"
+      },
+      "firmware/targets/BLDC_G431/runtime/target_runtime.h": {
+        "raw_sha256": "20d026cf8eb01b04137b5c8f6ec1cd25295b41a00ef82e97645de6a7394d25e0",
+        "git_blob": "53303cfe165a42019e9c70eb6dd5f654b57cc713"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/compute_probe_model.c": {
+        "raw_sha256": "fc34bcc65c1af96d1af1ce887bf6765d6013a442515da72318723bb23098dac3",
+        "git_blob": "891e65c03bae911145b59dd2836e7bde864ed07d"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/controller_profile_model.c": {
+        "raw_sha256": "814bc9de263123da920a085f69de8db3a87b837ae69721ae4c1ad9af2db787c3",
+        "git_blob": "a5c45e8f3f75a49394745ea4ef03c106417497c8"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/cordic_math_model.c": {
+        "raw_sha256": "8b7edab045e9dd730e866a288e7b3a6752115641e1a16ede97ede995eb2b1729",
+        "git_blob": "ec0fbf979364df700fc70eb98b5120e9ea26c245"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/current_capture_model.c": {
+        "raw_sha256": "4175a2d4ee59b72335217c19d902014240c5261b391d523fae3c2114b7578726",
+        "git_blob": "76057e92cc66db3a4f3788c05356b9ea8517b927"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/foc_runtime_model.c": {
+        "raw_sha256": "711b2b9b1a669919208b2869ca0354ad54143725f5c24b0b3a8d82c1ac55ca69",
+        "git_blob": "3c59b4cca06e41dd2aa3b181a012cda1322a28a3"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/model.c": {
+        "raw_sha256": "149bce65a7db5af0795fb3463cfa6e0735d57e0dba0d5d971e79a8a7eb500ba2",
+        "git_blob": "e0c933303b5f45129999c07edfc194eb9a68f6ce"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/runtime_timing_model.c": {
+        "raw_sha256": "d62b2d812fa0e26d22bfdf0ff52da60559ad00eb65bae08d6f42ab3d896172b0",
+        "git_blob": "3f0975794352663197e670b9bc0e25b939a3f1fe"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/stage_budget_model.c": {
+        "raw_sha256": "4c15291807e68f0066bbad1c94b2f29c2cc9853d48fc6ef43b2433a8a0f8e2bc",
+        "git_blob": "664d0710ef363e3199efed9d78bfe1422d97c82a"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/stubs/main.h": {
+        "raw_sha256": "3a078c6235dbeb726a4966e69e89b7cb7b0946d7b1e13ada3a8710dd47f4e0f8",
+        "git_blob": "53aa5b5a7266b8d1e48195161147d1de50e8f13e"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/stubs/tim.h": {
+        "raw_sha256": "42a2a5a50b60781cd1f29d2e0c7c44dbf32e8548fd3e1ffe2d07b838062b8ffa",
+        "git_blob": "7b5b9e075530c4275a484b08cff1e048f1272d6e"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/stubs/usart.h": {
+        "raw_sha256": "319a44aa06ba16531c85fc853134340407f87d4d38613fa300d09710fe0432ec",
+        "git_blob": "1a8a1e4b99f4d9f2d5d9621b3e21c7c041eda14c"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/test_compute_probe_tool.py": {
+        "raw_sha256": "7505607776f1c6487bb5a0907cd8443b6ec5d4108f0dc7e83dd5d00d8218a8d9",
+        "git_blob": "cffa8dbd0218d71b599bb836ff48175c1ebb510f"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/test_current_capture_tool.py": {
+        "raw_sha256": "aca2b10ea8502a5837a7b0c97e6a5463df602fd8b557e9ce856b9363d8135df9",
+        "git_blob": "de8ac7f99a838468255aa0eac62bfab4e1a843cd"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/test_runtime_timing_tool.py": {
+        "raw_sha256": "065a32864a03a885e216d97039b47f7496bfa38626e47c8eed68acfc27645838",
+        "git_blob": "941c7418f1fbb6b50f7f93e6a7f7b7a154bc582c"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/test_stage_budget_tool.py": {
+        "raw_sha256": "b113625423feea226bca730e996dabd42b7bcb9e1f22b6aa6050de288dde4d52",
+        "git_blob": "c490914c1f91b751683b2b8d3c4c47ac8e992f2f"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/timing_entry_model.c": {
+        "raw_sha256": "6c8f92853de7d6c305b00023c23d3f2e97e84a05a14b2f17a56c8a7effb4cc45",
+        "git_blob": "f6439475d948456dc195192d65c1915293a7aa8c"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/verify_compute_probe_model.py": {
+        "raw_sha256": "533eeda3bd387535215d367f1315aff4632dd5e2c264bbf945df3047deca9b59",
+        "git_blob": "b399896b9f1a36422a37ab2af5828a0ad7ce72b9"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/verify_controller_profile.py": {
+        "raw_sha256": "b0c7d9302f843bffb25e6d0321bbb5ee27b13d35102297f5d90ae2583ffa3b36",
+        "git_blob": "e84f46819706b2fe69e72c51c00f0769a727ed67"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/verify_cordic_math.py": {
+        "raw_sha256": "b43216f5debcd9d0b80e85167dca50bc0070d61c2a59c2c71b5f4ce178384931",
+        "git_blob": "07ba3f2769ba664e8d18da0a156b0ae010a2bacc"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/verify_current_capture_model.py": {
+        "raw_sha256": "ea49b6e74d76eb4e6b5362f7bea4561e95e5b251a8253982eace9be935a16a5b",
+        "git_blob": "efa712472292c7685102c9d699a3e9f61e2ed105"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py": {
+        "raw_sha256": "7941bb03013b105913ece86562ab0e33399f63e7312045f7125f81a6dee6d9f8",
+        "git_blob": "417352f10516bdd5ddda69e6b00058271031db32"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/verify_irq_timing.py": {
+        "raw_sha256": "0da331a794c2644cdc5964da952a8932494a53fea4d1e46b3092b6f2eaa4403a",
+        "git_blob": "f68b62889e2d2ffe907061017c98834de12c5bfb"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py": {
+        "raw_sha256": "bc48acb3c24a0a2fd16e9f2e579297dd48de9272acdde2bdff04b1ad2cd647e8",
+        "git_blob": "b17604ec0316eb70bf8bc57d31847ad12634f74e"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/verify_runtime_timing.py": {
+        "raw_sha256": "008a8b678db4a693dcaf55b4fff286bdbcb3de22d7f1bf9af59150af26dfac5a",
+        "git_blob": "8e7461422a7c956965fda5e5702f9db9af87dc77"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/verify_stage_budget.py": {
+        "raw_sha256": "1ab416ff6e4a2b54230c03352789a9c3a5adcc4264b77fba96381245bcbafbb3",
+        "git_blob": "c2131375382015572fbd99db2cb15806a6143c3f"
+      },
+      "firmware/targets/BLDC_G431/runtime/tests/verify_timing_entry.py": {
+        "raw_sha256": "6b3a543de64b90a26cd017ef5600177b501a3ee2e2fb2c75b1ae62ffebd0ee27",
+        "git_blob": "8562ac92775977740566433d8a1188eef32e6db3"
+      },
+      "firmware/targets/BLDC_G431/runtime/timing_entry.c": {
+        "raw_sha256": "dada90ad443c8d44a48db9d9d28f0ad431394f66f1c8a1e3d86a486180a0bc40",
+        "git_blob": "bc312579dc38ba0894c43e0f1e867bc382ea6336"
+      },
+      "firmware/targets/BLDC_G431/runtime/timing_entry.h": {
+        "raw_sha256": "7bfadaf839f10f6a14b15a4ebc09424bc708401c58312643d5eeeece698fb0fd",
+        "git_blob": "315521c3397bccfbdd09672cbef954723997d372"
+      },
+      "firmware/targets/BLDC_G431/runtime/tools/compute_probe.py": {
+        "raw_sha256": "a6225d65fb5b2c670aa82eb3a98b403ed93b0545366c17de998274d623147cf3",
+        "git_blob": "85e6daaceb22c0c6dc601a7815dfd1ee1f37a841"
+      },
+      "firmware/targets/BLDC_G431/runtime/tools/current_capture.py": {
+        "raw_sha256": "8114e0da837a89007a595849e1e8c878a5e7f266fc9f12e2659e1c70d676d205",
+        "git_blob": "c698bbc63ccf61004346f637049d6d74fe83ab72"
+      },
+      "firmware/targets/BLDC_G431/runtime/tools/runtime_timing.py": {
+        "raw_sha256": "f542bd7aec1ef4c1386dd1bf6b8d7fb9769bf86a103ab9ef15e9ed0647aad4fc",
+        "git_blob": "2b0abd176cb04000288c51edfbd9d60ea80f2805"
+      },
+      "firmware/targets/BLDC_G431/runtime/tools/stage_budget.py": {
+        "raw_sha256": "37a8dfe6cd8a075940f053951442d7ba8af64db931c362b49b158ad8792e8133",
+        "git_blob": "2042d322a401c315e53047b505d2054fd8e2b8e5"
+      }
+    },
+    "project_user_flash_excluded_from_git_blob": true
+  }
+}

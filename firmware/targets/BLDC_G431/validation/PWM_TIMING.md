@@ -33,6 +33,11 @@ OC4REF 上升沿触发 ADC1/2 injected conversion。正常回调在峰值后下�
 UDIS 阻止 preload → active 更新，不停止计数器；PRIMASK 防软件交错，不能替代硬件 UDIS。
 依据 [ST RM0440：Advanced-control timers、Center-aligned mode 与 TIMx_CR1 UDIS](https://www.st.com/resource/en/reference_manual/rm0440-stm32g4-series-advanced-armbased-32bit-mcus-stmicroelectronics.pdf)。
 
+1700 counts 是当前 Platform 的保守软件策略，不是定时器强制的最小预留。实现要求整个
+三相事务在该线以前完成，包含 UDIS 恢复后的复核；并非只要求事务开始时还剩 10 µs。
+现有证据尚未量化改变该值所需的总线/临界区最小余量，不能据注释认定 10 µs 已通过
+最坏情况论证。低侧采样窗口是另一项物理约束，不能用它直接替换该预留。
+
 ## 资源与失败语义
 
 Platform 启动时开启 DWT CYCCNT 而不清零，其他运行期模块不得停用或重置它。

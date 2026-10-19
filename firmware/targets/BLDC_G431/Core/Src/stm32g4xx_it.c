@@ -22,7 +22,10 @@
 #include "stm32g4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_TIMING_ENTRY)
+#include "timing_entry.h"
+#include "runtime_timing.h"
+#elif defined(BLDC_G431_OBSERVE_ENTRY)
 #include "target_runtime.h"
 #include "irq_timing.h"
 #else
@@ -228,7 +231,9 @@ void SysTick_Handler(void)
 void ADC1_2_IRQHandler(void)
 {
   /* USER CODE BEGIN ADC1_2_IRQn 0 */
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_TIMING_ENTRY)
+  g431_runtime_timing_irq_enter(DWT->CYCCNT);
+#elif defined(BLDC_G431_OBSERVE_ENTRY)
   uint32_t timing_request = g_target_runtime_compute_request;
   bool timing_ready = (g_target_runtime_compute_sequence & 1U) == 0U &&
       g_target_runtime_compute_result.state == OBSERVE_COMPUTE_PROBE_COMPLETE &&
@@ -249,7 +254,11 @@ void ADC1_2_IRQHandler(void)
   HAL_ADC_IRQHandler(&hadc1);
   HAL_ADC_IRQHandler(&hadc2);
   /* USER CODE BEGIN ADC1_2_IRQn 1 */
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_TIMING_ENTRY)
+  if (g_target_runtime_timing_active != 0U) {
+    g431_runtime_timing_irq_exit(DWT->CYCCNT, timing_entry_permitted());
+  }
+#elif defined(BLDC_G431_OBSERVE_ENTRY)
   if (timing_window) {
     uint32_t timing_end = DWT->CYCCNT;
     g431_irq_timing_irq_exit(timing_end, target_runtime_timing_permitted());
@@ -302,7 +311,9 @@ void TIM6_DAC_IRQHandler(void)
 #if defined(BLDC_G431_OBSERVE_ENTRY)
   g_target_runtime_irq_entries[7]++;
 #endif
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_TIMING_ENTRY)
+  timing_entry_guard_irq();
+#elif defined(BLDC_G431_OBSERVE_ENTRY)
   target_runtime_guard_irq();
 #else
   target_validation_guard_irq();
