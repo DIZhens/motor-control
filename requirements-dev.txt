@@ -1,4 +1,4 @@
-# Local ARM model checks and candidate-file parsing; Keil is installed separately.
-# Versions verified with Python 3.13.2.
+# 用于本地 ARM 模型验证和候选文件解析；Keil 需单独安装。
+# 以下版本已在 Python 3.13.2 上验证。
 unicorn==2.1.4
 pyelftools==0.33

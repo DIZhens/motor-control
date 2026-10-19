@@ -1,4 +1,4 @@
-/* Fake HCC/time for executing the actual ARM validation code; no electrical model. */
+/* 用 HCC 与时间替身执行正式 ARM 验证代码；不包含电气模型。 */
 #include "target_validation.h"
 #include "tim.h"
 #include "comp.h"

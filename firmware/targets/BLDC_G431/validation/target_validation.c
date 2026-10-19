@@ -15,7 +15,7 @@
 #define CURRENT_MAX_GAP_US (75U)
 #define CURRENT_MIN_GAP_US (25U)
 #define CAPTURE_MARGIN_US (5000U)
-#define BUS_MAX_AGE_TICKS (100U) /* 5 ms in the G431 20 kHz ControlTime domain. */
+#define BUS_MAX_AGE_TICKS (100U) /* 在 G431 的 20 kHz ControlTime 时域中为 5 ms。 */
 
 volatile PlatformBringupDebug g_platform_bringup;
 volatile TargetValidationMailbox g_target_validation_request;
@@ -46,7 +46,7 @@ static TargetValidationCurrentStatistics s_statistics;
 static float s_m2_b;
 static float s_m2_c;
 
-/* ADC owns transaction state; other IRQs may only stop it and publish a reason. */
+/* 事务状态仅由 ADC 更新；其他中断只能关断并发布原因。 */
 static volatile bool s_operation_active;
 static volatile bool s_deadline_active;
 static volatile uint32_t s_deadline_cycles;
@@ -123,9 +123,9 @@ static void finish_operation(void)
     g_target_validation.result = g_target_validation_stop_reason;
 }
 
-/* TIM6 is already configured at 1 MHz with a shared DAC IRQ by CubeMX.
- * Only the validation transaction changes its runtime period and starts it.
- * DWT elapsed time does not depend on ADC callbacks or ControlTime increments. */
+/* CubeMX 已将 TIM6 配置为 1 MHz 计数，并与 DAC 共用中断。
+ * 只有验证事务在运行时修改它的周期并启动计数。
+ * DWT 经过时间不依赖 ADC 回调或 ControlTime 递增。 */
 static void guard_timer_start(uint32_t now_cycles, uint32_t duration_us)
 {
     uint32_t primask = __get_PRIMASK();
@@ -165,7 +165,7 @@ void target_validation_guard_irq(void)
     uint32_t now_cycles;
 
     if (((TIM6->SR & TIM_SR_UIF) == 0U) || ((TIM6->DIER & TIM_DIER_UIE) == 0U)) {
-        return; /* Shared DAC interrupt still goes through its generated handler. */
+        return; /* 共用的 DAC 中断仍交给生成代码中的处理函数。 */
     }
     __HAL_TIM_CLEAR_FLAG(&htim6, TIM_FLAG_UPDATE);
     s_guard_irq_count++;
@@ -299,7 +299,7 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
                 result = TARGET_VALIDATION_RESULT_PROBE_REJECTED;
             }
         }
-        (void)trip_healthy(); /* Publish current condition AND sticky episode after idle control. */
+        (void)trip_healthy(); /* 空闲控制操作后，同时发布当前保护条件与尚未恢复的锁存原因。 */
         stop_operation(result);
         g_target_validation.result = (uint32_t)result;
         return;
@@ -531,9 +531,9 @@ static void run_operation(const PhaseCurrentObservation *current,
         ProtectionProbeOutcome outcome;
         uint32_t primask = __get_PRIMASK();
 
-        /* No software MOE write or interrupt handler between threshold change and
-         * captured hardware evidence. Always safe-off BEFORE unmasking, even if
-         * hardware Break fails. The 10 us wait is not a Gate latency measurement. */
+        /* 修改阈值至捕获硬件证据之间，不由软件写 MOE，也不执行中断处理。
+         * 即使硬件 Break 未生效，也必须先 safe-off，再恢复中断。
+         * 10 us 等待不用于测量栅极关断延迟。 */
         __disable_irq();
         outcome = protection_probe_fire();
         stop_operation(outcome == PROTECTION_PROBE_OBSERVED ? TARGET_VALIDATION_RESULT_HARDWARE_TRIP
@@ -647,7 +647,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     s_previous_sample_cycles = entry_cycles;
     s_previous_sample = true;
 
-    /* Retain the original watch ABI; its slow fields remain multi-writer diagnostics. */
+    /* 保留原 Watch ABI；其中的慢观测字段仍是由多个上下文分别更新的诊断数据。 */
     g_platform_bringup.fast_ticks++;
     g_platform_bringup.moe_checks++;
     g_platform_bringup.measured_phases = current->measured_phases;

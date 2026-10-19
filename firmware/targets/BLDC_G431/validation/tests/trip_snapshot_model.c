@@ -1,4 +1,4 @@
-/* Snapshot-only fixture; the getter and its evidence logic are production code. */
+/* 仅供快照测试；读取函数及其证据判断逻辑均使用正式代码。 */
 #include "hardware_trip.h"
 #include "comp.h"
 #include "dac.h"
@@ -16,7 +16,7 @@ volatile uint32_t model_unexpected_calls;
 DAC_HandleTypeDef hdac1;
 DAC_HandleTypeDef hdac3;
 
-/* Link-only initialization substitutes; snapshot tests require zero calls. */
+/* 这些初始化替身仅用于满足链接依赖；快照测试要求其调用次数为零。 */
 HAL_StatusTypeDef HAL_COMP_Start(COMP_HandleTypeDef *handle)
 { (void)handle; model_unexpected_calls++; return HAL_ERROR; }
 HAL_StatusTypeDef HAL_COMP_Stop(COMP_HandleTypeDef *handle)

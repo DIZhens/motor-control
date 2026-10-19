@@ -7,7 +7,7 @@
 #include "tim.h"
 
 #define PROBE_WAIT_CYCLES (10U * 170U)
-#define PROBE_MAX_POLLS (128U) /* Independent bound if CYCCNT stops advancing. */
+#define PROBE_MAX_POLLS (128U) /* CYCCNT 停止递增时，仍以轮询次数限制等待。 */
 #define BREAK_FLAGS (TIM_SR_BIF | TIM_SR_B2IF)
 #define COMP_CONFIG_MASK (COMP_CSR_EN | COMP_CSR_INMSEL | COMP_CSR_INPSEL \
     | COMP_CSR_POLARITY | COMP_CSR_BLANKING)
@@ -88,7 +88,7 @@ bool protection_probe_prepare(ProtectionProbeSource source, uint32_t request_seq
         break;
     case PROTECTION_PROBE_OCP_AB:
         s_threshold = &DAC3->DHR12R2;
-        empty.expected_comp_mask = 10U; /* Shared threshold: both outputs required. */
+        empty.expected_comp_mask = 10U; /* 两个比较器共用阈值，必须同时观察到两路输出。 */
         empty.expected_break_flag = TIM_SR_B2IF;
         break;
     default:
@@ -152,7 +152,7 @@ bool protection_probe_clear(void)
     }
     if (s_held) {
         if (*s_threshold != 0U) {
-            return false; /* Unknown external threshold change: do not overwrite it. */
+            return false; /* 阈值被外部意外改动时，不覆盖该值。 */
         }
         *s_threshold = s_capture.original_code;
         __DSB();

@@ -1,4 +1,4 @@
-/* Peripheral/service substitutes around the actual G431 Realtime Motor I/O. */
+/* 为正式 G431 Realtime Motor I/O 提供外设与服务替身。 */
 #include "realtime_motor_io.h"
 #include "realtime_motor_io_config.h"
 #include "control_time_source.h"
@@ -44,7 +44,7 @@ volatile uint32_t model_timing_result;
 const uint32_t model_timing_capture_size = sizeof(g_target_validation_timing);
 #endif
 
-/* Bits select consumer actions; all operations use only public Platform APIs. */
+/* 用位标志选择采样消费者的动作；所有操作仅调用 Platform 公共 API。 */
 static void sample_ready(void *context, const PhaseCurrentObservation *observation)
 {
     (void)context;
