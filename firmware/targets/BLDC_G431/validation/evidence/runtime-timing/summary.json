@@ -825,5 +825,88 @@
       }
     },
     "project_user_flash_excluded_from_git_blob": true
+  },
+  "ram_placement_trial": {
+    "decision": "收益不足，停止此路线；未修改正式源码、Keil配置或外设配置。",
+    "scope": "只把8个数学热section放到4KB SRAM，既有对象原样重链接。",
+    "files": {
+      "BLDC_G431_Timing.hex": "4fefda7b40f0742f46f5504fcb9cda8a724044bc7df66e17b3b0fb835407e30a",
+      "BLDC_G431_Timing.axf": "3d8661444cfd437038872f5eed28a719906d8e89619593b850ac79331b18309d",
+      "BLDC_G431_Timing.map": "1d673697f8509153ead53d6c4564a2cab42bb52e24beb9f51921b2eecb2d155e"
+    },
+    "hot_code_exec_base": "0x20000000",
+    "hot_code_load_base": "0x0800a2b4",
+    "hot_code_size": 3888,
+    "ram_data_exec_base": "0x20001000",
+    "ram_data_size": 8984,
+    "ram_code_verified_against_axf": true,
+    "one_request": true,
+    "automatic_retry": false,
+    "request_word": 6,
+    "state": 4,
+    "failure": 9,
+    "primary_failure": "firmware:IRQ_BUDGET",
+    "completed_samples": 9,
+    "sink_calls": 10,
+    "real_stage_calls": 0,
+    "enable_attempts": 0,
+    "fast_samples": 9,
+    "speed_updates": 0,
+    "ordinary_min_cycles": 4631,
+    "ordinary_max_cycles": 4693,
+    "ordinary_mean_us": 27.565359477124183,
+    "baseline_ordinary_mean_us": 28.074019607843134,
+    "ordinary_mean_reduction_percent": 1.8118535850022877,
+    "failed_speed_call_cycles": 5258,
+    "failed_irq_marker_cycles": 8929,
+    "post_health": {
+      "coherent": true,
+      "words": {
+        "guard_before": 0,
+        "bdtr_before": 50344960,
+        "cpu_before": 16842752,
+        "seq_before": 474,
+        "seq_after": 474,
+        "request": 6,
+        "active": 0,
+        "guard_after": 0,
+        "bdtr_after": 50344960,
+        "cpu_after": 16842752
+      },
+      "health": {
+        "schema_version": 1,
+        "sample_count": 46902,
+        "time_low": 46902,
+        "time_high": 0,
+        "last_sample_cycles": 2835342312,
+        "last_sample_interval_cycles": 8532,
+        "faults": 0,
+        "guard_trips": 0,
+        "drive_started": 1,
+        "current_valid": 1,
+        "power_disabled": 1,
+        "bus_valid": 1,
+        "bus_voltage_v": 2.6487815380096436,
+        "position_valid": 0,
+        "permitted": 0,
+        "reserved": 0
+      },
+      "issues": [
+        "缺少计时健康许可：permitted",
+        "缺少计时健康许可：position_valid"
+      ],
+      "time": 46902,
+      "sample_count": 46902,
+      "request": 6
+    },
+    "limits": [
+      "对比为12拍与9拍的有限普通样本，不是最坏时间或稳定加速比。",
+      "第10次计算的IRQ USER区间8929 cycles超50us，失败拍不纳入成功分类。",
+      "SSI位置再次失效，窗口未满80；不补发、不复位掩盖终态。",
+      "这次仅改变执行地址，约1.8%收益不支持继续扩展该优化路线。"
+    ],
+    "raw_result_sha256": "f7432c9cceffdb98a6776e6688bfa711765a8004e416372d04f3c58f3c586ba6",
+    "current_board_hex": "4fefda7b40f0742f46f5504fcb9cda8a724044bc7df66e17b3b0fb835407e30a",
+    "current_board_entry": "一次对比用RAM放置Timing镜像；失败结果冻结、CPU和采样推进、MOE0/guard0/入口faults0，位置许可无效。"
   }
 }
