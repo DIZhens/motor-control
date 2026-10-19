@@ -281,6 +281,15 @@ class CubeBackend:
         self.transport_write_attempted = False
         self.counter = 0
 
+    def allowed_read(self, address, size, words=False):
+        if type(address) is not int or type(size) is not int or size <= 0:
+            return False
+        ram_or_register = (RAM_START <= address < address + size <= RAM_END
+                           or (address, size) in [(self.layout["bdtr"], 4), (DHCSR, 4)])
+        if words:
+            return ram_or_register and address % 4 == size % 4 == 0
+        return ram_or_register or FLASH_START <= address < address + size <= FLASH_START + FLASH_SIZE
+
     def execute(self, arguments, tag, timeout_s):
         require(timeout_s > 0.0, "采集等待已超时")
         log_file = self.output / (tag + ".log")
@@ -291,35 +300,92 @@ class CubeBackend:
                     and 0 < int(arguments[2], 0) <= 0xFFFFFFFF,
                     "传输层拒绝非单次 request 单字写入")
             self.transport_write_attempted = True
+        elif arguments and arguments[0] == "-r32":
+            require(len(arguments) % 3 == 0, "快速读取参数不完整")
+            for index in range(0, len(arguments), 3):
+                require(arguments[index] == "-r32" and re.fullmatch(r"0x[0-9a-fA-F]+", arguments[index + 1]) is not None
+                        and re.fullmatch(r"[0-9]+", arguments[index + 2]) is not None,
+                        "快速读取只允许 -r32 地址 字节数")
+                require(self.allowed_read(int(arguments[index + 1], 16), int(arguments[index + 2]), words=True),
+                        "快速读取只允许对齐 SRAM 或指定只读寄存器，禁止 Flash")
         else:
             require(bool(arguments) and len(arguments) % 4 == 0
                     and all(arguments[index] == "-u" for index in range(0, len(arguments), 4)),
-                    "传输层只允许原始上传或一次 request 写入，拒绝复位、烧录及其他命令")
+                    "传输层只允许只读上传、快速读取或一次 request 写入，拒绝复位和烧录")
+            for index in range(0, len(arguments), 4):
+                require(re.fullmatch(r"0x[0-9a-fA-F]+", arguments[index + 1]) is not None
+                        and re.fullmatch(r"[0-9]+", arguments[index + 2]) is not None
+                        and self.allowed_read(int(arguments[index + 1], 16), int(arguments[index + 2]))
+                        and Path(arguments[index + 3]).resolve().parent == self.output.resolve()
+                        and Path(arguments[index + 3]).suffix == ".bin",
+                        "上传读取地址不在白名单")
         process = subprocess.run([str(self.cli), "-c", "port=SWD", "mode=HOTPLUG", "freq=4000",
                                   *arguments, "-score"], capture_output=True, timeout=timeout_s)
         message = (process.stdout + process.stderr).decode("utf-8", errors="replace")
         with log_file.open("x", encoding="utf-8") as stream:
             stream.write(message)
-        require(process.returncode == 0 and "Error:" not in message, "SWD 操作失败：" + message)
+        require(process.returncode == 0 and re.search(r"\bError\s*:", message, re.I) is None, "SWD 操作失败：" + message)
         require(re.search(r"Device ID\s*:\s*0x468\b", message) is not None, "连接的芯片不是 G431")
         require("Core is running" in message, "CPU 没有保持运行")
+        return message
+
+    @staticmethod
+    def parse_read32(message, blocks):
+        """严格绑定每段标题、字节数、起址及连续十六进制字；不接受额外块或残缺行。"""
+        sections = re.split(r"(?mi)^\s*Reading 32-bit memory content\s*$", message.replace("\r", ""))
+        require(len(sections) == len(blocks) + 1, "快速读取区块数量不符")
+        require(re.search(r"(?m)^\s*0x", sections[0]) is None, "快速读取包含标题前的额外数据")
+        result = {}
+        for (name, address, size), section in zip(blocks, sections[1:]):
+            sizes = re.findall(r"(?m)^\s*Size\s*:\s*(\d+) Bytes\s*$", section)
+            addresses = re.findall(r"(?m)^\s*Address\s*:\s*:?\s*(0x[0-9a-fA-F]+)\s*$", section)
+            require(len(re.findall(r"(?m)^\s*Size\b.*$", section)) == 1
+                    and len(re.findall(r"(?m)^\s*Address\b.*$", section)) == 1
+                    and len(sizes) == len(addresses) == 1 and int(sizes[0]) == size and int(addresses[0], 16) == address,
+                    "快速读取 Size/Address 与请求不符")
+            data = bytearray()
+            for line in section.splitlines():
+                if re.match(r"^\s*0x", line) is None:
+                    continue
+                row = re.fullmatch(r"\s*(0x[0-9a-fA-F]{8})\s*:\s*([0-9a-fA-F]{8}(?:\s+[0-9a-fA-F]{8}){0,3})\s*", line)
+                require(row is not None, "快速读取数据行格式非法")
+                require(int(row[1], 16) == address + len(data), "快速读取数据地址不连续")
+                words = row[2].split()
+                require(len(data) + 4 * len(words) <= size, "快速读取包含超出请求的字")
+                data.extend(struct.pack("<" + "I" * len(words), *(int(value, 16) for value in words)))
+            require(len(data) == size, "快速读取缺少完整数据行")
+            result[name] = bytes(data)
+        return result
 
     def read(self, blocks, tag, timeout_s=20.0):
+        blocks = list(blocks)
+        return self._read_blocks(blocks, tag, timeout_s,
+                                 bool(blocks) and all(self.allowed_read(address, size, words=True) for _, address, size in blocks))
+
+    def read32(self, blocks, tag, timeout_s=20.0):
+        """仅对齐 SRAM/寄存器的连续控制台读取；Flash 保持原始上传。"""
+        return self._read_blocks(list(blocks), tag, timeout_s, True)
+
+    def _read_blocks(self, blocks, tag, timeout_s, fast32):
         self.counter += 1
         tag = f"{self.counter:03d}-" + tag
         arguments, destinations = [], {}
+        require(bool(blocks), "读取块不能为空")
         for name, address, size in blocks:
             require(name not in destinations and re.fullmatch(r"[a-zA-Z0-9_-]+", name), "读取块名称重复或非法")
-            require(type(address) is int and type(size) is int and size > 0 and
-                    (FLASH_START <= address < address + size <= FLASH_START + FLASH_SIZE
-                     or RAM_START <= address < address + size <= RAM_END
-                     or (address, size) in [(self.layout["bdtr"], 4), (DHCSR, 4)]), "SWD 读取地址不在白名单")
+            require(self.allowed_read(address, size, words=fast32), "SWD 读取地址或对齐不在白名单")
             destination = self.output / (tag + "-" + name + ".bin")
             require(not destination.exists(), "原始证据文件已存在")
             destinations[name] = (destination, size)
-            arguments += ["-u", hex(address), str(size), str(destination)]
-        self.execute(arguments, tag, timeout_s)
-        result = {name: path.read_bytes() for name, (path, _) in destinations.items()}
+            arguments += ["-r32", hex(address), str(size)] if fast32 else ["-u", hex(address), str(size), str(destination)]
+        message = self.execute(arguments, tag, timeout_s)
+        if fast32:
+            result = self.parse_read32(message, blocks)
+            for name, (path, _) in destinations.items():
+                with path.open("xb") as stream:
+                    stream.write(result[name])
+        else:
+            result = {name: path.read_bytes() for name, (path, _) in destinations.items()}
         require(all(len(result[name]) == size for name, (_, size) in destinations.items()), "SWD 原始读取长度不足")
         return result
 

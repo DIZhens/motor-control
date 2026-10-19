@@ -15,6 +15,7 @@
 #include "hardware_trip.h"
 #include "position_observation.h"
 #include "bus_observation.h"
+#include "cordic_math.h"
 
 #define CYCLES_PER_US (170U)
 #define SAMPLE_MIN_US (25U)
@@ -32,12 +33,13 @@ typedef struct {
 } RuntimePublication;
 
 volatile uint32_t g_target_runtime_guard_faults;
+volatile uint32_t g_target_runtime_irq_entries[8];
 volatile uint32_t g_target_runtime_current_request;
 volatile uint32_t g_target_runtime_current_sequence;
 volatile ObserveCurrentCaptureResult g_target_runtime_current_capture;
 volatile uint32_t g_target_runtime_compute_request;
 volatile uint32_t g_target_runtime_compute_sequence;
-volatile ObserveComputeProbeResult g_target_runtime_compute_result;
+volatile ObserveComputeComparisonResult g_target_runtime_compute_result;
 
 /* 启动阶段在时基开启前写入；运行后仅由 sample_ready 更新 Motor。 */
 static Motor s_motor;
@@ -70,7 +72,9 @@ static ObserveCurrentCapture s_current_capture;
 static uint32_t s_current_request_seen;
 
 /* 计时诊断只由后台写入，ADC 与 guard 不修改实例或结果。 */
-static ObserveComputeProbe s_compute_probe;
+static ObserveComputeComparison s_compute_probe;
+static G431CordicMath s_cordic_math;
+static bool s_cordic_ready;
 static uint32_t s_compute_request_seen;
 static bool s_compute_stop_this_service; /* 同轮收到 Stop 后，即使 ADC 已消费也不接受计时请求。 */
 
@@ -327,7 +331,10 @@ void target_runtime_start(void)
         return;
     }
     s_attempted = true;
-    observe_compute_probe_init(&s_compute_probe);
+    observe_compute_comparison_init(&s_compute_probe);
+    /* 每个异常槽位只有该 handler 写入，嵌套 IRQ 不会覆盖另一路计数。 */
+    memset((void *)g_target_runtime_irq_entries, 0, sizeof(g_target_runtime_irq_entries));
+    s_cordic_ready = g431_cordic_math_init(&s_cordic_math);
     g_target_runtime_compute_request = 0U;
     g_target_runtime_compute_sequence = 0U;
     s_compute_request_seen = 0U;
@@ -428,15 +435,37 @@ static bool compute_probe_permitted(void)
     return (uint32_t)(now - last_sample) <= SAMPLE_MAX_US * CYCLES_PER_US;
 }
 
-static bool compute_probe_clock(void *context, uint32_t *cycles)
+static uint32_t compute_probe_irq_sum(void)
 {
+    uint32_t index, sum = 0U;
+    for (index = 0U; index < 8U; index++) {
+        sum += g_target_runtime_irq_entries[index];
+    }
+    return sum;
+}
+
+static bool compute_probe_stamp(void *context, ObserveComputeProbeStamp *stamp)
+{
+    uint32_t before, after, cycles, attempt;
     (void)context;
     if (((CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) == 0U)
         || ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) == 0U)) {
         return false;
     }
-    *cycles = DWT->CYCCNT;
-    return true;
+    /* 不关中断。计数夹住 cycle 读取，若被抢占只重取瞬时边界，最多三次。 */
+    for (attempt = 0U; attempt < 3U; attempt++) {
+        before = compute_probe_irq_sum();
+        __DMB();
+        cycles = DWT->CYCCNT;
+        __DMB();
+        after = compute_probe_irq_sum();
+        if (before == after) {
+            stamp->cycles = cycles;
+            stamp->irq_entries = after;
+            return true;
+        }
+    }
+    return false;
 }
 
 /* 每轮后台至多执行一个固定算例；结果仅发布诊断，不提交 duty 或开放许可。 */
@@ -448,17 +477,18 @@ static void service_compute_probe(void)
     if ((request != 0U) && (request != s_compute_request_seen)) {
         s_compute_request_seen = request;
         permitted = compute_probe_permitted();
-        (void)observe_compute_probe_start(&s_compute_probe, request,
-            SystemCoreClock, 200U * CYCLES_PER_US, permitted);
+        (void)observe_compute_comparison_start(&s_compute_probe, request,
+            SystemCoreClock, 200U * CYCLES_PER_US, permitted && s_cordic_ready,
+            g431_cordic_sincos, &s_cordic_math);
         publish_compute_probe();
     }
     if (s_compute_probe.result.state != OBSERVE_COMPUTE_PROBE_ACTIVE) {
         return;
     }
     permitted = compute_probe_permitted();
-    (void)observe_compute_probe_step(&s_compute_probe, permitted, compute_probe_clock, NULL);
+    (void)observe_compute_comparison_step(&s_compute_probe, permitted, compute_probe_stamp, NULL);
     if (!compute_probe_permitted()) {
-        (void)observe_compute_probe_revoke(&s_compute_probe);
+        (void)observe_compute_comparison_revoke(&s_compute_probe);
     }
     /* ACTIVE 中的统计保持私有；开始/终态才发布，避免采集端读到半份统计。 */
     if (s_compute_probe.result.state != OBSERVE_COMPUTE_PROBE_ACTIVE) {
@@ -492,7 +522,7 @@ static void enqueue(const VofaCommand *request, bool rejected)
     restore_interrupts(primask);
     /* Stop 可能已被高优先级 ADC 消费并清掉 pending；在同一后台直接取消诊断。 */
     if (!rejected && (request->type == VOFA_COMMAND_STOP)
-        && observe_compute_probe_abort(&s_compute_probe, OBSERVE_COMPUTE_PROBE_FAILURE_ABORTED)) {
+        && observe_compute_comparison_abort(&s_compute_probe, OBSERVE_COMPUTE_PROBE_FAILURE_ABORTED)) {
         publish_compute_probe();
     }
 }

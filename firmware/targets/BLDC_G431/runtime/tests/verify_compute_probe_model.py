@@ -112,6 +112,28 @@ with tempfile.TemporaryDirectory(prefix="observe-compute-probe-") as directory:
             return struct.unpack("<3f", self.cpu.mem_read(symbols["model_integrals"], 12))
 
         @property
+        def segment_statistics(self):
+            words = self.integers("model_segment_words", 6 * 6 * 7)
+            return [[words[(case * 6 + segment) * 7:(case * 6 + segment + 1) * 7]
+                     for segment in range(6)] for case in range(6)]
+
+        @property
+        def segment_sums(self):
+            words = struct.unpack("<72Q", self.cpu.mem_read(symbols["model_segment_sums"], 576))
+            return [[words[(case * 6 + segment) * 2:(case * 6 + segment + 1) * 2]
+                     for segment in range(6)] for case in range(6)]
+
+        @property
+        def case_phasors(self):
+            words = struct.unpack("<24f", self.cpu.mem_read(symbols["model_case_phasors"], 96))
+            return [words[index:index + 4] for index in range(0, 24, 4)]
+
+        @property
+        def accepted_statistics(self):
+            return (self.statistics, self.sums, self.duties, self.case_phasors,
+                    self.segment_statistics, self.segment_sums)
+
+        @property
         def snapshot(self):
             return bytes(self.cpu.mem_read(symbols["model_probe"], sizes["model_probe"]))
 
@@ -126,6 +148,21 @@ with tempfile.TemporaryDirectory(prefix="observe-compute-probe-") as directory:
                                 ("model_permitted", int(permitted)), ("model_clock_fail_read", fail_read)]:
                 self.write(name, value)
             return self.call("model_step")
+
+        def profile(self, cycles=None, irqs=None, permitted=True, fail_read=0, trig_mode=0,
+                    entry="model_step_profiled"):
+            if cycles is None:
+                cycles = [100 + 10 * index for index in range(16)]
+            if irqs is None:
+                irqs = [0] * 16
+            self.cpu.mem_write(symbols["model_stamp_cycles"], struct.pack("<16I", *cycles))
+            self.cpu.mem_write(symbols["model_stamp_irqs"], struct.pack("<16I", *irqs))
+            self.write("model_permitted", int(permitted))
+            self.write("model_clock_fail_read", fail_read)
+            self.write("model_trig_mode", trig_mode)
+            result = self.call(entry)
+            assert self.integers("model_early_stats_write", 1) == (0,)
+            return result
 
         def abort(self, reason=ABORTED):
             self.write("model_reason", reason)
@@ -325,6 +362,158 @@ with tempfile.TemporaryDirectory(prefix="observe-compute-probe-") as directory:
     model.expect(0, IDLE)
     assert model.statistics == [(0,) * 6] * 6 and model.sums == (0,) * 6
     passed("独立实例不共享算法历史或结果，显式init完整清空")
+
+    def segment_reads(case):
+        # 独立指定每例实际经过的测量边界，不从正式 C 的 mask 或结构体反推。
+        if case == 4:
+            return {0: (0, 3), 1: (1, 2)}
+        if case == 2:
+            return {0: (0, 11), 1: (1, 2), 2: (3, 4), 3: (5, 6),
+                    4: (7, 8), 5: (9, 10)}
+        return {0: (0, 9), 1: (1, 2), 2: (3, 4), 4: (5, 6), 5: (7, 8)}
+
+    def expected_timing(samples):
+        elapsed = [item[0] for item in samples]
+        clean = [item[0] for item in samples if item[1] == 0]
+        words = (len(elapsed), min(elapsed, default=0), max(elapsed, default=0),
+                 len(clean), min(clean, default=0), max(clean, default=0),
+                 sum(item[1] for item in samples))
+        return words, (sum(elapsed), sum(clean))
+
+    model, legacy = Model(), Model()
+    assert model.start(101) and legacy.start(101)
+    expected_segments = [[[] for _ in range(6)] for _ in range(6)]
+    for index in range(96):
+        case, round_index = index % 6, index // 6
+        mapping = segment_reads(case)
+        stride = 10 + round_index
+        cycles = [1000 + item * stride for item in range(16)]
+        irqs = [20 + (item // 3 if round_index % 2 else 0) for item in range(16)]
+        assert model.profile(cycles, irqs) == (index == 95)
+        assert legacy.step(100, 100 + cycles[mapping[0][1]] - cycles[0]) == (index == 95)
+        model.expect(101, COMPLETE if index == 95 else ACTIVE, NONE, index + 1, (case + 1) % 6)
+        assert model.words[7] == mapping[0][1] + 1
+        assert model.statistics == legacy.statistics and model.sums == legacy.sums
+        assert model.duties == legacy.duties and model.integrals == legacy.integrals
+        assert model.case_phasors == legacy.case_phasors
+        assert model.integers("model_trig_calls", 1)[0] == (0 if case == 4 else 2 if case == 2 else 1)
+        for segment, (begin, end) in mapping.items():
+            expected_segments[case][segment].append((cycles[end] - cycles[begin],
+                                                     irqs[end] - irqs[begin]))
+        for segment in range(6):
+            expected_words, expected_sums = expected_timing(expected_segments[case][segment])
+            assert model.segment_statistics[case][segment] == expected_words
+            assert model.segment_sums[case][segment] == expected_sums
+        if case != 4 and case != 2:
+            assert model.case_phasors[case][:2] == model.case_phasors[case][2:]
+        if case == 4:
+            assert model.case_phasors[case] == (0.0,) * 4
+    assert model.case_phasors[2][:2] != model.case_phasors[2][2:]
+    assert all(item == (0,) * 7 for row in legacy.segment_statistics for item in row)
+    before = model.snapshot
+    assert not model.profile(permitted=False, fail_read=1)
+    assert model.words[7] == 0 and model.snapshot == before
+    passed("分段96步与旧路径正式算法/轮转输入逐位一致；各段独立总和、clean统计、跳过段和冻结正确")
+
+    model = Model()
+    assert model.start()
+    cycles = [(0xFFFFFFF0 + index * 10) & 0xFFFFFFFF for index in range(16)]
+    irqs = [0xFFFFFFFE, 0xFFFFFFFE, 1] + [1] * 13
+    assert not model.profile(cycles, irqs)
+    assert model.segment_statistics[0][0] == (1, 90, 90, 0, 0, 0, 3)
+    assert model.segment_statistics[0][1] == (1, 10, 10, 0, 0, 0, 3)
+    assert model.segment_statistics[0][2] == (1, 10, 10, 1, 10, 10, 0)
+    assert model.segment_sums[0][0] == (90, 0)
+    model = Model()
+    assert model.start()
+    # IRQ 恰在两段之间进入：总段为受抢占样本，各算法段仍各自 clean。
+    irqs = [8] + [9] * 15
+    assert not model.profile(irqs=irqs)
+    assert model.segment_statistics[0][0][3:] == (0, 0, 0, 1)
+    assert all(model.segment_statistics[0][segment][3:] == (1, 10, 10, 0)
+               for segment in [1, 2, 4, 5])
+    passed("cycle与IRQ进入计数各自32位回绕正确；边界间抢占只影响独立total，不靠分段相减推估")
+
+    for fail_read in range(1, 13):
+        model = Model()
+        assert model.start()
+        assert not model.profile() and not model.profile()
+        before = model.accepted_statistics
+        assert model.profile(fail_read=fail_read)
+        model.expect(state=FAILED, failure=CLOCK, count=2, next_case=2)
+        assert model.accepted_statistics == before
+        expected_calls = 1 if fail_read == 1 else min(12, fail_read + 1)
+        assert model.words[7] == expected_calls
+        before = model.snapshot
+        assert not model.profile() and model.words[7] == 0 and model.snapshot == before
+    for segment, (_, end) in segment_reads(2).items():
+        for invalid in ["zero", "beyond", "backward"]:
+            model = Model()
+            assert model.start() and not model.profile() and not model.profile()
+            before = model.accepted_statistics
+            cycles = [100 + index * 10 for index in range(16)]
+            begin = segment_reads(2)[segment][0]
+            cycles[end] = (cycles[begin] + {"zero": 0, "beyond": 20001,
+                                          "backward": -1}[invalid]) & 0xFFFFFFFF
+            assert model.profile(cycles)
+            model.expect(state=FAILED, failure=CLOCK, count=2, next_case=2)
+            assert model.accepted_statistics == before
+    model = Model()
+    assert model.start() and model.profile(entry="model_step_profiled_null_stamp")
+    model.expect(state=FAILED, failure=CLOCK)
+    assert model.words[7] == 0
+    passed("双角12个读取边界逐一失败及各段零/倒退/超界均CLOCK；total末读前无写入且失败无部分统计")
+
+    model = Model()
+    assert model.start() and not model.profile()
+    before = model.accepted_statistics
+    assert model.profile(permitted=False)
+    model.expect(state=FAILED, failure=NOT_READY, count=1, next_case=1)
+    assert model.words[7] == 0 and model.accepted_statistics == before
+    for entry, mode in [("model_step_profiled_null_trig", 0), ("model_step_profiled", 1),
+                        ("model_step_profiled", 2)]:
+        model = Model()
+        assert model.start() and not model.profile()
+        before = model.accepted_statistics
+        assert model.profile(trig_mode=mode, entry=entry)
+        model.expect(state=FAILED, failure=ALGORITHM, count=1, next_case=1)
+        assert model.accepted_statistics == before
+        assert model.words[7] == 8
+    model = Model()
+    assert model.start() and not model.profile()
+    before = model.accepted_statistics
+    model.call("model_corrupt_current")
+    assert model.profile()
+    model.expect(state=FAILED, failure=ALGORITHM, count=1, next_case=1)
+    assert model.words[7] == 10 and model.accepted_statistics == before
+    passed("许可撤销零读取；NULL/拒绝/非单位三角后端及真实控制器失败保留已接受统计并锁存首因")
+
+    model = Model()
+    assert model.start(maximum=0x7FFFFFFF)
+    for index in range(96):
+        case = index % 6
+        mapping = segment_reads(case)
+        cycles = [0] * 16
+        cursor = 1
+        for segment, (begin, end) in mapping.items():
+            if segment == 0:
+                continue
+            cycles[begin] = cursor
+            cycles[end] = cursor + 400000000
+            cursor = cycles[end] + 1
+        cycles[mapping[0][1]] = cursor
+        assert model.profile(cycles) == (index == 95)
+    assert all(model.segment_sums[case][segment][0] > 0xFFFFFFFF
+               for case in range(6) for segment in segment_reads(case))
+    assert all(total == clean for row in model.segment_sums for total, clean in row)
+    model = Model()
+    assert model.start(141) and not model.profile()
+    before = model.snapshot
+    assert model.call("model_second_profiled") and model.snapshot == before
+    model.call("model_init")
+    assert all(item == (0,) * 7 for row in model.segment_statistics for item in row)
+    assert all(item == (0, 0) for row in model.segment_sums for item in row)
+    passed("分段与clean总和均保留超过32位的结果；双独立probe不串状态，init清完整附加统计")
 
 for index, name in enumerate(CASES, 1):
     print(f"PASS {index}: {name}")

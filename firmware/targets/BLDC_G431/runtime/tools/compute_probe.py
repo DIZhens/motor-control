@@ -1,4 +1,4 @@
-"""Observe 后台算法耗时诊断；默认只离线核对，显式 --measure 才写一次请求。"""
+"""Observe 软件与 CORDIC 后台对照；默认只离线核对，显式 --measure 才写一次请求。"""
 
 import argparse
 from dataclasses import dataclass
@@ -20,26 +20,39 @@ from current_capture import (CubeBackend, DEFAULT_CLI, DEFAULT_GDB, DHCSR, FLASH
 
 CASE_NAMES = ["普通计算", "速度输出保持", "独立施加角", "电流电压限幅", "坏电流拒绝", "坏母线拒绝"]
 CASE_COUNT, ITERATIONS, CLOCK_HZ, MAX_ELAPSED = 6, 16, 170000000, 34000
-RESULT_FIELDS = {"request_sequence": "I", "state": "I", "failure": "I", "clock_hz": "I",
+SEGMENT_NAMES = ["总计", "电流预处理", "测量角", "施加角", "速度更新或保持", "电流控制"]
+ERROR_FIELDS = ["max_sine_error", "max_cosine_error", "max_norm_error", "max_phasor_error", "max_duty_error"]
+TIMING_FIELDS = {"count": "I", "min_cycles": "I", "max_cycles": "I", "sum_cycles": "Q",
+                 "clean_count": "I", "clean_min_cycles": "I", "clean_max_cycles": "I",
+                 "clean_sum_cycles": "Q", "irq_entries": "I"}
+PROBE_FIELDS = {"request_sequence": "I", "state": "I", "failure": "I", "clock_hz": "I",
                  "max_elapsed_cycles": "I", "completed_steps": "I", "next_case": "I"}
 for index in range(CASE_COUNT):
-    RESULT_FIELDS.update({f"cases[{index}].{field}": fmt for field, fmt in {
+    PROBE_FIELDS.update({f"cases[{index}].{field}": fmt for field, fmt in {
         "count": "I", "min_cycles": "I", "max_cycles": "I", "sum_cycles": "Q",
         "last_duty[0]": "f", "last_duty[1]": "f", "last_duty[2]": "f",
         "last_output_valid": "B", "last_voltage_limited": "B", "last_speed_limited": "B"}.items()})
+    PROBE_FIELDS.update({f"cases[{index}].last_phasor[{component}]": "f" for component in range(4)})
+    for segment in range(6):
+        PROBE_FIELDS.update({f"cases[{index}].segments[{segment}].{field}": fmt for field, fmt in TIMING_FIELDS.items()})
+RESULT_FIELDS = {"schema_version": "I", "request_sequence": "I", "state": "I", "failure": "I",
+                 "completed_steps": "I", "sweep_count": "I", **{field: "f" for field in ERROR_FIELDS}}
+for backend in ["software", "cordic"]:
+    RESULT_FIELDS.update({backend + "." + field: fmt for field, fmt in PROBE_FIELDS.items()})
 PUBLICATION_FIELDS = {
     "snapshot.control_time_ticks": "Q", "snapshot.control_time_ticks_per_second": "I",
     "snapshot.state": "I", "snapshot.faults": "I", "snapshot.bus_voltage_v": "f",
     "snapshot.status_valid": "B", "snapshot.control_time_valid": "B",
     "snapshot.bus_voltage_valid": "B", "has_sample": "B", "compute_probe_permitted": "B"}
-ENUM_FIELDS = {"result.state", "result.failure", "publication.snapshot.state"}
+ENUM_FIELDS = {"result.state", "result.failure", "publication.snapshot.state",
+               "result.software.state", "result.software.failure", "result.cordic.state", "result.cordic.failure"}
 SYMBOLS = {"request": "g_target_runtime_compute_request", "sequence": "g_target_runtime_compute_sequence",
            "result": "g_target_runtime_compute_result", "guard": "g_target_runtime_guard_faults",
            "publication_sequence": "s_publication_sequence", "publication": "s_publication"}
 EXPECTED_ENUMS = {"MOTOR_STATE_IDLE": 1, "OBSERVE_COMPUTE_PROBE_IDLE": 0,
                   "OBSERVE_COMPUTE_PROBE_ACTIVE": 1, "OBSERVE_COMPUTE_PROBE_COMPLETE": 2,
                   "OBSERVE_COMPUTE_PROBE_FAILED": 3, "OBSERVE_COMPUTE_PROBE_FAILURE_NONE": 0}
-LIMITS = ["独立合成算法状态，诊断 duty 未提交硬件。", "读数包含测量开销和中断抢占。",
+LIMITS = ["独立合成算法状态，诊断 duty 未提交硬件。", "总读数包含测量开销和中断抢占；clean 只表示所覆盖 IRQ 进入计数未变化。",
           "不是完整快环 ISR 时间或 WCET，也不证明 stage 截止通过。",
           "不改变实物电流、电角度或时序标定许可，不授权功率输出。"]
 
@@ -62,8 +75,8 @@ def layout_spec():
     for key, name in SYMBOLS.items():
         spec[key], spec[key + "_size"] = "&" + name, "sizeof(" + name + ")"
     spec["bdtr"] = f"&((TIM_TypeDef*){TIM1_BASE})->BDTR"
-    spec["case_count"] = "sizeof(((ObserveComputeProbeResult*)0)->cases)/sizeof(ObserveComputeProbeCaseResult)"
-    for prefix, type_name, fields in [("result", "ObserveComputeProbeResult", RESULT_FIELDS),
+    spec["case_count"] = "sizeof(((ObserveComputeComparisonResult*)0)->software.cases)/sizeof(ObserveComputeProbeCaseResult)"
+    for prefix, type_name, fields in [("result", "ObserveComputeComparisonResult", RESULT_FIELDS),
                                       ("publication", "RuntimePublication", PUBLICATION_FIELDS)]:
         for field in fields:
             expression = f"(({type_name}*)0)->{field}"
@@ -104,9 +117,12 @@ def validate_layout(layout):
 def derive_layout(axf, gdb, output):
     require(gdb.is_file(), "找不到离线 ARM GDB")
     spec = layout_spec()
-    arguments = [str(gdb), "-nx", "-batch", "-ex", 'file "' + axf.as_posix() + '"']
-    for expression in spec.values():
-        arguments += ["-ex", "p/x (unsigned int)(" + expression + ")"]
+    # 两后端分段字段较多；使用离线批文件，避免超过 Windows 命令行长度上限。
+    commands = output / "layout-gdb.commands"
+    with commands.open("x", encoding="utf-8") as stream:
+        stream.write('file "' + axf.as_posix() + '"\n')
+        stream.writelines("p/x (unsigned int)(" + expression + ")\n" for expression in spec.values())
+    arguments = [str(gdb), "-nx", "-batch", "-x", str(commands)]
     process = subprocess.run(arguments, capture_output=True, text=True, timeout=20)
     with (output / "layout-gdb.log").open("x", encoding="utf-8") as stream:
         stream.write(process.stdout + process.stderr)
@@ -197,6 +213,7 @@ def read_result(backend, layout, tag, timeout_s=20.0, clock=time.monotonic):
         version = word(raw["seq_before"])
         if version == word(raw["seq_after"]) and version % 2 == 0:
             result = decode(raw["result"], "result", RESULT_FIELDS, layout)
+            require(result["schema_version"] == 1, "结果 schema 版本不符，禁止按旧单后端布局解释")
             require(result["state"] in range(4) and result["failure"] in range(6), "结果状态或失败原因非法")
             return result, raw["result"], version
     raise RuntimeError("结果三次只读复核未取得一致版本")
@@ -209,7 +226,7 @@ def read_health(backend, layout, conditions, tag, timeout_s=20.0, clock=time.mon
               ("pub_after", layout["publication_sequence"], 4), ("request", layout["request"], 4),
               ("guard_after", layout["guard"], 4), ("bdtr_after", layout["bdtr"], 4), ("cpu_after", DHCSR, 4)]
     deadline = clock() + timeout_s
-    for attempt in range(3):
+    for attempt in range(8):
         require(clock() < deadline, "健康只读复核超时")
         raw = backend.read(blocks, tag if attempt == 0 else tag + f"-coherent-{attempt + 1}", deadline - clock())
         for suffix in ["before", "after"]:
@@ -219,8 +236,11 @@ def read_health(backend, layout, conditions, tag, timeout_s=20.0, clock=time.mon
         version = word(raw["pub_before"])
         if version == word(raw["pub_after"]) and version % 2 == 0:
             break
+        # 发布每 10 ms 更新；只读冲突短暂错开相位，避免 USB 读周期持续撞上同一边界。
+        if attempt < 7:
+            time.sleep(min(0.001 * (attempt + 1), max(0.0, deadline - clock())))
     else:
-        raise RuntimeError("健康快照三次只读复核未取得一致版本")
+        raise RuntimeError("健康快照八次只读复核未取得一致版本")
     publication = decode(raw["publication"], "publication", PUBLICATION_FIELDS, layout)
     require(all(publication[field] == 1 for field in ["snapshot.status_valid", "snapshot.control_time_valid",
                                                     "snapshot.bus_voltage_valid", "has_sample", "compute_probe_permitted"]),
@@ -234,7 +254,36 @@ def read_health(backend, layout, conditions, tag, timeout_s=20.0, clock=time.mon
             "bus_voltage_v": bus, "request": word(raw["request"])}
 
 
-def validate_complete(result):
+def timing_summary(values, expected_count):
+    count, low, high, total = (values[field] for field in ["count", "min_cycles", "max_cycles", "sum_cycles"])
+    clean_count = values["clean_count"]
+    clean_low, clean_high, clean_sum = (values[field] for field in ["clean_min_cycles", "clean_max_cycles", "clean_sum_cycles"])
+    require(count == expected_count and 0 <= clean_count <= count, "分段或 clean 次数不符")
+    def consistent(n, minimum, maximum, summed):
+        if n == 0:
+            return minimum == maximum == summed == 0
+        return (0 < minimum <= maximum <= MAX_ELAPSED and n * minimum <= summed <= n * maximum
+                and (minimum == maximum or n >= 2 and (n - 1) * minimum + maximum <= summed <= (n - 1) * maximum + minimum))
+    require(consistent(count, low, high, total) and consistent(clean_count, clean_low, clean_high, clean_sum),
+            "分段或 clean 极值/总和不自洽")
+    require((values["irq_entries"] == 0) == (clean_count == count)
+            and values["irq_entries"] >= count - clean_count, "IRQ 与 clean 次数不自洽")
+    if clean_count:
+        require(low <= clean_low <= clean_high <= high, "clean 极值超出完整样本范围")
+    require((count - clean_count) * low <= total - clean_sum <= (count - clean_count) * high,
+            "clean 总和与完整样本不自洽")
+    if clean_count == count:
+        require((low, high, total) == (clean_low, clean_high, clean_sum), "全部 clean 时两套统计必须相同")
+    def converted(n, minimum, maximum, summed):
+        return {"count": n, "min_us": minimum * 1e6 / CLOCK_HZ if n else None,
+                "mean_us": summed / n * 1e6 / CLOCK_HZ if n else None,
+                "max_us": maximum * 1e6 / CLOCK_HZ if n else None}
+    return {**values, "all": converted(count, low, high, total),
+            "clean": converted(clean_count, clean_low, clean_high, clean_sum)}
+
+
+def validate_probe(result, request):
+    require(result["request_sequence"] == request, "内外层请求身份不符")
     require(result["state"] == 2 and result["failure"] == 0 and result["completed_steps"] == CASE_COUNT * ITERATIONS
             and result["next_case"] == 0, "计时没有完整成功或固定 96 步不完整")
     require(result["clock_hz"] == CLOCK_HZ and result["max_elapsed_cycles"] == MAX_ELAPSED, "计时频率或单例上界不符")
@@ -256,11 +305,49 @@ def validate_complete(result):
         require(all(math.isfinite(value) and 0.0 <= value <= 1.0 for value in duties), "诊断 duty 非法")
         if index >= 4:
             require(duties == [0.5] * 3 and values["last_voltage_limited"] == 0, "拒绝路径未保留中性无效输出")
+        phasor = [result[f"cases[{index}].last_phasor[{component}]"] for component in range(4)]
+        require(all(math.isfinite(value) and abs(value) <= 1.00002 for value in phasor), "诊断相量非法")
+        segments = []
+        for segment, segment_name in enumerate(SEGMENT_NAMES):
+            expected = ITERATIONS if segment in ([0, 1] if index == 4 else [0, 1, 2, 4, 5] + ([3] if index == 2 else [])) else 0
+            timing = {field: result[f"cases[{index}].segments[{segment}].{field}"] for field in TIMING_FIELDS}
+            summary = timing_summary(timing, expected)
+            summary["name"] = segment_name
+            segments.append(summary)
+        require(all(values[field] == segments[0][field] for field in ["count", "min_cycles", "max_cycles", "sum_cycles"]),
+                "total 与兼容算例统计不一致")
         values.update(name=name, mean_cycles=total / count, min_us=low * 1e6 / CLOCK_HZ,
                       mean_us=total / count * 1e6 / CLOCK_HZ, max_us=high * 1e6 / CLOCK_HZ,
-                      last_duty=duties)
+                      last_duty=duties, last_phasor=phasor, segments=segments)
         cases.append(values)
     return cases
+
+
+def validate_complete(result):
+    require(result["schema_version"] == 1, "结果 schema 版本不符")
+    require(result["request_sequence"] != 0 and result["state"] == 2 and result["failure"] == 0
+            and result["completed_steps"] == 192 and result["sweep_count"] == 257,
+            "对照没有完整成功，或 192 步/257 点扫描不完整")
+    require(all(math.isfinite(result[field]) and 0.0 <= result[field] <= 2e-5 for field in ERROR_FIELDS),
+            "软件/CORDIC 全周或配对误差非法或超限")
+    backends = {}
+    for backend in ["software", "cordic"]:
+        nested = {field: result[backend + "." + field] for field in PROBE_FIELDS}
+        backends[backend] = validate_probe(nested, result["request_sequence"])
+    comparison = []
+    for software, cordic in zip(backends["software"], backends["cordic"]):
+        require(all(software[field] == cordic[field] for field in ["last_output_valid", "last_voltage_limited", "last_speed_limited"]),
+                "两个后端接受/拒绝或限幅路径不同")
+        for field, maximum in [("last_duty", "max_duty_error"), ("last_phasor", "max_phasor_error")]:
+            require(all(abs(a - b) <= 2e-5 and abs(a - b) <= result[maximum] + 1e-7
+                        for a, b in zip(software[field], cordic[field])), "后端配对结果与误差摘要不符")
+        segments = []
+        for a, b in zip(software["segments"], cordic["segments"]):
+            sa, sb = a["clean"]["mean_us"], b["clean"]["mean_us"]
+            segments.append({"name": a["name"], "software": a, "cordic": b,
+                             "clean_mean_speedup": sa / sb if sa is not None and sb is not None else None})
+        comparison.append({"name": software["name"], "segments": segments})
+    return backends, comparison
 
 
 def run_measurement(backend, prepared, conditions, clock=time.monotonic, sleep=time.sleep):
@@ -287,7 +374,7 @@ def run_measurement(backend, prepared, conditions, clock=time.monotonic, sleep=t
         if result["request_sequence"] == sequence:
             require(result["state"] != 3, "计时失败，原因编号：" + str(result["failure"]))
             if result["state"] == 2:
-                cases = validate_complete(result)
+                backends, comparison = validate_complete(result)
                 break
             require(result["state"] == 1 and result["failure"] == 0 and result["completed_steps"] == 0,
                     "活动结果发布了非法状态或部分窗口")
@@ -305,7 +392,8 @@ def run_measurement(backend, prepared, conditions, clock=time.monotonic, sleep=t
     require(after["time"] > advanced["time"] and latest["time"] > after["time"], "完成后控制时间未持续推进")
     require(after["request"] == latest["request"] == sequence, "完成后请求身份改变")
     return {"status": "后台算法诊断完成", "request_sequence": sequence, "before": before, "after": latest,
-            "result": result, "cases": cases, "files": prepared.hashes, "write_count": 1,
+            "result": result, "backends": backends, "comparison": comparison,
+            "errors": {field: result[field] for field in ERROR_FIELDS}, "files": prepared.hashes, "write_count": 1,
             "automatic_retry": False, "hardware_qualified": False, "stage_timing_qualified": False,
             "full_isr_wcet": False, "limits": LIMITS}
 
@@ -332,7 +420,7 @@ def main(argv=None):
         backend = CubeBackend(prepared, args.cli.resolve())
         report = run_measurement(backend, prepared, conditions)
         save(prepared.output / "result.json", report)
-        print("96 次后台算例已完成；读数包含抢占，不代表完整 ISR 或 WCET。")
+        print("软件/CORDIC 各 96 次算例与 257 点全周对照完成；分段 clean 统计不代表完整 ISR 或 WCET。")
         return 0
     except Exception as error:
         save(prepared.output / "failure.json", {"error": str(error), "request_write_attempted": bool(backend and backend.write_attempted),

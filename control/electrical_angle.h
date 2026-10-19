@@ -28,6 +28,15 @@ typedef struct {
 } ElectricalAngle;
 
 /*
+ * 三角函数的窄替换边界；输入是已归一化的电角度 [turn]，范围 [0, 1)。
+ * 成功时写入同一角度的 sin/cos；失败返回 false，不由调用方猜测或修正结果。
+ * context 由调用方拥有，本模块不保存；实现须有界、非阻塞，并由调用方串行使用。
+ * 本边界不改变角度预测、配置校验或功率授权，也不引入任何硬件依赖。
+ */
+typedef bool (*ElectricalAngleTrig)(void *context, float electrical_turns,
+                                    float *sine, float *cosine);
+
+/*
  * 非零 max_prediction_time_s 必须严格小于 30/max_velocity_rpm，
  * 将配置覆盖范围内的机械预测位移限制在半圈以内；这不是速度或标定可信度证明。
  * 非法配置清空配置与输出；允许合法重配，config 可指向实例内部原配置。
@@ -47,5 +56,19 @@ void electrical_angle_reset(ElectricalAngle *angle);
  */
 bool electrical_angle_update(ElectricalAngle *angle, float position_turns,
                               float velocity_rpm, float observation_age_s);
+
+/* 默认软件实现；忽略 context。输出指针须非空且不同；失败时清可写输出。 */
+bool electrical_angle_sincos_software(void *context, float electrical_turns,
+                                     float *sine, float *cosine);
+
+/*
+ * 与 update 使用相同的预测和检查，仅将最终 sin/cos 交给 trig 一次。
+ * NULL trig、回调失败、非有限结果或 |sin^2+cos^2-1| > 0.001 均清空输出。
+ * 单位圆检查不验证相位正确；后端必须单独与软件参考作角度精度对照。
+ * 不归一化回调结果；通过容差只说明可交付相量，不代表时序或实物验收。
+ */
+bool electrical_angle_update_with_trig(ElectricalAngle *angle, float position_turns,
+                                        float velocity_rpm, float observation_age_s,
+                                        ElectricalAngleTrig trig, void *context);
 
 #endif

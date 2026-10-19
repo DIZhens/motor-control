@@ -411,6 +411,11 @@
               <FilePath>../Core/Src/comp.c</FilePath>
             </File>
             <File>
+              <FileName>cordic.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/cordic.c</FilePath>
+            </File>
+            <File>
               <FileName>dac.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/dac.c</FilePath>
@@ -574,6 +579,11 @@
               <FileName>stm32g4xx_hal_comp.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32G4xx_HAL_Driver/Src/stm32g4xx_hal_comp.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32g4xx_hal_cordic.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/STM32G4xx_HAL_Driver/Src/stm32g4xx_hal_cordic.c</FilePath>
             </File>
             <File>
               <FileName>stm32g4xx_hal_dac.c</FileName>
@@ -762,6 +772,16 @@
               <FileName>compute_probe.c</FileName>
               <FileType>1</FileType>
               <FilePath>../runtime/compute_probe.c</FilePath>
+            </File>
+            <File>
+              <FileName>compute_comparison.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/compute_comparison.c</FilePath>
+            </File>
+            <File>
+              <FileName>cordic_math.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/cordic_math.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -1449,6 +1469,11 @@
               <FilePath>../Core/Src/comp.c</FilePath>
             </File>
             <File>
+              <FileName>cordic.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/cordic.c</FilePath>
+            </File>
+            <File>
               <FileName>dac.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/dac.c</FilePath>
@@ -1612,6 +1637,11 @@
               <FileName>stm32g4xx_hal_comp.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32G4xx_HAL_Driver/Src/stm32g4xx_hal_comp.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32g4xx_hal_cordic.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/STM32G4xx_HAL_Driver/Src/stm32g4xx_hal_cordic.c</FilePath>
             </File>
             <File>
               <FileName>stm32g4xx_hal_dac.c</FileName>
@@ -1800,6 +1830,16 @@
               <FileName>compute_probe.c</FileName>
               <FileType>1</FileType>
               <FilePath>../runtime/compute_probe.c</FilePath>
+            </File>
+            <File>
+              <FileName>compute_comparison.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/compute_comparison.c</FilePath>
+            </File>
+            <File>
+              <FileName>cordic_math.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/cordic_math.c</FilePath>
             </File>
           </Files>
         </Group>

@@ -524,6 +524,92 @@ class Tests(unittest.TestCase):
                     backend.execute(command, "forbidden", 1.0)
             self.assertEqual(run.call_count, 1)
 
+    def fast_read_fixture(self):
+        blocks = [("before", self.layout["publication_sequence"], 4),
+                  ("publication", self.layout["publication"], 20),
+                  ("after", self.layout["publication_sequence"], 4)]
+        words = [[0x8136], [0x003275F8, 0, 0x4E20, 1, 0x4029774A], [0x8136]]
+        message = "Device ID : 0x468\r\r\nCore is running\r\r\n"
+        for (_, address, size), values in zip(blocks, words):
+            message += f"Reading 32-bit memory content\r\r\n  Size : {size} Bytes\r\r\n  Address: : 0x{address:08X}\r\r\n"
+            for offset in range(0, len(values), 4):
+                message += f"0x{address + offset * 4:08X} : " + " ".join(f"{word:08X}" for word in values[offset:offset + 4]) + "\r\r\n"
+        message += "Core is running\r\r\n"
+        return blocks, words, message
+
+    def test_fast_read32_parses_ordered_words_and_preserves_raw_files(self):
+        blocks, words, message = self.fast_read_fixture()
+        cli = self.root / "fake-cli.exe"
+        cli.write_bytes(b"never executed")
+        backend = tool.CubeBackend(self.prepared, cli)
+        process = type("Process", (), {"returncode": 0, "stdout": message.encode(), "stderr": b""})()
+        with patch.object(tool.subprocess, "run", return_value=process) as run:
+            result = backend.read(blocks, "coherent-fast")
+        expected = {name: struct.pack("<" + "I" * len(values), *values) for (name, _, _), values in zip(blocks, words)}
+        self.assertEqual(result, expected)
+        arguments = run.call_args.args[0]
+        self.assertNotIn("-u", arguments)
+        self.assertEqual(arguments.count("-r32"), 3)
+        for name, payload in expected.items():
+            self.assertEqual((self.output / f"001-coherent-fast-{name}.bin").read_bytes(), payload)
+        self.assertEqual(backend.write_attempted, False)
+        self.assertTrue((self.output / "001-coherent-fast.log").is_file())
+
+    def test_fast_read32_rejects_missing_extra_wrong_size_address_and_words(self):
+        blocks, _, message = self.fast_read_fixture()
+        bad = [message.replace("Size : 20 Bytes", "Size : 24 Bytes"),
+               message.replace(f"Address: : 0x{blocks[1][1]:08X}", "Address: : 0x2000FFFF"),
+               message.replace(f"0x{blocks[1][1] + 16:08X} : 4029774A", ""),
+               message.replace(f"0x{blocks[1][1] + 16:08X}", f"0x{blocks[1][1] + 12:08X}"),
+               message.replace("00008136", "00008136 00000000", 1),
+               message.replace("4029774A", "4029774Z"),
+               message.replace("Size : 20 Bytes", "Size : 20 Bytes\nSize : missing"),
+               message.replace(f"Address: : 0x{blocks[1][1]:08X}", f"Address: : 0x{blocks[1][1]:08X}\nAddress: missing"),
+               message + message[message.index("Reading 32-bit memory content"):],
+               message.replace("Reading 32-bit memory content", "", 1),
+               "0x20000000 : 00000000\n" + message]
+        for index, altered in enumerate(bad):
+            with self.subTest(index=index), self.assertRaises(RuntimeError):
+                tool.CubeBackend.parse_read32(altered, blocks)
+
+    def test_fast_read32_transport_rejects_flash_unaligned_extra_flags_and_errors(self):
+        cli = self.root / "fake-cli.exe"
+        cli.write_bytes(b"never executed")
+        backend = tool.CubeBackend(self.prepared, cli)
+        commands = [["-r32", hex(tool.FLASH_START), "4"], ["-r32", hex(tool.RAM_START + 1), "4"],
+                    ["-r32", hex(tool.RAM_START), "3"], ["-r32", hex(tool.RAM_START), "0"],
+                    ["-r32", hex(tool.DHCSR), "8"], ["-r32", hex(tool.RAM_START), "4", "-rst"],
+                    ["-r32", hex(tool.RAM_START), "4", "-u", hex(tool.RAM_START), "4"],
+                    ["-r32", "not-an-address", "4"], ["-r32", hex(tool.RAM_START), "4;reset"]]
+        commands += [["-u", hex(tool.FLASH_START), "4", "-rst"],
+                     ["-u", hex(tool.FLASH_START), "4", str(self.root / "outside.bin")]]
+        for command in commands:
+            with self.subTest(command=command), self.assertRaises(RuntimeError):
+                backend.execute(command, "forbidden-fast", 1.0)
+        with self.assertRaises(RuntimeError):
+            backend.read32([("flash", tool.FLASH_START, 4)], "flash-forbidden")
+        for index, (code, text) in enumerate([(1, "Device ID : 0x468\nCore is running"),
+                                               (0, "Device ID : 0x468\nCore is running\nError : failure"),
+                                               (0, "Device ID : 0x469\nCore is running"),
+                                               (0, "Device ID : 0x468\nCore is halted")]):
+            process = type("Process", (), {"returncode": code, "stdout": text.encode(), "stderr": b""})()
+            with patch.object(tool.subprocess, "run", return_value=process), self.subTest(index=index), self.assertRaises(RuntimeError):
+                backend.execute(["-r32", hex(tool.RAM_START), "4"], f"bad-response-{index}", 1.0)
+        self.assertFalse(backend.write_attempted or backend.transport_write_attempted)
+
+    def test_flash_read_keeps_upload_and_never_uses_read32(self):
+        cli = self.root / "fake-cli.exe"
+        cli.write_bytes(b"never executed")
+        backend = tool.CubeBackend(self.prepared, cli)
+        def uploaded(arguments, tag, timeout):
+            self.assertEqual(arguments[0], "-u")
+            self.assertNotIn("-r32", arguments)
+            Path(arguments[3]).write_bytes(b"\x12\x34\x56\x78")
+            return ""
+        with patch.object(backend, "execute", side_effect=uploaded):
+            self.assertEqual(backend.read([("flash", tool.FLASH_START, 4)], "flash-upload"),
+                             {"flash": b"\x12\x34\x56\x78"})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

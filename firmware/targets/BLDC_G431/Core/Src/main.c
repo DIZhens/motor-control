@@ -32,6 +32,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #if defined(BLDC_G431_OBSERVE_ENTRY)
+#include "cordic.h"
 #include "target_runtime.h"
 #else
 #include "target_validation.h"
@@ -119,6 +120,7 @@ int main(void)
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
 #if defined(BLDC_G431_OBSERVE_ENTRY)
+  MX_CORDIC_Init();
   target_runtime_start();
 #else
   target_validation_start();

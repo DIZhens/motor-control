@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #include "current_capture.h"
-#include "compute_probe.h"
+#include "compute_comparison.h"
 
 /* Observe 入口的锁存诊断；当前没有清除或功率使能路径。 */
 enum {
@@ -18,6 +18,8 @@ enum {
 
 /* TIM6 独立写入；ADC 不再执行时，不能靠旧 Motor 快照判断健康。 */
 extern volatile uint32_t g_target_runtime_guard_faults;
+/* 当前 Observe 入口所有可返回异常的进入计数，用于后台计时的抢占分类。 */
+extern volatile uint32_t g_target_runtime_irq_entries[8];
 
 /*
  * Observe 专用无功率诊断，不属于 Motor 命令或 UART 协议。
@@ -34,7 +36,7 @@ extern volatile ObserveCurrentCaptureResult g_target_runtime_current_capture;
  * CPU cycle 读数包含抢占与测量开销，不代表完整 ISR 或 stage 截止验收。 */
 extern volatile uint32_t g_target_runtime_compute_request;
 extern volatile uint32_t g_target_runtime_compute_sequence;
-extern volatile ObserveComputeProbeResult g_target_runtime_compute_result;
+extern volatile ObserveComputeComparisonResult g_target_runtime_compute_result;
 
 /* 一次装配，默认关断；不包含 stage、enable 或保护注入命令。 */
 void target_runtime_start(void);

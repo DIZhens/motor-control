@@ -114,16 +114,25 @@ with tempfile.TemporaryDirectory(prefix="electrical-angle-") as directory:
             assert self.integer("model_valid") == 0
             assert self.integer("model_configured") == int(configured)
 
-        def update(self, position: float, velocity=0.0, age=0.0) -> bool:
+        def update(self, position: float, velocity=0.0, age=0.0, *, with_trig=False) -> bool:
             for symbol, value in [("model_position", position), ("model_velocity", velocity),
                                   ("model_age", age)]:
                 self.cpu.mem_write(symbols[symbol], struct.pack("<f", value))
-            result = self.call("model_update")
+            result = self.call("model_update_with_trig" if with_trig else "model_update")
             assert result == bool(self.integer("model_valid"))
             assert all(math.isfinite(value) for value in self.output), self.output
             if not result:
                 self.expect_empty(bool(self.integer("model_configured")))
             return result
+
+        def configure_trig(self, mode=0, sine=0.0, cosine=0.0, *, second=False) -> None:
+            symbol = "model_second_trig_context" if second else "model_trig_context"
+            self.cpu.mem_write(symbols[symbol], struct.pack("<IIfff", 0, mode, 0.0,
+                                                           sine, cosine))
+
+        def trig_context(self, *, second=False) -> tuple[int, int, float, float, float]:
+            symbol = "model_second_trig_context" if second else "model_trig_context"
+            return struct.unpack("<IIfff", self.cpu.mem_read(symbols[symbol], 20))
 
         def expect_reference(self, position: float, velocity=0.0, age=0.0) -> None:
             assert self.update(position, velocity, age)
@@ -248,6 +257,101 @@ with tempfile.TemporaryDirectory(prefix="electrical-angle-") as directory:
         age = generator.uniform(0.0, model.config[3])
         model.expect_reference(position, velocity, age)
     passed("1200 组随机映射/预测与双精度参考一致，sin/cos 满足单位圆容差")
+
+    model = Model(64, -1, 0.31)
+    model.configure_trig()
+    for index, values in enumerate([(0.99, 300.0, 0.004), (0.01, -300.0, 0.004),
+                                    (0.125, 0.0, 0.0), (0.0, -6000.0, 0.004)], 1):
+        model.expect_reference(*values)
+        reference = model.output
+        assert model.update(*values, with_trig=True)
+        assert model.output == reference
+        calls, _, received, _, _ = model.trig_context()
+        assert calls == index and received == reference[0]
+    passed("可替换后端只收到一次已预测/方向映射/偏置归一化结果，软件结果逐位一致")
+
+    model = Model()
+    model.configure_trig()
+    for values in [(math.nan, 0.0, 0.0), (-0.1, 0.0, 0.0), (1.0, 0.0, 0.0),
+                   (0.2, math.inf, 0.0), (0.2, 6001.0, 0.0),
+                   (0.2, 0.0, -0.01), (0.2, 0.0, 0.005)]:
+        model.expect_reference(0.3)
+        assert not model.update(*values, with_trig=True)
+        model.expect_empty()
+        assert model.trig_context()[0] == 0
+    model.expect_reference(0.3)
+    assert not model.call("model_null_trig")
+    model.expect_empty()
+    model.expect_reference(0.3)
+    before = model.output
+    assert not model.call("model_null_angle_with_trig")
+    assert model.output == before
+    assert not model.configure(poles=0)
+    assert not model.update(0.3, with_trig=True)
+    assert model.trig_context()[0] == 0
+    passed("配置/输入失败与 NULL 后端不调用回调并清旧输出，NULL 实例不影响已有实例")
+
+    model = Model()
+    for mode, sine, cosine in [(1, 0.6, 0.8), (3, 1.0, 0.0), (4, 0.0, 0.0),
+                               (2, math.nan, 1.0), (2, 1.0, math.nan),
+                               (2, math.inf, 0.0), (2, 0.0, -math.inf),
+                               (2, 0.0, 0.0), (2, 1.0, 1.0),
+                               (2, 3e38, 3e38), (2, math.sqrt(1.002), 0.0),
+                               (2, math.sqrt(0.998), 0.0)]:
+        model.expect_reference(0.3)
+        model.configure_trig(mode, sine, cosine)
+        assert not model.update(0.3, with_trig=True)
+        assert model.trig_context()[0] == 1
+        model.expect_empty()
+        model.expect_reference(0.3)
+    sine = float32(math.sqrt(1.0005))
+    model.configure_trig(2, sine, 0.0)
+    assert model.update(0.3, with_trig=True)
+    assert model.output[1:] == (sine, 0.0)
+    passed("后端拒绝、漏写、非有限及非单位相量失效清零；容差内结果保持原值不静默修正")
+
+    model = Model()
+    model.configure_trig()
+    for index in range(1024):
+        phase = float32(index / 1024.0)
+        model.cpu.mem_write(symbols["model_position"], struct.pack("<f", phase))
+        assert model.call("model_software_trig")
+        _, sine, cosine = model.output
+        assert math.isclose(sine, math.sin(math.tau * phase), abs_tol=6e-7)
+        assert math.isclose(cosine, math.cos(math.tau * phase), abs_tol=6e-7)
+    for phase in [-0.001, 1.0, math.nan, math.inf, -math.inf]:
+        model.cpu.mem_write(symbols["model_position"], struct.pack("<f", phase))
+        assert not model.call("model_software_trig")
+        assert model.output[1:] == (0.0, 0.0)
+    model.cpu.mem_write(symbols["model_position"], struct.pack("<f", 0.25))
+    for pointer_mode, expected in [(1, (23.0, 0.0)), (2, (0.0, -17.0)),
+                                   (3, (0.0, -17.0))]:
+        model.cpu.mem_write(symbols["model_pointer_mode"], struct.pack("<I", pointer_mode))
+        assert not model.call("model_software_trig")
+        assert model.output[1:] == expected
+    assert model.trig_context()[0] == 0
+    passed("公开软件后端全周与双精度参考一致，拒绝非法角度/空或别名输出且不使用上下文")
+
+    model = Model(64, 1, 0.6)
+    model.configure_trig(2, 0.6, 0.8)
+    model.configure_trig(2, -0.8, 0.6, second=True)
+    assert model.update(0.7, 1000.0, 0.001, with_trig=True)
+    first_output = model.output
+    first_context = model.trig_context()
+    assert model.call("model_second_instance_with_trig")
+    assert model.output == first_output and model.trig_context() == first_context
+    second_output = struct.unpack("<fff", model.cpu.mem_read(symbols["model_second_output"], 12))
+    assert second_output == (0.875, float32(-0.8), float32(0.6))
+    assert model.integer("model_second_valid") == 1
+    assert model.trig_context(second=True)[0] == 1
+    assert model.trig_context(second=True)[2] == 0.875
+    model.configure_trig(1)
+    assert not model.update(0.7, 1000.0, 0.001, with_trig=True)
+    assert model.trig_context(second=True)[0] == 1
+    model.configure_trig()
+    assert model.update(0.7, 1000.0, 0.001, with_trig=True)
+    assert model.output[0] == first_output[0]
+    passed("实例与回调上下文相互独立，单实例后端失败和恢复不改变另一实例")
 
 for index, name in enumerate(CASES, 1):
     print(f"PASS {index}: {name}")

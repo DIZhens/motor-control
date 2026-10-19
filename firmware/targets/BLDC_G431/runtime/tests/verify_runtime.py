@@ -71,6 +71,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     for source in [TESTS / "model.c", TARGET / "runtime/target_runtime.c",
                    TARGET / "runtime/current_capture.c",
                    TARGET / "runtime/compute_probe.c",
+                   TARGET / "runtime/compute_comparison.c",
                    REPOSITORY / "firmware/app/motor/motor.c",
                    REPOSITORY / "firmware/app/motor/control_runtime.c",
                    REPOSITORY / "control/position_estimator.c",
@@ -138,7 +139,9 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             self.capture_size = capture_sizes[0]
             self.capture_formats = [{1: "B", 2: "H", 4: "I"}[size] for size in capture_sizes[1:]]
             self.compute_offsets = struct.unpack(
-                "<9I", self.cpu.mem_read(symbols["model_compute_offsets"], 36))
+                "<13I", self.cpu.mem_read(symbols["model_compute_offsets"], 52))
+            self.compute_timing_offsets = struct.unpack(
+                "<5I", self.cpu.mem_read(symbols["model_compute_timing_offsets"], 20))
             for name, value in (settings or {}).items():
                 self.write(name, value)
             if start:
@@ -218,11 +221,21 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             offsets = self.compute_offsets
             data = bytes(self.cpu.mem_read(symbols["g_target_runtime_compute_result"], offsets[7]))
             read = lambda offset, fmt: struct.unpack_from("<" + fmt, data, offset)[0]
+            timing = self.compute_timing_offsets
+            def segments(base):
+                return [[tuple(read(base + case * offsets[8] + timing[0] + segment * timing[1]
+                                    + member, "I") for member in timing[2:])
+                         for segment in range(6)] for case in range(6)]
             return {"request": read(offsets[0], "I"),
                     "state": read(offsets[1], {1: "B", 2: "H", 4: "I"}[offsets[5]]),
                     "failure": read(offsets[2], {1: "B", 2: "H", 4: "I"}[offsets[6]]),
                     "steps": read(offsets[3], "I"),
                     "counts": [read(offsets[4] + i * offsets[8], "I") for i in range(6)],
+                    "hardware_counts": [read(offsets[10] + i * offsets[8], "I") for i in range(6)],
+                    "sweep": read(offsets[9], "I"), "schema": read(offsets[12], "I"),
+                    "errors": struct.unpack_from("<5f", data, offsets[11]),
+                    "software_segments": segments(offsets[4]),
+                    "hardware_segments": segments(offsets[10]),
                     "sequence": self.word("g_target_runtime_compute_sequence"), "bytes": data}
 
         def prepare_compute(self) -> None:
@@ -1352,21 +1365,25 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     model.service()
     assert model.compute()["state"] == 1 and model.compute()["steps"] == 0
     active = model.compute()
-    for step in range(95):
+    for step in range(448):
         model.sample()
         model.service()
-        if step < 94:
+        if step < 447:
             assert model.compute() == active
     complete = model.compute()
     assert complete["state"] == 2 and complete["failure"] == 0
-    assert complete["steps"] == 96 and complete["counts"] == [16] * 6
+    assert complete["steps"] == 192 and complete["counts"] == complete["hardware_counts"] == [16] * 6
+    assert complete["sweep"] == 257 and complete["schema"] == 1
+    assert complete["errors"][:2] == (0.0, 0.0) and complete["errors"][2] <= 2e-5
+    assert complete["errors"][3:] == (0.0, 0.0)
+    assert model.word("model_cordic_calls") == 353 and model.word("model_cordic_init_count") == 1
     assert complete["sequence"] % 2 == 0
     model.sample()
     model.service()
     assert model.compute() == complete
     assert model.current()["state"] == CURRENT_WAITING
     model.assert_default_off()
-    passed("后台计时逐轮只跑一例并在96步冻结，真实Runtime保持未标定且没有stage、enable或重试")
+    passed("后台逐轮配对192例及全周257点后冻结，活动快照不变，真实Runtime保持未标定且没有stage或enable")
 
     model = Model()
     model.prepare_compute()
@@ -1442,24 +1459,139 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     model.prepare_compute()
     model.write("g_target_runtime_compute_request", 1)
     model.service()
-    for _ in range(94):
+    for _ in range(447):
         model.sample()
         model.service()
     model.sample()
-    reads = [0]
-    def fail_after_final_algorithm(cpu, access, address, size, value, user_data):
-        reads[0] += 1
-        if reads[0] == 3:  # 许可心跳读取、算法前读数、算法后读数。
-            model.write("g_target_runtime_guard_faults", FAULT_CADENCE)
-    hook = model.cpu.hook_add(UC_HOOK_MEM_READ, fail_after_final_algorithm,
+    # 最后全周点的硬件回调完成后置入 guard，验证 Target 发布前复核。
+    model.write("model_cordic_guard_after_call", model.word("model_cordic_calls") + 1)
+    model.service()
+    result = model.compute()
+    assert result["state"] == 3 and result["failure"] == 1
+    assert result["steps"] == 192 and result["counts"] == result["hardware_counts"] == [16] * 6
+    assert result["sweep"] == 257
+    model.assert_default_off()
+    passed("末步算法完成后健康复核失败会撤销COMPLETE，完整计数也不被误报为合格结果")
+
+    model = Model({"model_cordic_ok": 0})
+    assert model.motor() == (IDLE, 0, NONE, 0, 0.0)
+    assert model.word("model_cordic_init_count") == 1
+    model.prepare_compute()
+    model.write("g_target_runtime_compute_request", 1)
+    model.service()
+    result = model.compute()
+    assert result["state"] == 3 and result["failure"] == 1 and result["steps"] == 0
+    assert result["counts"] == result["hardware_counts"] == [0] * 6
+    assert model.word("model_cordic_calls") == 0
+    model.receive(b"start:120\n")
+    model.sample()
+    assert model.motor()[0:3] == (IDLE, 0, NOT_READY)
+    frame = model.frame()
+    assert int(frame[6]) == IDLE and int(frame[7]) == 0
+    model.assert_current_unpublished()
+    model.assert_default_off()
+    passed("CORDIC初始化失败仅拒绝对照，不破坏默认关断观察、UART或Start拒绝语义")
+
+    for failure in ["backend", "phase"]:
+        model = Model()
+        model.prepare_compute()
+        model.write("g_target_runtime_compute_request", 1)
+        model.service()  # 软件首例成功，下一轮才使用硬件替身。
+        model.write("model_cordic_runtime_ok" if failure == "backend" else "model_cordic_phase_error",
+                    0 if failure == "backend" else 1)
+        model.sample()
+        model.service()
+        result = model.compute()
+        assert result["state"] == 3 and result["failure"] == 4, (failure, result)
+        assert result["steps"] == (1 if failure == "backend" else 2)
+        assert result["counts"] == [1, 0, 0, 0, 0, 0]
+        assert result["hardware_counts"] == ([0] * 6 if failure == "backend" else [1, 0, 0, 0, 0, 0])
+        assert result["sweep"] == 0
+        frozen = model.compute()
+        model.write("model_cordic_runtime_ok", 1)
+        model.write("model_cordic_phase_error", 0)
+        model.sample()
+        model.service()
+        assert model.compute() == frozen
+        model.assert_default_off()
+    passed("后端失败与错误相位都锁存ALGORITHM，不回退软件或自动重试，失败计数保留真实完成边界")
+
+    model = Model()
+    model.prepare_compute()
+    model.write("model_cordic_irq_after_call", 1)
+    model.write("model_cordic_irq_slot", 7)
+    model.write("g_target_runtime_compute_request", 1)
+    model.service()
+    for _ in range(448):
+        model.sample()
+        model.service()
+    result = model.compute()
+    assert result["state"] == 2 and result["failure"] == 0
+    assert result["software_segments"][0][0] == (16, 16, 0)
+    assert result["hardware_segments"][0][0] == (16, 15, 1)
+    assert result["hardware_segments"][0][2] == (16, 15, 1)
+    assert result["hardware_segments"][0][1] == (16, 16, 0)
+    assert model.memory_word(symbols["g_target_runtime_irq_entries"] + 7 * 4) == 1
+    model.assert_default_off()
+    passed("Target稳定stamp分段记录IRQ差，受抢占硬件角度及total不计clean，独立未受抢占段保持clean")
+
+    model = Model()
+    model.prepare_compute()
+    model.write("g_target_runtime_compute_request", 1)
+    model.service()
+    model.sample()
+    stamp_reads = [0]
+    def interrupt_every_stamp(cpu, access, address, size, value, user_data):
+        stamp_reads[0] += 1
+        model.write("g_target_runtime_irq_entries", model.word("g_target_runtime_irq_entries") + 1)
+    hook = model.cpu.hook_add(UC_HOOK_MEM_READ, interrupt_every_stamp,
                              begin=DWT_CYCCNT, end=DWT_CYCCNT + 3)
     model.service()
     model.cpu.hook_del(hook)
     result = model.compute()
-    assert result["state"] == 3 and result["failure"] == 1
-    assert result["steps"] == 96 and result["counts"] == [16] * 6
+    assert result["state"] == 3 and result["failure"] == 3 and result["steps"] == 1
+    assert result["hardware_counts"] == [0] * 6
+    assert stamp_reads[0] == 5  # 前后许可各一次，stamp 恰好三次有界尝试。
     model.assert_default_off()
-    passed("末步算法完成后健康复核失败会撤销COMPLETE，完整计数也不被误报为合格结果")
+    passed("三次stamp读取均被IRQ计数打断时有界失败CLOCK，不提交部分分段统计或关中断等待")
+
+    model = Model()
+    model.prepare_compute()
+    model.write("g_target_runtime_compute_request", 1)
+    model.service()
+    for _ in range(211):
+        model.sample()
+        model.service()
+    model.receive(b"stop\n")
+    model.sample()
+    result = model.compute()
+    assert result["state"] == 3 and result["failure"] == 2 and result["steps"] == 192
+    assert result["counts"] == result["hardware_counts"] == [16] * 6
+    assert 0 < result["sweep"] < 257
+    assert model.motor()[0:3] == (IDLE, 0, ACCEPTED)
+    model.sample()
+    model.service()
+    assert model.compute() == result
+    model.assert_default_off()
+    passed("全周扫描期间Stop仍立即取消并冻结已配对数据，ADC消费Stop后旧身份也不会继续扫描")
+
+    for failure in ["backend", "phase"]:
+        model = Model()
+        model.prepare_compute()
+        model.write("g_target_runtime_compute_request", 1)
+        model.service()
+        for _ in range(191):
+            model.sample()
+            model.service()
+        model.write("model_cordic_runtime_ok" if failure == "backend" else "model_cordic_phase_error",
+                    0 if failure == "backend" else 1)
+        model.sample()
+        model.service()
+        result = model.compute()
+        assert result["state"] == 3 and result["failure"] == 4 and result["steps"] == 192
+        assert result["sweep"] == 0 and result["counts"] == result["hardware_counts"] == [16] * 6
+        model.assert_default_off()
+    passed("正式配对已完成后，全周首点的后端失败或相位错误仍拒绝COMPLETE，完整计时不能替代精度对照")
 
 print(f"PASS: {len(CASES)} G431 runtime C behavior groups")
 for name in CASES:

@@ -5,6 +5,7 @@
 
 #define ELECTRICAL_ANGLE_MAX_POLE_PAIRS 64U
 #define ELECTRICAL_ANGLE_TWO_PI 6.2831853071795865f
+#define ELECTRICAL_ANGLE_PHASOR_NORM_TOLERANCE 0.001f
 
 void electrical_angle_reset(ElectricalAngle *angle)
 {
@@ -80,12 +81,45 @@ static float wrap_bounded_turns(float turns)
 bool electrical_angle_update(ElectricalAngle *angle, float position_turns,
                               float velocity_rpm, float observation_age_s)
 {
-    float delta_turns, predicted_position, electrical_turns, radians, sine, cosine;
+    return electrical_angle_update_with_trig(angle, position_turns, velocity_rpm,
+                                              observation_age_s,
+                                              electrical_angle_sincos_software, NULL);
+}
+
+bool electrical_angle_sincos_software(void *context, float electrical_turns,
+                                     float *sine, float *cosine)
+{
+    float radians;
+    (void)context;
+    if (sine != NULL) {
+        *sine = 0.0f;
+    }
+    if (cosine != NULL) {
+        *cosine = 0.0f;
+    }
+    if (sine == NULL || cosine == NULL || sine == cosine || !isfinite(electrical_turns) ||
+        electrical_turns < 0.0f || electrical_turns >= 1.0f) {
+        return false;
+    }
+    radians = ELECTRICAL_ANGLE_TWO_PI * electrical_turns;
+    *sine = sinf(radians);
+    *cosine = cosf(radians);
+    return isfinite(*sine) && isfinite(*cosine);
+}
+
+bool electrical_angle_update_with_trig(ElectricalAngle *angle, float position_turns,
+                                        float velocity_rpm, float observation_age_s,
+                                        ElectricalAngleTrig trig, void *context)
+{
+    float delta_turns, predicted_position, electrical_turns, norm;
+    float sine = 0.0f;
+    float cosine = 0.0f;
     if (angle == NULL) {
         return false;
     }
     electrical_angle_reset(angle);
-    if (!angle->configured || !isfinite(position_turns) || position_turns < 0.0f ||
+    if (trig == NULL || !angle->configured ||
+        !isfinite(position_turns) || position_turns < 0.0f ||
         position_turns >= 1.0f || !isfinite(velocity_rpm) ||
         fabsf(velocity_rpm) > angle->config.max_velocity_rpm ||
         !isfinite(observation_age_s) || observation_age_s < 0.0f ||
@@ -101,10 +135,13 @@ bool electrical_angle_update(ElectricalAngle *angle, float position_turns,
     electrical_turns = wrap_bounded_turns(
         (float)angle->config.pole_pairs * (float)angle->config.encoder_direction *
         predicted_position - angle->config.electrical_offset_turns);
-    radians = ELECTRICAL_ANGLE_TWO_PI * electrical_turns;
-    sine = sinf(radians);
-    cosine = cosf(radians);
-    if (!isfinite(electrical_turns) || !isfinite(sine) || !isfinite(cosine)) {
+    if (!isfinite(electrical_turns) ||
+        !trig(context, electrical_turns, &sine, &cosine) ||
+        !isfinite(sine) || !isfinite(cosine)) {
+        return false;
+    }
+    norm = sine * sine + cosine * cosine;
+    if (!isfinite(norm) || fabsf(norm - 1.0f) > ELECTRICAL_ANGLE_PHASOR_NORM_TOLERANCE) {
         return false;
     }
     angle->output.electrical_turns = electrical_turns;

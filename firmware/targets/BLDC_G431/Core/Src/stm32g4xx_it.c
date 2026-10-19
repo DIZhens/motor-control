@@ -155,6 +155,9 @@ void UsageFault_Handler(void)
 void SVC_Handler(void)
 {
   /* USER CODE BEGIN SVCall_IRQn 0 */
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+  g_target_runtime_irq_entries[0]++;
+#endif
 
   /* USER CODE END SVCall_IRQn 0 */
   /* USER CODE BEGIN SVCall_IRQn 1 */
@@ -168,6 +171,9 @@ void SVC_Handler(void)
 void DebugMon_Handler(void)
 {
   /* USER CODE BEGIN DebugMonitor_IRQn 0 */
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+  g_target_runtime_irq_entries[1]++;
+#endif
 
   /* USER CODE END DebugMonitor_IRQn 0 */
   /* USER CODE BEGIN DebugMonitor_IRQn 1 */
@@ -181,6 +187,9 @@ void DebugMon_Handler(void)
 void PendSV_Handler(void)
 {
   /* USER CODE BEGIN PendSV_IRQn 0 */
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+  g_target_runtime_irq_entries[2]++;
+#endif
 
   /* USER CODE END PendSV_IRQn 0 */
   /* USER CODE BEGIN PendSV_IRQn 1 */
@@ -194,6 +203,9 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+  g_target_runtime_irq_entries[3]++;
+#endif
 
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
@@ -215,6 +227,9 @@ void SysTick_Handler(void)
 void ADC1_2_IRQHandler(void)
 {
   /* USER CODE BEGIN ADC1_2_IRQn 0 */
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+  g_target_runtime_irq_entries[4]++;
+#endif
 
   /* USER CODE END ADC1_2_IRQn 0 */
   HAL_ADC_IRQHandler(&hadc1);
@@ -230,6 +245,9 @@ void ADC1_2_IRQHandler(void)
 void TIM1_BRK_TIM15_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM1_BRK_TIM15_IRQn 0 */
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+  g_target_runtime_irq_entries[5]++;
+#endif
 
   /* USER CODE END TIM1_BRK_TIM15_IRQn 0 */
   HAL_TIM_IRQHandler(&htim1);
@@ -244,6 +262,9 @@ void TIM1_BRK_TIM15_IRQHandler(void)
 void SPI1_IRQHandler(void)
 {
   /* USER CODE BEGIN SPI1_IRQn 0 */
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+  g_target_runtime_irq_entries[6]++;
+#endif
 
   /* USER CODE END SPI1_IRQn 0 */
   HAL_SPI_IRQHandler(&hspi1);
@@ -258,6 +279,9 @@ void SPI1_IRQHandler(void)
 void TIM6_DAC_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM6_DAC_IRQn 0 */
+#if defined(BLDC_G431_OBSERVE_ENTRY)
+  g_target_runtime_irq_entries[7]++;
+#endif
 #if defined(BLDC_G431_OBSERVE_ENTRY)
   target_runtime_guard_irq();
 #else

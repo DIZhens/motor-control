@@ -114,10 +114,21 @@ Stop 清目标、待启动请求和两环积分，保留正常冻结零偏；任
 
 ## 后台无功率计算计时
 
-`compute_probe.h/.c` 使用独立算法状态和明确的合成输入，调用正式电流预处理、电角度、
-速度 PI 与电流 PI。六例覆盖正常、速度保持、独立施加角、限幅及两条预期拒绝路径，
-每例 16 次，共 96 次。主循环每轮至多执行一例，duty 只保存为诊断，不提交硬件。
-它不调用真实 ControlRuntime，不改物理标定确认，不 stage、不 enable、不清故障。
+`compute_probe.h/.c` 调用正式电流预处理、电角度、速度 PI 与电流 PI；
+`compute_comparison.h/.c` 为软件 sin/cos 和 G431 CORDIC 各持有一份独立算法状态。
+六例覆盖正常、速度保持、独立施加角、限幅及两条预期拒绝路径，每例每后端 16 次，
+共 192 个计时算例。同一轮交替运行软件和硬件，输入相同、积分历史各自推进。
+之后逐轮扫描 256 个等分电角度和 1 的前一浮点数，核对分量、单位圆及配对 duty 误差。
+主循环每轮至多执行一个算例或一个扫描点，duty 只保存诊断，不提交硬件。
+它不调用真实 ControlRuntime，不改实物标定确认，不 stage、不 enable、不清故障。
+
+电角度的默认 API 继续使用软件后端；纯 C 的 `ElectricalAngleTrig` 仅接收已经预测、
+映射并归一化的角度，Target 私有的 `cordic_math` 拥有唯一硬件实例。CubeMX 的 `.ioc`
+开启 CORDIC 并生成时钟初始化，但本机模式库不配置计算功能。适配器启动时一次配置
+COSINE、6 cycles、scale 0、两个 32 位输入输出；每拍显式写角度和模长，读 cos 后读 sin。
+有界等待、重入或配置异常均拒绝，外设失败隔离到 MCU 重启，不静默回退软件。
+当前实际控制链没有选择硬件后端。共享栈由 `.ioc` 配置为 4 KB，再生成 startup，
+用于容纳新增后台调用链、函数指针回调与中断嵌套；静态调用图仍不能证明最坏栈占用。
 
 主机只向 `g_target_runtime_compute_request` 写一次非零新身份。后台是实例、身份消费和
 结果发布的唯一写者；开始及终态通过 `g_target_runtime_compute_sequence` 发布
@@ -129,12 +140,18 @@ ADC 同拍发布 IDLE/OFF、控制关闭且母线有效、处于 0..3.6 V 的诊
 时间对，计算期间不屏蔽中断、不清零 DWT。Stop 在后台直接取消，即使 ADC 已消费并
 清掉 Stop pending，也不能漏取消或同轮重开。最后一步后失去健康条件会撤销 COMPLETE。
 
-cycle 读数包含中断抢占和两次测量调用的开销，按 170 MHz 配置换算；200 µs 的单例诊断
-上限只用于拒绝异常读数，不是实际控制提交预算。它不是完整 ISR 时间、WCET 或 stage
-截止验收。背景诊断也会延后 UART 轮询，不能同时把它作为串口高负荷测试。
+每例独立计量 total、电流处理、测量角、施加角、速度更新或保持、电流控制六段。
+未执行段保持零次；total 包含分段边界、控制流及读数开销，不能用不同算例极值相减
+推算函数成本。八个可返回异常 handler 各自维护单写计数槽，stamp 前后求和夹住 DWT
+读取，冲突最多重取三次，不屏蔽计算期间的中断。段内进入计数不变的样本另记 clean；
+其余样本保留总耗时和 IRQ 进入数，不估算或扣除 ISR 周期。
+clean 仍包含仪器化开销、Flash 与外设访问延迟，不是函数净耗时或 WCET。
+按 170 MHz 配置换算；200 µs 的单例诊断上限只用于拒绝异常读数，不是实际控制预算。
+该诊断不是完整 ISR 或 stage 截止验收，也会延后 UART 轮询，不能同时验收串口高负荷。
 
 [`tools/compute_probe.py`](tools/compute_probe.py) 默认只冻结并核对同次 HEX/AXF/MAP、
-真实 DWARF 字段和短枚举。只有显式 `--measure --logic-only-confirmed --vbus-dmm-v <实测值>`
+真实 DWARF 字段、短枚举和对照 schema；旧单后端布局不能套用到新镜像。
+只有显式 `--measure --logic-only-confirmed --vbus-dmm-v <实测值>`
 才 HOTPLUG 进行一次请求；失败不补发，不烧录、不复位。现场须由操作者确认母线电源、
 电池、三相和外部注入源断开。实测结果及解释见 [验证页](../VALIDATION.md)。
 
@@ -195,6 +212,7 @@ python control/tests/verify_speed_controller.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_current_capture_model.py
 python firmware/targets/BLDC_G431/runtime/tests/test_current_capture_tool.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_compute_probe_model.py
+python firmware/targets/BLDC_G431/runtime/tests/verify_cordic_math.py
 python firmware/targets/BLDC_G431/runtime/tests/test_compute_probe_tool.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py
@@ -213,8 +231,9 @@ ADC 丢失、旧快照失效、低优先级代码被 ADC 抢占的交错，以�
 锁存/请求身份、重复请求、BUSY、Stop 与异常中止；主机替身验证前检失败零写入、
 单地址一次写、应答丢失不补发和采后复核。模型不代替 UART 链路、
 实机速度精度或 ISR WCET；软件与实机结论分别记录在 Target 验证页。
-既有 UART、手转反馈、逻辑供电零偏及本次后台计算计时各有有限实测；下一步先对计算与
-抢占开销作分段定位，并推进已知电流增益/方向对照，随后安排受控电角度标定和 FOC。
+既有 UART、手转反馈、逻辑供电零偏及后台计算计时各有有限实测；软件/CORDIC 对照的
+当前执行身份和范围见验证页。下一步依据分段结果决定是否替换实际后端，并推进已知
+电流增益/方向对照，随后安排受控电角度标定和 FOC。
 各轮镜像与实测范围、既有台架证据仍从
 [VALIDATION.md](../VALIDATION.md) 进入，按具体修改影响选择复测。
 

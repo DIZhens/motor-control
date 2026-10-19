@@ -22,7 +22,7 @@ def fixture_layout():
     layout = {key: 0 for key in tool.layout_spec()}
     for key, address, size in [("request", 0x20000000, 4), ("sequence", 0x20000004, 4),
                                ("guard", 0x20000008, 4), ("publication_sequence", 0x2000000C, 4),
-                               ("result", 0x20000100, 320), ("publication", 0x20000300, 64)]:
+                               ("result", 0x20001000, 8192), ("publication", 0x20000300, 64)]:
         layout[key], layout[key + "_size"] = address, size
     layout["bdtr"], layout["case_count"] = tool.TIM1_BASE + 68, tool.CASE_COUNT
     for prefix, fields in [("result", tool.RESULT_FIELDS), ("publication", tool.PUBLICATION_FIELDS)]:
@@ -46,7 +46,7 @@ def encode(prefix, fields, values, layout):
     return bytes(payload)
 
 
-def complete(sequence):
+def probe_fixture(sequence):
     result = {"request_sequence": sequence, "state": 2, "failure": 0, "clock_hz": tool.CLOCK_HZ,
               "max_elapsed_cycles": tool.MAX_ELAPSED, "completed_steps": 96, "next_case": 0}
     for index in range(6):
@@ -54,7 +54,22 @@ def complete(sequence):
                   "last_output_valid": int(index < 4), "last_voltage_limited": int(index == 3),
                   "last_speed_limited": int(index == 3)}
         values.update({f"last_duty[{phase}]": 0.5 for phase in range(3)})
+        values.update({f"last_phasor[{component}]": 0.0 if index == 4 else float(component % 2) for component in range(4)})
+        for segment in range(6):
+            executed = segment in ([0, 1] if index == 4 else [0, 1, 2, 4, 5] + ([3] if index == 2 else []))
+            timing = {"count": 16, "min_cycles": 100, "max_cycles": 200, "sum_cycles": 2400,
+                      "clean_count": 16, "clean_min_cycles": 100, "clean_max_cycles": 200,
+                      "clean_sum_cycles": 2400, "irq_entries": 0}
+            values.update({f"segments[{segment}].{field}": value if executed else 0 for field, value in timing.items()})
         result.update({f"cases[{index}].{field}": value for field, value in values.items()})
+    return result
+
+
+def complete(sequence):
+    result = {"schema_version": 1, "request_sequence": sequence, "state": 2, "failure": 0,
+              "completed_steps": 192, "sweep_count": 257, **{field: 0.0 for field in tool.ERROR_FIELDS}}
+    for backend in ["software", "cordic"]:
+        result.update({backend + "." + field: value for field, value in probe_fixture(sequence).items()})
     return result
 
 
@@ -88,7 +103,7 @@ class FakeBackend:
                 flash[address - tool.FLASH_START] = value
             raw = {"flash": bytes(flash)}
         elif tag.startswith(("pre-result", "result-poll", "result-confirm")):
-            result = {"request_sequence": self.old_sequence, "state": 0}
+            result = {"schema_version": 1, "request_sequence": self.old_sequence, "state": 0}
             if not tag.startswith("pre-result") and not self.old_forever:
                 result = complete(self.request)
                 if self.active_forever:
@@ -178,8 +193,9 @@ class Tests(unittest.TestCase):
     def test_complete_exactly_one_write_with_explicit_limits(self):
         report = self.measure()
         self.assertEqual(self.backend.writes, [(self.layout["request"], 1)])
-        self.assertEqual(len(report["cases"]), 6)
-        self.assertEqual(report["cases"][0]["mean_cycles"], 150)
+        self.assertEqual(len(report["comparison"]), 6)
+        self.assertEqual(report["backends"]["software"][0]["mean_cycles"], 150)
+        self.assertEqual(report["comparison"][0]["segments"][0]["clean_mean_speedup"], 1)
         self.assertFalse(report["hardware_qualified"] or report["stage_timing_qualified"] or report["full_isr_wcet"])
         self.assertFalse(report["automatic_retry"])
 
@@ -244,22 +260,88 @@ class Tests(unittest.TestCase):
             self.assertEqual(len(self.backend.writes), 1)
 
     def test_invalid_statistics_or_path_flags_rejected(self):
-        for field, value in [("completed_steps", 95), ("next_case", 1), ("clock_hz", 1), ("max_elapsed_cycles", 1),
-                             ("cases[0].count", 15), ("cases[0].min_cycles", 0), ("cases[0].max_cycles", 34001),
-                             ("cases[0].sum_cycles", 1599), ("cases[0].sum_cycles", 1600),
-                             ("cases[0].last_output_valid", 0), ("cases[3].last_voltage_limited", 0),
-                             ("cases[3].last_speed_limited", 0), ("cases[4].last_duty[0]", 0.1),
-                             ("cases[5].last_duty[0]", math.nan), ("cases[0].last_duty[0]", 1.01)]:
+        for field, value in [("completed_steps", 191), ("software.next_case", 1), ("software.clock_hz", 1), ("software.max_elapsed_cycles", 1),
+                             ("software.cases[0].count", 15), ("software.cases[0].min_cycles", 0), ("software.cases[0].max_cycles", 34001),
+                             ("software.cases[0].sum_cycles", 1599), ("software.cases[0].sum_cycles", 1600),
+                             ("software.cases[0].last_output_valid", 0), ("software.cases[3].last_voltage_limited", 0),
+                             ("software.cases[3].last_speed_limited", 0), ("software.cases[4].last_duty[0]", 0.1),
+                             ("software.cases[5].last_duty[0]", math.nan), ("software.cases[0].last_duty[0]", 1.01)]:
             result = complete(1)
             result[field] = value
             with self.subTest(field=field, value=value), self.assertRaises(RuntimeError):
                 tool.validate_complete(result)
 
     def test_second_result_must_remain_frozen(self):
-        self.backend.result_mutate = lambda tag, result: result.update({"cases[0].sum_cycles": 2401}) if tag == "result-confirm" else None
+        self.backend.result_mutate = lambda tag, result: result.update({"software.cases[0].sum_cycles": 2401}) if tag == "result-confirm" else None
         with self.assertRaisesRegex(RuntimeError, "第二次"):
             self.measure()
         self.assertEqual(len(self.backend.writes), 1)
+
+    def test_old_schema_rejected_before_request_write(self):
+        self.backend.result_mutate = lambda tag, result: result.update(schema_version=0) if tag == "pre-result" else None
+        with self.assertRaisesRegex(RuntimeError, "schema"):
+            self.measure()
+        self.assertEqual(self.backend.writes, [])
+
+    def test_sweep_errors_nested_identity_and_completion_checked(self):
+        failures = [("schema_version", 2), ("sweep_count", 256), ("software.completed_steps", 95),
+                    ("cordic.request_sequence", 2), ("software.cases[0].last_phasor[0]", math.nan)]
+        failures += [(field, value) for field in tool.ERROR_FIELDS for value in [math.nan, math.inf, -0.1, 2.0001e-5]]
+        for field, value in failures:
+            result = complete(1)
+            result[field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(RuntimeError):
+                tool.validate_complete(result)
+
+    def test_segment_counts_clean_and_irq_corruption_rejected(self):
+        failures = [("software.cases[0].segments[1].count", 15),
+                    ("software.cases[4].segments[2].count", 16),
+                    ("cordic.cases[2].segments[3].count", 0),
+                    ("software.cases[0].segments[1].clean_count", 17),
+                    ("software.cases[0].segments[1].clean_count", 15),
+                    ("software.cases[0].segments[1].irq_entries", 1),
+                    ("software.cases[0].segments[1].clean_sum_cycles", 0),
+                    ("software.cases[0].segments[1].clean_min_cycles", 90)]
+        for field, value in failures:
+            result = complete(1)
+            result[field] = value
+            with self.subTest(field=field), self.assertRaises(RuntimeError):
+                tool.validate_complete(result)
+        result = complete(1)
+        result["software.cases[0].segments[0].sum_cycles"] = 2401
+        result["software.cases[0].segments[0].clean_sum_cycles"] = 2401
+        with self.assertRaisesRegex(RuntimeError, "兼容"):
+            tool.validate_complete(result)
+
+    def test_mixed_and_fully_preempted_segments_preserve_clean_meaning(self):
+        result = complete(1)
+        prefix = "software.cases[0].segments[1]."
+        result.update({prefix + field: value for field, value in {
+            "clean_count": 12, "clean_min_cycles": 100, "clean_max_cycles": 180,
+            "clean_sum_cycles": 1680, "irq_entries": 5}.items()})
+        backends, comparison = tool.validate_complete(result)
+        timing = backends["software"][0]["segments"][1]
+        self.assertEqual(timing["clean"]["count"], 12)
+        self.assertAlmostEqual(timing["clean"]["mean_us"], 140 / 170)
+        self.assertEqual(timing["irq_entries"], 5)
+        self.assertTrue(comparison[0]["segments"][1]["clean_mean_speedup"] > 0)
+        result.update({prefix + field: value for field, value in {
+            "clean_count": 0, "clean_min_cycles": 0, "clean_max_cycles": 0,
+            "clean_sum_cycles": 0, "irq_entries": 16}.items()})
+        backends, comparison = tool.validate_complete(result)
+        self.assertIsNone(backends["software"][0]["segments"][1]["clean"]["mean_us"])
+        self.assertIsNone(comparison[0]["segments"][1]["clean_mean_speedup"])
+
+    def test_backend_pair_errors_must_match_declared_bounds(self):
+        result = complete(1)
+        result["cordic.cases[0].last_duty[0]"] = 0.500001
+        with self.assertRaisesRegex(RuntimeError, "配对"):
+            tool.validate_complete(result)
+        result["max_duty_error"] = 1.1e-6
+        tool.validate_complete(result)
+        result["cordic.cases[0].last_phasor[0]"] = 3e-5
+        with self.assertRaisesRegex(RuntimeError, "配对"):
+            tool.validate_complete(result)
 
     def test_post_health_must_advance_and_preserve_request(self):
         for mode in ["guard", "request", "clock", "permit"]:
@@ -292,20 +374,20 @@ class Tests(unittest.TestCase):
             self.backend = FakeBackend(self.prepared)
             self.backend.mutate = lambda tag, raw, permanent=permanent: raw.update(pub_after=struct.pack("<I", 8)) if tag == "pre-health-1" or permanent and tag.startswith("pre-health-1-coherent-") else None
             if permanent:
-                with self.assertRaisesRegex(RuntimeError, "三次只读"):
+                with self.assertRaisesRegex(RuntimeError, "八次只读"):
                     self.measure()
                 self.assertEqual(self.backend.writes, [])
             else:
                 self.measure()
                 self.assertEqual(len(self.backend.writes), 1)
-            self.assertEqual(sum(tag.startswith("pre-health-1") for tag in self.backend.reads), 3 if permanent else 2)
+            self.assertEqual(sum(tag.startswith("pre-health-1") for tag in self.backend.reads), 8 if permanent else 2)
 
     def test_short_enums_derived_and_layout_corruption_rejected(self):
         raw = encode("result", tool.RESULT_FIELDS, complete(1), self.layout)
         self.assertEqual(tool.decode(raw, "result", tool.RESULT_FIELDS, self.layout)["state"], 2)
         for key, value in [("request", 0x1FFFFFFC), ("sequence_size", 8), ("result", self.layout["request"]),
                            ("bdtr", 0x20000000), ("case_count", 7), ("result.state.size", 3),
-                           ("result.cases[0].count.offset", 0), ("result.cases[0].count.offset", 320),
+                           ("result.software.cases[0].count.offset", 0), ("result.software.cases[0].count.offset", 8192),
                            ("enum.MOTOR_STATE_IDLE", 2)]:
             broken = dict(self.layout)
             broken[key] = value
@@ -367,8 +449,11 @@ class Tests(unittest.TestCase):
             result = tool.derive_layout(self.root / "same.axf", gdb, self.output)
         self.assertEqual(result, self.layout)
         arguments = run.call_args.args[0]
-        self.assertTrue(any("ObserveComputeProbeResult" in argument for argument in arguments))
-        self.assertFalse(any("target remote" in argument for argument in arguments))
+        self.assertIn("-x", arguments)
+        commands = (self.output / "layout-gdb.commands").read_text(encoding="utf-8")
+        self.assertIn("ObserveComputeComparisonResult", commands)
+        self.assertIn('file "' + (self.root / "same.axf").as_posix() + '"', commands)
+        self.assertNotIn("target remote", commands)
 
     def test_cli_default_has_no_backend_and_measure_requires_confirmation(self):
         arguments = ["--build-dir", str(self.root), "--expected-hex-sha256", "a" * 64, "--output", str(self.root / "new")]
@@ -398,6 +483,25 @@ class Tests(unittest.TestCase):
                 with self.subTest(command=command), self.assertRaises(RuntimeError):
                     backend.execute(command, "forbidden", 1.0)
             self.assertEqual(run.call_count, 1)
+
+    def test_shared_fast_transport_reads_full_comparison_without_upload_file_gaps(self):
+        cli = self.root / "fake-cli.exe"
+        cli.write_bytes(b"never executed")
+        backend = tool.CubeBackend(self.prepared, cli)
+        address, size = self.layout["result"], 4792
+        values = [(index * 31337) & 0xFFFFFFFF for index in range(size // 4)]
+        message = f"Device ID : 0x468\nCore is running\nReading 32-bit memory content\nSize : {size} Bytes\nAddress: : 0x{address:08X}\n"
+        for index in range(0, len(values), 4):
+            message += f"0x{address + index * 4:08X} : " + " ".join(f"{value:08X}" for value in values[index:index + 4]) + "\n"
+        message += "Core is running\n"
+        process = type("Process", (), {"returncode": 0, "stdout": message.encode(), "stderr": b""})()
+        with patch.object(tool.subprocess, "run", return_value=process) as run:
+            actual = backend.read([("result", address, size)], "large-comparison")
+        expected = struct.pack("<" + "I" * len(values), *values)
+        self.assertEqual(actual["result"], expected)
+        self.assertEqual((self.output / "001-large-comparison-result.bin").read_bytes(), expected)
+        self.assertEqual(run.call_args.args[0][-4:], ["-r32", hex(address), str(size), "-score"])
+        self.assertFalse(backend.write_attempted)
 
 
 if __name__ == "__main__":

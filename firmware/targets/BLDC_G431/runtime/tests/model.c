@@ -9,6 +9,7 @@
 #include "position_observation.h"
 #include "bus_observation.h"
 #include "current_capture.h"
+#include "cordic_math.h"
 
 #include <stddef.h>
 
@@ -61,6 +62,14 @@ uint32_t model_bus_read_count;
 uint32_t model_position_read_count;
 uint32_t model_trip_read_count;
 uint32_t model_notify_count;
+uint32_t model_cordic_ok = 1U;
+uint32_t model_cordic_runtime_ok = 1U;
+uint32_t model_cordic_phase_error;
+uint32_t model_cordic_init_count;
+uint32_t model_cordic_calls;
+uint32_t model_cordic_guard_after_call;
+uint32_t model_cordic_irq_after_call;
+uint32_t model_cordic_irq_slot;
 ControlTime model_control_time;
 
 const uint32_t model_motor_offsets[] = {
@@ -114,13 +123,22 @@ const uint32_t model_capture_field_sizes[] = {
     sizeof(ObserveCurrentCaptureFailure)
 };
 const uint32_t model_compute_offsets[] = {
-    offsetof(ObserveComputeProbeResult, request_sequence),
-    offsetof(ObserveComputeProbeResult, state),
-    offsetof(ObserveComputeProbeResult, failure),
-    offsetof(ObserveComputeProbeResult, completed_steps),
-    offsetof(ObserveComputeProbeResult, cases),
+    offsetof(ObserveComputeComparisonResult, request_sequence),
+    offsetof(ObserveComputeComparisonResult, state),
+    offsetof(ObserveComputeComparisonResult, failure),
+    offsetof(ObserveComputeComparisonResult, completed_steps),
+    offsetof(ObserveComputeComparisonResult, software) + offsetof(ObserveComputeProbeResult, cases),
     sizeof(ObserveComputeProbeState), sizeof(ObserveComputeProbeFailure),
-    sizeof(ObserveComputeProbeResult), sizeof(ObserveComputeProbeCaseResult)
+    sizeof(ObserveComputeComparisonResult), sizeof(ObserveComputeProbeCaseResult),
+    offsetof(ObserveComputeComparisonResult, sweep_count),
+    offsetof(ObserveComputeComparisonResult, cordic) + offsetof(ObserveComputeProbeResult, cases),
+    offsetof(ObserveComputeComparisonResult, max_sine_error),
+    offsetof(ObserveComputeComparisonResult, schema_version)
+};
+const uint32_t model_compute_timing_offsets[] = {
+    offsetof(ObserveComputeProbeCaseResult, segments), sizeof(ObserveComputeProbeTiming),
+    offsetof(ObserveComputeProbeTiming, count), offsetof(ObserveComputeProbeTiming, clean_count),
+    offsetof(ObserveComputeProbeTiming, irq_entries)
 };
 ControlRuntime model_unpermitted_runtime;
 Motor model_unpermitted_motor;
@@ -144,6 +162,36 @@ static void *s_trip_context;
 uint32_t HAL_GetTick(void)
 {
     return model_ms;
+}
+
+/* Target 集成替身只验证生命周期；真实寄存器协议由独立 cordic_math 模型覆盖。 */
+bool g431_cordic_math_init(G431CordicMath *context)
+{
+    model_cordic_init_count++;
+    context->initialized = model_cordic_ok != 0U;
+    return context->initialized;
+}
+
+bool g431_cordic_sincos(void *context, float turns, float *sine, float *cosine)
+{
+    G431CordicMath *math = context;
+    model_cordic_calls++;
+    if (model_cordic_guard_after_call == model_cordic_calls) {
+        g_target_runtime_guard_faults |= 4U;
+    }
+    if (model_cordic_irq_after_call == model_cordic_calls) {
+        g_target_runtime_irq_entries[model_cordic_irq_slot & 7U]++;
+    }
+    if (!math->initialized || model_cordic_runtime_ok == 0U) {
+        return false;
+    }
+    if (model_cordic_phase_error != 0U) {
+        turns += 0.25f;
+        if (turns >= 1.0f) {
+            turns -= 1.0f;
+        }
+    }
+    return electrical_angle_sincos_software(NULL, turns, sine, cosine);
 }
 
 bool realtime_motor_io_get_facts(RealtimeMotorIoFacts *facts)
@@ -361,6 +409,8 @@ void model_sample(void)
 {
     PhaseCurrentObservation current = { 0 };
 
+    /* 正式 ADC IRQ 入口包装不在此替身内，显式补上其单写计数槽。 */
+    g_target_runtime_irq_entries[0]++;
     DWT->CYCCNT += model_tick_cycles;
     model_control_time += model_current_time_step;
     current.phase_b_a = model_current_b;
@@ -391,5 +441,6 @@ void model_service(void)
 
 void model_guard(void)
 {
+    g_target_runtime_irq_entries[1]++;
     target_runtime_guard_irq();
 }

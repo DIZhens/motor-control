@@ -11,6 +11,7 @@
 
 #define OBSERVE_COMPUTE_PROBE_CASE_COUNT (6U)
 #define OBSERVE_COMPUTE_PROBE_ITERATIONS (16U)
+#define OBSERVE_COMPUTE_PROBE_SEGMENT_COUNT (6U)
 
 typedef enum {
     OBSERVE_COMPUTE_PROBE_IDLE = 0, /* 初始化后尚无请求。 */
@@ -37,6 +38,28 @@ typedef enum {
     OBSERVE_COMPUTE_PROBE_INVALID_CONTROLLER = 5 /* 完成前段计算后拒绝无效母线标志。 */
 } ObserveComputeProbeCase;
 
+/* 各段独立读取起止 stamp；total 不是分段相减或相加的估算。 */
+typedef enum {
+    OBSERVE_COMPUTE_PROBE_SEGMENT_TOTAL = 0, /* 完整单例，包括分段测量开销。 */
+    OBSERVE_COMPUTE_PROBE_SEGMENT_MEASUREMENT = 1, /* 电流校正与重构。 */
+    OBSERVE_COMPUTE_PROBE_SEGMENT_MEASUREMENT_ANGLE = 2, /* 测量时刻电角度。 */
+    OBSERVE_COMPUTE_PROBE_SEGMENT_ACTUATION_ANGLE = 3, /* 仅双角算例计算施加角。 */
+    OBSERVE_COMPUTE_PROBE_SEGMENT_SPEED = 4, /* 速度更新或保持已有输出。 */
+    OBSERVE_COMPUTE_PROBE_SEGMENT_CURRENT = 5 /* 电流控制计算，包括预期拒绝路径。 */
+} ObserveComputeProbeSegment;
+
+typedef struct {
+    uint32_t count; /* 本段接受次数；未执行段保持为零。 */
+    uint32_t min_cycles; /* 所有已接受段的最小耗时 [CPU cycle]。 */
+    uint32_t max_cycles; /* 所有已接受段的最大耗时，包含抢占。 */
+    uint64_t sum_cycles; /* 所有已接受段的完整 64 位总耗时。 */
+    uint32_t clean_count; /* IRQ 进入计数未变化的段样本数。 */
+    uint32_t clean_min_cycles; /* clean 样本最小耗时；尚无 clean 样本时为零。 */
+    uint32_t clean_max_cycles; /* clean 样本最大耗时。 */
+    uint64_t clean_sum_cycles; /* clean 样本完整 64 位总耗时。 */
+    uint32_t irq_entries; /* 已接受段中 IRQ 进入计数差的累计值。 */
+} ObserveComputeProbeTiming;
+
 typedef struct {
     uint32_t count; /* 本算例已接受的有效计时次数，完成时为 16。 */
     uint32_t min_cycles; /* 最小前后读数差 [CPU cycle]；count=0 时为零。 */
@@ -46,6 +69,8 @@ typedef struct {
     bool last_output_valid; /* 最近一次电流控制输出有效；预期拒绝路径为 false。 */
     bool last_voltage_limited; /* 最近一次正式电流控制的电压限幅标志。 */
     bool last_speed_limited; /* 最近一次速度输出的限流标志，包括保持路径。 */
+    ObserveComputeProbeTiming segments[OBSERVE_COMPUTE_PROBE_SEGMENT_COUNT]; /* 分段独立统计。 */
+    float last_phasor[4]; /* 测量 sin/cos、施加 sin/cos；未计算施加角时复制测量值。 */
 } ObserveComputeProbeCaseResult;
 
 typedef struct {
@@ -61,6 +86,14 @@ typedef struct {
 
 /* 回调只读取连续运行的 32 位 cycle 计数器；失败返回 false，不修改或复位计数器。 */
 typedef bool (*ObserveComputeProbeClockRead)(void *context, uint32_t *cycles);
+
+/* 调用方须保证一份 stamp 的 cycle 和 IRQ 进入计数是同一读取边界的稳定快照。 */
+typedef struct {
+    uint32_t cycles; /* 连续运行的 CPU cycle 计数器；不在本模块复位。 */
+    uint32_t irq_entries; /* 连续递增的 IRQ 进入计数，不是当前中断嵌套深度。 */
+} ObserveComputeProbeStamp;
+
+typedef bool (*ObserveComputeProbeStampRead)(void *context, ObserveComputeProbeStamp *stamp);
 
 /* Target 私有后台单写对象；与实时控制实例、观测、标定数据及功率许可完全独立。 */
 typedef struct {
@@ -98,6 +131,20 @@ bool observe_compute_probe_start(ObserveComputeProbe *probe, uint32_t request,
  */
 bool observe_compute_probe_step(ObserveComputeProbe *probe, bool permitted,
     ObserveComputeProbeClockRead clock_read, void *clock_context);
+
+/*
+ * 与旧 step 共用正式算例和轮转输入；trig/context 只替换最终三角函数计算。
+ * total 和每个实际执行段分别读取两个 stamp，速度保持段也计时；跳过段不读。
+ * 所有统计在 total 末读后一起提交；任意读取失败、零耗时或超上界均 CLOCK，
+ * 算法失败为 ALGORITHM，两者都不提交本步的部分统计；此前已接受统计继续保留。
+ * uint32 差支持 cycle 和 IRQ 进入计数各自一次回绕；调用方排除整圈计数歧义。
+ * IRQ 差为零计入 clean，否则累计抢占次数；clean 只对计数器覆盖的 IRQ 有意义，
+ * 不代表完整 ISR WCET 或提交截止验收。顶层 count/min/max/sum 同步为 total 兼容视图。
+ * 旧 step 仍只读两次 clock，不填 segments；两个入口不得交错用于同一请求的性能比较。
+ */
+bool observe_compute_probe_step_profiled(ObserveComputeProbe *probe, bool permitted,
+    ElectricalAngleTrig trig, void *trig_context, ObserveComputeProbeStampRead stamp_read,
+    void *stamp_context);
 
 /* 只在 ACTIVE 锁存失败并保留已接受统计；无效或 NONE reason 统一为 ABORTED。 */
 bool observe_compute_probe_abort(ObserveComputeProbe *probe, ObserveComputeProbeFailure reason);
