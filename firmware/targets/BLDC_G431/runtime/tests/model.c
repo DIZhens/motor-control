@@ -113,6 +113,15 @@ const uint32_t model_capture_field_sizes[] = {
     sizeof(ObserveCurrentCaptureResult), sizeof(ObserveCurrentCaptureState),
     sizeof(ObserveCurrentCaptureFailure)
 };
+const uint32_t model_compute_offsets[] = {
+    offsetof(ObserveComputeProbeResult, request_sequence),
+    offsetof(ObserveComputeProbeResult, state),
+    offsetof(ObserveComputeProbeResult, failure),
+    offsetof(ObserveComputeProbeResult, completed_steps),
+    offsetof(ObserveComputeProbeResult, cases),
+    sizeof(ObserveComputeProbeState), sizeof(ObserveComputeProbeFailure),
+    sizeof(ObserveComputeProbeResult), sizeof(ObserveComputeProbeCaseResult)
+};
 ControlRuntime model_unpermitted_runtime;
 Motor model_unpermitted_motor;
 uint32_t model_unpermitted_init_ok;

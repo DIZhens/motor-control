@@ -86,7 +86,7 @@ READY 后只校正，不重新学习；正常 RUN 与 Stop 保留冻结偏置，
 控制配置和可信标定尚未开放，Id/Iq 仍为 NaN。READY 只证明本次零偏窗口满足软件门限，增益、极性和实际采样窗口仍待实测。
 
 可移植电流 PI、速度 PI、Park 和 SVPWM 已接入公共 Runtime，当前装配仍关闭控制配置；
-板上仍沿用已验收的无功率镜像，本次软件增量未烧录。具体构建与实测身份见 Target 验证页。
+最新构建和已完成的无功率诊断实测身份见 Target 验证页；这不开放实际控制链。
 
 ## 受门控的控制链
 
@@ -112,6 +112,36 @@ Stop 清目标、待启动请求和两环积分，保留正常冻结零偏；任
 不表示这个实机入口已开放。尤其三角函数、PI 和 SVPWM 的真实执行时间必须满足当前约
 15 µs 的 stage 前段预算；模型与编译不证明该预算。
 
+## 后台无功率计算计时
+
+`compute_probe.h/.c` 使用独立算法状态和明确的合成输入，调用正式电流预处理、电角度、
+速度 PI 与电流 PI。六例覆盖正常、速度保持、独立施加角、限幅及两条预期拒绝路径，
+每例 16 次，共 96 次。主循环每轮至多执行一例，duty 只保存为诊断，不提交硬件。
+它不调用真实 ControlRuntime，不改物理标定确认，不 stage、不 enable、不清故障。
+
+主机只向 `g_target_runtime_compute_request` 写一次非零新身份。后台是实例、身份消费和
+结果发布的唯一写者；开始及终态通过 `g_target_runtime_compute_sequence` 发布
+`g_target_runtime_compute_result`。ACTIVE 只含开始状态，COMPLETE 才含完整统计。
+重复身份不重放；活动请求遇新身份锁存 BUSY，不隐式运行替代请求。
+
+ADC 同拍发布 IDLE/OFF、控制关闭且母线有效、处于 0..3.6 V 的诊断许可；许可变化立即
+发布。后台在计算前后另查 MOE、guard、邮箱、DWT 与采样心跳；只在极短临界区读取心跳
+时间对，计算期间不屏蔽中断、不清零 DWT。Stop 在后台直接取消，即使 ADC 已消费并
+清掉 Stop pending，也不能漏取消或同轮重开。最后一步后失去健康条件会撤销 COMPLETE。
+
+cycle 读数包含中断抢占和两次测量调用的开销，按 170 MHz 配置换算；200 µs 的单例诊断
+上限只用于拒绝异常读数，不是实际控制提交预算。它不是完整 ISR 时间、WCET 或 stage
+截止验收。背景诊断也会延后 UART 轮询，不能同时把它作为串口高负荷测试。
+
+[`tools/compute_probe.py`](tools/compute_probe.py) 默认只冻结并核对同次 HEX/AXF/MAP、
+真实 DWARF 字段和短枚举。只有显式 `--measure --logic-only-confirmed --vbus-dmm-v <实测值>`
+才 HOTPLUG 进行一次请求；失败不补发，不烧录、不复位。现场须由操作者确认母线电源、
+电池、三相和外部注入源断开。实测结果及解释见 [验证页](../VALIDATION.md)。
+
+```powershell
+.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tools/compute_probe.py --build-dir <同次构建目录> --expected-hex-sha256 <完整SHA256> --output <新目录>
+```
+
 ## 已知电流诊断采集
 
 `current_capture.h/.c` 是此 Target 的无功率诊断统计器，不属于 Motor 命令、控制算法或
@@ -136,7 +166,7 @@ HEX/AXF/MAP、派生类型布局，不接设备；`--acquire` 才执行 HOTPLUG 
 
 实际采集需先确认电机母线电源及电机三相断开，启动校零时外部注入源断开；
 零偏 READY 后再接入限流注入支路。注入期间不得复位或重新启动自动校零。
-脚本不烧录、不复位，也不提供功率命令；本入口尚未上板，器材与焊点确认后再做针对性实测。
+脚本不烧录、不复位，也不提供功率命令；该统计入口的非零电流采集尚未执行，器材与焊点确认后再做针对性实测。
 参考方向、接点与既有台架记录见 [电流复核](../validation/CURRENT_CHECK.md#后续已知电流对照准备)。
 
 ## 通信与运行监视
@@ -155,6 +185,7 @@ Clear 不会清锁存；独立 guard 原因可在 Watch 中查看 `g_target_runt
 
 ```powershell
 python firmware/app/motor/tests/verify_motor.py
+python firmware/app/motor/tests/verify_rotor_alignment.py
 python firmware/app/communication/tests/verify_vofa.py
 python firmware/app/communication/tests/verify_motor_vofa.py
 python control/tests/verify_position_estimator.py
@@ -163,6 +194,8 @@ python control/tests/verify_electrical_angle.py
 python control/tests/verify_speed_controller.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_current_capture_model.py
 python firmware/targets/BLDC_G431/runtime/tests/test_current_capture_tool.py
+python firmware/targets/BLDC_G431/runtime/tests/verify_compute_probe_model.py
+python firmware/targets/BLDC_G431/runtime/tests/test_compute_probe_tool.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py
 ```
@@ -180,8 +213,9 @@ ADC 丢失、旧快照失效、低优先级代码被 ADC 抢占的交错，以�
 锁存/请求身份、重复请求、BUSY、Stop 与异常中止；主机替身验证前检失败零写入、
 单地址一次写、应答丢失不补发和采后复核。模型不代替 UART 链路、
 实机速度精度或 ISR WCET；软件与实机结论分别记录在 Target 验证页。
-UART、手转反馈和本次逻辑供电零偏窗口已完成有限实测；下一步做已知电流增益/方向对照、
-受控电角度标定和 FOC；各轮镜像与实测范围、既有台架证据仍从
+既有 UART、手转反馈、逻辑供电零偏及本次后台计算计时各有有限实测；下一步先对计算与
+抢占开销作分段定位，并推进已知电流增益/方向对照，随后安排受控电角度标定和 FOC。
+各轮镜像与实测范围、既有台架证据仍从
 [VALIDATION.md](../VALIDATION.md) 进入，按具体修改影响选择复测。
 
 可为独立 MATLAB 复算导出轨迹：
@@ -195,4 +229,5 @@ python firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py --trace-ou
 `verify_foc_trace(csv_path, metadata_path, report_path)`，先将本目录 `tests/` 加入 path。
 仅依赖基础 `ode45`，不需要 Simulink；抽取起步、降速、反转切换和 Stop 附近的连续区段，
 每段只取首状态，随后累计独立积分比较。误差表示两个数值对象的一致性，不能解释为传感器精度。
-[本轮软件模型摘要与曲线](../validation/evidence/foc-runtime-model/summary.json)明确区分模型与实物范围。
+[集成检查点 130a410 的软件模型摘要与曲线](../validation/evidence/foc-runtime-model/summary.json)
+保留原源码身份，明确区分模型与实物范围；后续后台诊断的实测不改写这份模型证据。

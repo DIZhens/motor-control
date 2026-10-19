@@ -758,6 +758,11 @@
               <FileType>1</FileType>
               <FilePath>../runtime/current_capture.c</FilePath>
             </File>
+            <File>
+              <FileName>compute_probe.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/compute_probe.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -840,6 +845,11 @@
               <FileName>control_runtime.c</FileName>
               <FileType>1</FileType>
               <FilePath>../../../app/motor/control_runtime.c</FilePath>
+            </File>
+            <File>
+              <FileName>rotor_alignment.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../../../app/motor/rotor_alignment.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -1786,6 +1796,11 @@
               <FileType>1</FileType>
               <FilePath>../runtime/current_capture.c</FilePath>
             </File>
+            <File>
+              <FileName>compute_probe.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/compute_probe.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -1800,6 +1815,11 @@
               <FileName>control_runtime.c</FileName>
               <FileType>1</FileType>
               <FilePath>../../../app/motor/control_runtime.c</FilePath>
+            </File>
+            <File>
+              <FileName>rotor_alignment.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../../../app/motor/rotor_alignment.c</FilePath>
             </File>
           </Files>
         </Group>

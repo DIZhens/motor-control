@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "current_capture.h"
+#include "compute_probe.h"
 
 /* Observe 入口的锁存诊断；当前没有清除或功率使能路径。 */
 enum {
@@ -28,9 +29,16 @@ extern volatile uint32_t g_target_runtime_current_request;
 extern volatile uint32_t g_target_runtime_current_sequence;
 extern volatile ObserveCurrentCaptureResult g_target_runtime_current_capture;
 
+/* 后台独立计算计时：仅写一次非零新 request，不使用真实控制状态或功率许可。
+ * result 使用奇偶 sequence 发布；只有 COMPLETE 才含完整固定次数统计。
+ * CPU cycle 读数包含抢占与测量开销，不代表完整 ISR 或 stage 截止验收。 */
+extern volatile uint32_t g_target_runtime_compute_request;
+extern volatile uint32_t g_target_runtime_compute_sequence;
+extern volatile ObserveComputeProbeResult g_target_runtime_compute_result;
+
 /* 一次装配，默认关断；不包含 stage、enable 或保护注入命令。 */
 void target_runtime_start(void);
-/* 主循环轮询 USART1，一次至多收/发一个字节，不等待外设。 */
+/* 主循环至多收/发一个 UART 字节、计算一个诊断算例，不等待外设。 */
 void target_runtime_service(void);
 /* 复用已配置的 TIM6_DAC IRQ，仅处理 TIM6 update。 */
 void target_runtime_guard_irq(void);

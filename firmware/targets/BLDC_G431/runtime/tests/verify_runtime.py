@@ -70,6 +70,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     objects = []
     for source in [TESTS / "model.c", TARGET / "runtime/target_runtime.c",
                    TARGET / "runtime/current_capture.c",
+                   TARGET / "runtime/compute_probe.c",
                    REPOSITORY / "firmware/app/motor/motor.c",
                    REPOSITORY / "firmware/app/motor/control_runtime.c",
                    REPOSITORY / "control/position_estimator.c",
@@ -136,6 +137,8 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                 "<3I", self.cpu.mem_read(symbols["model_capture_field_sizes"], 12))
             self.capture_size = capture_sizes[0]
             self.capture_formats = [{1: "B", 2: "H", 4: "I"}[size] for size in capture_sizes[1:]]
+            self.compute_offsets = struct.unpack(
+                "<9I", self.cpu.mem_read(symbols["model_compute_offsets"], 36))
             for name, value in (settings or {}).items():
                 self.write(name, value)
             if start:
@@ -211,6 +214,28 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             self.assert_default_off()
             return capture
 
+        def compute(self) -> dict:
+            offsets = self.compute_offsets
+            data = bytes(self.cpu.mem_read(symbols["g_target_runtime_compute_result"], offsets[7]))
+            read = lambda offset, fmt: struct.unpack_from("<" + fmt, data, offset)[0]
+            return {"request": read(offsets[0], "I"),
+                    "state": read(offsets[1], {1: "B", 2: "H", 4: "I"}[offsets[5]]),
+                    "failure": read(offsets[2], {1: "B", 2: "H", 4: "I"}[offsets[6]]),
+                    "steps": read(offsets[3], "I"),
+                    "counts": [read(offsets[4] + i * offsets[8], "I") for i in range(6)],
+                    "sequence": self.word("g_target_runtime_compute_sequence"), "bytes": data}
+
+        def prepare_compute(self) -> None:
+            self.memory_write(0xE000EDFC, 1 << 24)
+            self.memory_write(0xE0001000, 1)
+            self.write("model_bus_voltage", 2.68, "f")
+            self.sample(20)  # 达到真实慢观测分频，发布合法母线快照后才许可诊断。
+            # 假周期数只验证接入与并发，不能作为 Cortex-M4 的物理执行时间。
+            def advance_clock(cpu, access, address, size, value, user_data):
+                self.memory_write(DWT_CYCCNT, self.memory_word(DWT_CYCCNT) + 17)
+            self.compute_clock_hook = self.cpu.hook_add(
+                UC_HOOK_MEM_READ, advance_clock, begin=DWT_CYCCNT, end=DWT_CYCCNT + 3)
+
         def angle(self, runtime_name: str = "s_control_runtime") -> dict:
             def read(index: int, fmt: str):
                 address = symbols[runtime_name] + self.angle_offsets[index]
@@ -283,7 +308,8 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                 self.memory_write(USART1 + 0x1C, self.memory_word(USART1 + 0x1C) & ~value)
 
         def call(self, name: str, interrupt_clock: bool = False,
-                 stack: int = 0x20007FF0, instruction_budget: int = 100000) -> None:
+                 stack: int = 0x20007FF0, instruction_budget: int = 100000,
+                 interrupt_write: int | None = None, interrupt_step_cycles: int = 1) -> None:
             self.cpu.reg_write(UC_ARM_REG_SP, stack)
             self.cpu.reg_write(UC_ARM_REG_LR, 0x0803F001)
             clock_read = False
@@ -300,15 +326,16 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                     paused = True
                     cpu.emu_stop()
 
-            if interrupt_clock:
-                hooks = [self.cpu.hook_add(UC_HOOK_MEM_READ, read_clock,
-                                          begin=DWT_CYCCNT, end=DWT_CYCCNT + 3),
+            if interrupt_clock or interrupt_write is not None:
+                hooks = [self.cpu.hook_add(UC_HOOK_MEM_READ if interrupt_clock else UC_HOOK_MEM_WRITE,
+                                          read_clock, begin=DWT_CYCCNT if interrupt_clock else interrupt_write,
+                                          end=DWT_CYCCNT + 3 if interrupt_clock else interrupt_write),
                          self.cpu.hook_add(UC_HOOK_CODE, pause_after_clock)]
             try:
                 self.cpu.emu_start(symbols[name] | 1, 0x0803F000, count=instruction_budget)
                 for hook in hooks:
                     self.cpu.hook_del(hook)
-                if interrupt_clock:
+                if interrupt_clock or interrupt_write is not None:
                     assert paused, "DWT read interruption point was not reached: " + name
                     # 暂停低优先级代码，独立栈执行真实 ADC callback，再恢复寄存器而保留内存写入。
                     context = self.cpu.context_save()
@@ -316,7 +343,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                     previous_step = self.word("model_tick_cycles")
                     previous_count = self.word("model_callback_count")
                     self.interrupt_masks.append(self.cpu.reg_read(UC_ARM_REG_PRIMASK))
-                    self.write("model_tick_cycles", 1)
+                    self.write("model_tick_cycles", interrupt_step_cycles)
                     self.phase = "sample"
                     self.call("model_sample", stack=0x20006FF0)
                     assert self.word("model_callback_count") == previous_count + 1
@@ -339,12 +366,14 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             assert self.fast_uart_accesses == []
 
         def service(self, status: int = 0, byte: int = 0,
-                    interrupt_clock: bool = False) -> None:
+                    interrupt_clock: bool = False, interrupt_write: int | None = None,
+                    interrupt_step_cycles: int = 1) -> None:
             before_rx, before_tx = self.rx_reads, self.tx_writes
             self.memory_write(USART1 + 0x1C, status)
             self.memory_write(USART1 + 0x24, byte)
             self.phase = "service"
-            self.call("model_service", interrupt_clock=interrupt_clock)
+            self.call("model_service", interrupt_clock=interrupt_clock,
+                      interrupt_write=interrupt_write, interrupt_step_cycles=interrupt_step_cycles)
             self.phase = ""
             assert self.rx_reads - before_rx <= 1 and self.tx_writes - before_tx <= 1
 
@@ -1305,6 +1334,132 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         assert (model.capture_bytes(), model.capture()["sequence"]) == before, failure
         model.assert_current_unpublished()
     passed("活动诊断在故障、坏采样、时间异常、运动、位置失效及意外功率时失败锁存且不stage或enable")
+
+    model = Model()
+    model.write("g_target_runtime_compute_request", 1)
+    model.service()
+    assert model.compute()["state"] == 3 and model.compute()["failure"] == 1
+    frozen = model.compute()
+    model.prepare_compute()
+    model.service()
+    assert model.compute() == frozen
+    model.assert_default_off()
+    passed("计时诊断在无真实采样或时钟许可时拒绝，拒绝身份在条件改善后不自动重放")
+
+    model = Model()
+    model.prepare_compute()
+    model.write("g_target_runtime_compute_request", 1)
+    model.service()
+    assert model.compute()["state"] == 1 and model.compute()["steps"] == 0
+    active = model.compute()
+    for step in range(95):
+        model.sample()
+        model.service()
+        if step < 94:
+            assert model.compute() == active
+    complete = model.compute()
+    assert complete["state"] == 2 and complete["failure"] == 0
+    assert complete["steps"] == 96 and complete["counts"] == [16] * 6
+    assert complete["sequence"] % 2 == 0
+    model.sample()
+    model.service()
+    assert model.compute() == complete
+    assert model.current()["state"] == CURRENT_WAITING
+    model.assert_default_off()
+    passed("后台计时逐轮只跑一例并在96步冻结，真实Runtime保持未标定且没有stage、enable或重试")
+
+    model = Model()
+    model.prepare_compute()
+    model.write("g_target_runtime_compute_request", 1)
+    model.service()
+    model.write("g_target_runtime_compute_request", 2)
+    model.service()
+    result = model.compute()
+    assert result["request"] == 2 and result["state"] == 3 and result["failure"] == 5
+    assert result["steps"] == 0 and result["counts"] == [0] * 6
+    model.service()
+    assert model.compute() == result
+    model.assert_default_off()
+    passed("活动计时遇新身份明确BUSY，不把旧统计冠到新请求或自动替代运行")
+
+    model = Model()
+    model.prepare_compute()
+    model.write("g_target_runtime_compute_request", 1)
+    model.service()
+    model.write("model_bus_voltage", 12.0, "f")
+    model.sample(20)
+    assert model.control_time() == 40  # 尚未到 200 拍周期发布点。
+    model.service()
+    assert model.compute()["state"] == 3 and model.compute()["failure"] == 1
+    assert model.compute()["steps"] == 1
+    model.assert_default_off()
+    passed("新母线观测越过逻辑供电门限立即撤销诊断许可，不与旧100Hz低压快照混用")
+
+    for failure in ["stale", "clock_disabled", "guard", "publication"]:
+        model = Model()
+        model.prepare_compute()
+        model.write("g_target_runtime_compute_request", 1)
+        model.service()
+        if failure == "stale":
+            model.memory_write(DWT_CYCCNT, model.memory_word(DWT_CYCCNT) + 13000)
+        elif failure == "clock_disabled":
+            model.memory_write(0xE0001000, 0)
+        elif failure == "guard":
+            model.write("g_target_runtime_guard_faults", FAULT_CADENCE)
+        else:
+            model.write("s_publication_sequence", model.word("s_publication_sequence") | 1)
+        model.service()
+        assert model.compute()["state"] == 3 and model.compute()["failure"] == 1, failure
+        assert model.compute()["steps"] == 1
+        model.assert_default_off()
+    passed("完整旧快照不能替代ADCheartbeat，时钟禁用、guard或发布冲突均有界终止计时")
+
+    for simultaneous_request in [False, True]:
+        model = Model()
+        model.prepare_compute()
+        model.write("g_target_runtime_compute_request", 1)
+        model.service()
+        model.receive(b"stop")
+        if simultaneous_request:
+            model.write("g_target_runtime_compute_request", 2)
+        model.service(RXNE, ord("\n"), interrupt_write=symbols["s_stop_pending"],
+                      interrupt_step_cycles=8500)
+        result = model.compute()
+        assert model.interruptions == 1 and model.motor()[0:3] == (IDLE, 0, ACCEPTED)
+        assert result["state"] == 3
+        if simultaneous_request:
+            assert result["request"] == 2 and result["failure"] == 1 and result["steps"] == 0
+        else:
+            assert result["request"] == 1 and result["failure"] == 2 and result["steps"] > 0
+        frozen = model.compute()
+        model.sample()
+        model.service()
+        assert model.compute() == frozen
+        model.assert_default_off()
+    passed("真实ADC抢占消费Stop后仍取消后台计时，同轮新请求不能利用清掉的pending绕过Stop")
+
+    model = Model()
+    model.prepare_compute()
+    model.write("g_target_runtime_compute_request", 1)
+    model.service()
+    for _ in range(94):
+        model.sample()
+        model.service()
+    model.sample()
+    reads = [0]
+    def fail_after_final_algorithm(cpu, access, address, size, value, user_data):
+        reads[0] += 1
+        if reads[0] == 3:  # 许可心跳读取、算法前读数、算法后读数。
+            model.write("g_target_runtime_guard_faults", FAULT_CADENCE)
+    hook = model.cpu.hook_add(UC_HOOK_MEM_READ, fail_after_final_algorithm,
+                             begin=DWT_CYCCNT, end=DWT_CYCCNT + 3)
+    model.service()
+    model.cpu.hook_del(hook)
+    result = model.compute()
+    assert result["state"] == 3 and result["failure"] == 1
+    assert result["steps"] == 96 and result["counts"] == [16] * 6
+    model.assert_default_off()
+    passed("末步算法完成后健康复核失败会撤销COMPLETE，完整计数也不被误报为合格结果")
 
 print(f"PASS: {len(CASES)} G431 runtime C behavior groups")
 for name in CASES:

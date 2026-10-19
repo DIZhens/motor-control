@@ -28,12 +28,16 @@ typedef struct {
     MotorSnapshot snapshot; /* 与协议无关的完整业务快照及其有效性。 */
     uint32_t incorporated_guard_faults; /* 已纳入 Motor 快照的故障位，用于识别尚未合并的监视原因。 */
     bool has_sample; /* 是否已有真实采样；启动阶段的初始快照为 false。 */
+    bool compute_probe_permitted; /* ADC 同拍确认 IDLE/OFF、控制配置关闭且无故障；后台仍须复核心跳和 MOE。 */
 } RuntimePublication;
 
 volatile uint32_t g_target_runtime_guard_faults;
 volatile uint32_t g_target_runtime_current_request;
 volatile uint32_t g_target_runtime_current_sequence;
 volatile ObserveCurrentCaptureResult g_target_runtime_current_capture;
+volatile uint32_t g_target_runtime_compute_request;
+volatile uint32_t g_target_runtime_compute_sequence;
+volatile ObserveComputeProbeResult g_target_runtime_compute_result;
 
 /* 启动阶段在时基开启前写入；运行后仅由 sample_ready 更新 Motor。 */
 static Motor s_motor;
@@ -65,6 +69,11 @@ static bool s_has_sample;
 static ObserveCurrentCapture s_current_capture;
 static uint32_t s_current_request_seen;
 
+/* 计时诊断只由后台写入，ADC 与 guard 不修改实例或结果。 */
+static ObserveComputeProbe s_compute_probe;
+static uint32_t s_compute_request_seen;
+static bool s_compute_stop_this_service; /* 同轮收到 Stop 后，即使 ADC 已消费也不接受计时请求。 */
+
 /* 解析器和正在发送的整帧仅由后台维护；发送完成前不改写帧内容。 */
 static VofaParser s_parser;
 static uint8_t s_tx_frame[VOFA_TELEMETRY_FRAME_SIZE];
@@ -85,6 +94,16 @@ static bool finite_float(float value)
     return (value >= -FLT_MAX) && (value <= FLT_MAX);
 }
 
+/* 只由 ADC 所有者读取实时对象；许可变化须立即发布，不能沿用 100 Hz 的旧母线值。 */
+static bool compute_probe_adc_permitted(bool has_sample)
+{
+    return has_sample && (s_motor.state == MOTOR_STATE_IDLE) && (s_motor.faults == 0U)
+        && (s_control_runtime.phase == CONTROL_RUNTIME_OFF)
+        && !s_control_runtime.config.control.enabled && s_control_runtime.bus_valid
+        && finite_float(s_control_runtime.bus.voltage_v)
+        && (s_control_runtime.bus.voltage_v >= 0.0f) && (s_control_runtime.bus.voltage_v <= 3.6f);
+}
+
 static void publish(ControlTime now, bool has_sample)
 {
     RuntimePublication next;
@@ -93,6 +112,7 @@ static void publish(ControlTime now, bool has_sample)
     control_runtime_snapshot(&s_control_runtime, now, has_sample, &next.snapshot);
     next.incorporated_guard_faults = s_motor.faults;
     next.has_sample = has_sample;
+    next.compute_probe_permitted = compute_probe_adc_permitted(has_sample);
     s_publication_sequence++;
     __DMB();
     s_publication = next;
@@ -252,6 +272,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     /* 同拍更新健康快照，主机复核完整窗口时不沿用此前的100Hz旧状态。 */
     business_changed |= capture_current(current, power_disabled,
         command_available && !rejected && (command.type == MOTOR_COMMAND_STOP));
+    business_changed |= compute_probe_adc_permitted(true) != s_publication.compute_probe_permitted;
     s_publication_divider++;
     if (business_changed || (s_publication_divider >= PUBLICATION_DIVIDER)) {
         if (s_publication_divider >= PUBLICATION_DIVIDER) {
@@ -306,6 +327,11 @@ void target_runtime_start(void)
         return;
     }
     s_attempted = true;
+    observe_compute_probe_init(&s_compute_probe);
+    g_target_runtime_compute_request = 0U;
+    g_target_runtime_compute_sequence = 0U;
+    s_compute_request_seen = 0U;
+    g_target_runtime_compute_result = s_compute_probe.result;
     observe_current_capture_init(&s_current_capture);
     g_target_runtime_current_request = 0U;
     g_target_runtime_current_sequence = 0U;
@@ -362,6 +388,84 @@ void target_runtime_start(void)
     restore_interrupts(primask);
 }
 
+/* 后台单写计时结果；外部通过版本号读取冻结的一致副本。 */
+static void publish_compute_probe(void)
+{
+    g_target_runtime_compute_sequence++;
+    __DMB();
+    g_target_runtime_compute_result = s_compute_probe.result;
+    __DMB();
+    g_target_runtime_compute_sequence++;
+}
+
+/* 健康 publication 只是同拍证据；独立心跳、硬件关闭状态和邮箱须额外复核。
+ * 临界区只保护采样时间/DWT 读数对，绝不包围控制计算。 */
+static bool compute_probe_permitted(void)
+{
+    RuntimePublication publication;
+    uint32_t primask;
+    uint32_t last_sample;
+    uint32_t now;
+
+    if (!read_publication(&publication) || !publication.has_sample
+        || !publication.compute_probe_permitted || !publication.snapshot.status_valid
+        || !publication.snapshot.control_time_valid || !publication.snapshot.bus_voltage_valid
+        || (publication.snapshot.state != MOTOR_STATE_IDLE) || (publication.snapshot.faults != 0U)
+        || !finite_float(publication.snapshot.bus_voltage_v)
+        || (publication.snapshot.bus_voltage_v < 0.0f) || (publication.snapshot.bus_voltage_v > 3.6f)
+        || s_command_pending || s_stop_pending || s_reject_pending || s_compute_stop_this_service
+        || (g_target_runtime_guard_faults != 0U) || ((TIM1->BDTR & TIM_BDTR_MOE) != 0U)
+        || (SystemCoreClock != 170000000U)
+        || ((CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) == 0U)
+        || ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) == 0U)) {
+        return false;
+    }
+    primask = __get_PRIMASK();
+    __disable_irq();
+    last_sample = s_last_sample_cycles;
+    now = DWT->CYCCNT;
+    restore_interrupts(primask);
+    return (uint32_t)(now - last_sample) <= SAMPLE_MAX_US * CYCLES_PER_US;
+}
+
+static bool compute_probe_clock(void *context, uint32_t *cycles)
+{
+    (void)context;
+    if (((CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) == 0U)
+        || ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) == 0U)) {
+        return false;
+    }
+    *cycles = DWT->CYCCNT;
+    return true;
+}
+
+/* 每轮后台至多执行一个固定算例；结果仅发布诊断，不提交 duty 或开放许可。 */
+static void service_compute_probe(void)
+{
+    uint32_t request = g_target_runtime_compute_request;
+    bool permitted;
+
+    if ((request != 0U) && (request != s_compute_request_seen)) {
+        s_compute_request_seen = request;
+        permitted = compute_probe_permitted();
+        (void)observe_compute_probe_start(&s_compute_probe, request,
+            SystemCoreClock, 200U * CYCLES_PER_US, permitted);
+        publish_compute_probe();
+    }
+    if (s_compute_probe.result.state != OBSERVE_COMPUTE_PROBE_ACTIVE) {
+        return;
+    }
+    permitted = compute_probe_permitted();
+    (void)observe_compute_probe_step(&s_compute_probe, permitted, compute_probe_clock, NULL);
+    if (!compute_probe_permitted()) {
+        (void)observe_compute_probe_revoke(&s_compute_probe);
+    }
+    /* ACTIVE 中的统计保持私有；开始/终态才发布，避免采集端读到半份统计。 */
+    if (s_compute_probe.result.state != OBSERVE_COMPUTE_PROBE_ACTIVE) {
+        publish_compute_probe();
+    }
+}
+
 /* 后台只向实时边界提交长度受限且内容完整的命令。 */
 static void enqueue(const VofaCommand *request, bool rejected)
 {
@@ -369,6 +473,7 @@ static void enqueue(const VofaCommand *request, bool rejected)
 
     __disable_irq();
     if (!rejected && (request->type == VOFA_COMMAND_STOP)) {
+        s_compute_stop_this_service = true;
         s_command_pending = false;
         s_stop_pending = true;
     } else if (rejected || s_command_pending || s_stop_pending) {
@@ -385,6 +490,11 @@ static void enqueue(const VofaCommand *request, bool rejected)
         }
     }
     restore_interrupts(primask);
+    /* Stop 可能已被高优先级 ADC 消费并清掉 pending；在同一后台直接取消诊断。 */
+    if (!rejected && (request->type == VOFA_COMMAND_STOP)
+        && observe_compute_probe_abort(&s_compute_probe, OBSERVE_COMPUTE_PROBE_FAILURE_ABORTED)) {
+        publish_compute_probe();
+    }
 }
 
 void target_runtime_service(void)
@@ -393,6 +503,7 @@ void target_runtime_service(void)
     uint32_t uart_status = USART1->ISR;
     uint32_t errors = uart_status & (USART_ISR_PE | USART_ISR_FE | USART_ISR_NE | USART_ISR_ORE);
 
+    s_compute_stop_this_service = false;
     if ((s_parser.length != 0U) && !s_parser.discarding
         && ((uint32_t)(now_ms - s_last_rx_ms) >= RX_FRAGMENT_TIMEOUT_MS)) {
         s_parser.length = 0U;
@@ -441,4 +552,5 @@ void target_runtime_service(void)
     if ((s_tx_cursor < s_tx_length) && ((USART1->ISR & USART_ISR_TXE_TXFNF) != 0U)) {
         USART1->TDR = s_tx_frame[s_tx_cursor++];
     }
+    service_compute_probe();
 }

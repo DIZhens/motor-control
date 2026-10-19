@@ -15,6 +15,7 @@ MCU 电机控制固件。
 
 公共应用使用 HCC，不直接依赖某一 Target 的 HAL、调试邮箱或保护注入命令。
 两板验证结果互不替代；模型、静态检查、目标编译和实物验证分别记录。
+Motor 内部有限静态定向核心及其尚未装配的执行边界见 [Motor 说明](app/motor/README.md)。
 
 V1 只推进 G431、一台电机和 MT6701 的 FOC 电流内环与速度外环，以 UART 对接现成 VOFA 工具。默认关断入口的构建与限制见 [G431 runtime](targets/BLDC_G431/runtime/README.md)，随后接入反馈、标定和受控闭环。位置环、FreeRTOS、Modbus、CANopen 和 F405 同功能验收后续再做。
 
