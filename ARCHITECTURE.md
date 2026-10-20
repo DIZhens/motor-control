@@ -305,7 +305,7 @@ black-box smart servo drive
 
 Realtime Motor I/O 是 V1 最核心的硬实时硬件边界。它把共享同一确定时序事务的 Drive Timing、Power Stage Actuation、同步相电流采集、Power Enable 和 software safe-off 收拢在一起；这不表示建立巨大 Platform 模块，而是承认这些能力必须共同满足同一个 PWM / sample / control 一致性边界。
 
-`control/` 负责 FOC、逆 Park 和 SVPWM，并向 Platform 提交归一化三相 `PhaseDutyRequest`。该请求表达“控制算法希望下一 PWM 周期实现的三相平均 duty”，不是 CCR、Timer count 或最终硬件波形。
+`control/` 负责 FOC、逆 Park 和 SVPWM，并向 Platform 提交归一化三相 `PhaseDutyRequest`。该请求表达“控制算法希望在 Target 声明的下一有效更新边界起实现的三相平均 duty”，不是 CCR、Timer count 或最终硬件波形。有效更新区间可以包含多个 PWM 载波周期；采样时刻、生效边界和保持时长必须由 Target 明确，并与 Runtime 的控制周期及角度预测参数一致。
 
 Platform 负责：
 

@@ -21,9 +21,9 @@
 #include "../platform/realtime_motor_io_diagnostic.h"
 
 #define CYCLES_PER_US (170U)
-#define SAMPLE_MIN_US (25U)
-#define SAMPLE_MAX_US (75U)
-#define PUBLICATION_DIVIDER (200U)
+#define SAMPLE_MIN_US (75U)
+#define SAMPLE_MAX_US (125U)
+#define PUBLICATION_DIVIDER (100U)
 #define TELEMETRY_PERIOD_MS (10U)
 #define RX_FRAGMENT_TIMEOUT_MS (100U)
 
@@ -52,9 +52,9 @@ static ControlRuntime s_control_runtime;
 static G431CordicMath s_cordic_math;
 /* 3000 rpm 只用于位置差分排歧，不构成电机运行许可；当前没有使能路径。 */
 static const ControlRuntimeConfig s_control_config = {
-    20000U, 1U, 20U, 100U, 100U, { 3000.0f, 0.01f },
+    20000U, 2U, 10U, 100U, 100U, { 3000.0f, 0.01f },
     /* 零偏/噪声限是本次保守工程候选，不代表增益、极性或精度已经标定。 */
-    { CURRENT_MEASUREMENT_PHASE_BC, 4096U, 0.10f, 0.05f }, 200U, 5.0f,
+    { CURRENT_MEASUREMENT_PHASE_BC, 2048U, 0.10f, 0.05f }, 100U, 5.0f,
     /* 仅此无功率观察构建：启动校零前须断开电池、三相及外部注入源。 */
     true,
     /* 极对数、方向和电角度偏置尚未实测，保持电角度未配置、未确认。 */
@@ -112,7 +112,8 @@ static bool compute_probe_adc_permitted(bool has_sample)
     (void)has_sample;
     return false;
 #else
-    return has_sample && g_target_stage_budget_active == 0U
+    return s_control_config.fast_tick_period_ticks == 1U
+        && has_sample && g_target_stage_budget_active == 0U
         && g_target_runtime_stage_request == s_stage_request_seen
         && (s_motor.state == MOTOR_STATE_IDLE) && (s_motor.faults == 0U)
         && (s_control_runtime.phase == CONTROL_RUNTIME_OFF)
@@ -125,7 +126,9 @@ static bool compute_probe_adc_permitted(bool has_sample)
 /* 原观察对象仍保持OFF；只给隔离试具读取/计算/真实stage的许可。 */
 static bool stage_budget_adc_permitted(bool has_sample)
 {
-    return has_sample && s_cordic_ready && s_motor.state == MOTOR_STATE_IDLE
+    /* 旧半周期诊断只适用于原20kHz采样；新slot统一使用Timing入口。 */
+    return s_control_config.fast_tick_period_ticks == 1U
+        && has_sample && s_cordic_ready && s_motor.state == MOTOR_STATE_IDLE
         && s_motor.faults == 0U && s_control_runtime.phase == CONTROL_RUNTIME_OFF
         && !s_control_runtime.config.control.enabled && s_control_runtime.bus_valid
         && finite_float(s_control_runtime.bus.voltage_v)
@@ -462,7 +465,7 @@ void target_runtime_start(void)
     }
     if (!realtime_motor_io_get_facts(&facts)
         || (facts.control_time_ticks_per_second != 20000U)
-        || (facts.fast_tick_period_ticks != 1U)
+        || (facts.fast_tick_period_ticks != 2U)
         || !realtime_motor_io_bind_sample_ready(sample_ready, NULL)
         || !hardware_trip_bind(trip_notify, NULL)
         || !position_observation_arm() || !bus_observation_arm()

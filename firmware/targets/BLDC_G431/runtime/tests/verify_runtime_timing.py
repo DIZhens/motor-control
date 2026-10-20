@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import os
+import math
 import struct
 import subprocess
 import tempfile
@@ -10,7 +11,7 @@ from elftools.elf.elffile import ELFFile
 from unicorn import (Uc, UcError, UC_ARCH_ARM, UC_MODE_MCLASS, UC_MODE_THUMB,
                      UC_HOOK_CODE, UC_HOOK_MEM_READ)
 from unicorn.arm_const import (UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_SP,
-                              UC_ARM_REG_PRIMASK, UC_ARM_REG_R0, UC_CPU_ARM_CORTEX_M4)
+                              UC_ARM_REG_PRIMASK, UC_ARM_REG_R0, UC_ARM_REG_R1, UC_CPU_ARM_CORTEX_M4)
 
 TESTS = Path(__file__).resolve().parent
 RUNTIME = TESTS.parent
@@ -23,7 +24,7 @@ NONE, NOT_READY, ABORTED, BUSY, CLOCK, CONTROL, STAGE, POWER, INCOMPLETE, IRQ_BU
 NAMES = ["schema", "request", "mode", "state", "failure", "expected", "count",
          "stage_calls", "accepted", "sinks", "enables", "speeds", "observations",
          "fast", "slow", "limited", "faults", "work", "anchor", "irq", "timer",
-         "entry", "cr1", "bdtr", "over_stage", "over_consumer"]
+         "entry", "cr1", "bdtr", "stage_budget", "irq_budget", "over_stage", "over_consumer"]
 
 
 def checked(arguments, directory):
@@ -78,6 +79,7 @@ with tempfile.TemporaryDirectory(prefix="g431-runtime-timing-") as directory:
             for address, data in segments + initializers:
                 self.cpu.mem_write(address, data)
             self.cpu.mem_write(0xE000ED88, struct.pack("<I", 0x00F00000))
+            self.current_intervals, self.speed_intervals = [], []
             self.entries = {}
             names = ["g431_runtime_timing_runtime_init", "current_measurement_init",
                      "current_measurement_calibrate", "position_estimator_init",
@@ -91,13 +93,17 @@ with tempfile.TemporaryDirectory(prefix="g431-runtime-timing-") as directory:
             self.sink_values = []
             self.cpu.hook_add(UC_HOOK_MEM_READ, self.clock_read, begin=0xE0001004, end=0xE0001007)
             self.call("model_init")
-            assert self.word("model_result_size") == 248
+            assert self.word("model_result_size") == 256
             assert self.word("model_facts_reads") == 1
             assert self.word("model_stage_count") == self.word("model_real_enable_count") == 0
             assert self.word("model_safe_off_count") == 0
 
         def count_entry(self, cpu, address, size, name):
             self.entries[name] += 1
+            if name in ("current_controller_update", "speed_controller_update"):
+                offset_name = "model_current_dt_offset" if name == "current_controller_update" else "model_speed_dt_offset"
+                value = struct.unpack("<f", cpu.mem_read(cpu.reg_read(UC_ARM_REG_R1) + self.word(offset_name), 4))[0]
+                (self.current_intervals if name == "current_controller_update" else self.speed_intervals).append(value)
             if name == "g431_runtime_timing_runtime_step":
                 self.write("model_cycles", self.word("model_cycles") + self.word("model_compute_cost"))
             if name == "g431_runtime_timing_sink":
@@ -133,15 +139,15 @@ with tempfile.TemporaryDirectory(prefix="g431-runtime-timing-") as directory:
         @property
         def snapshot(self):
             return self.word("g_target_runtime_timing_sequence"), bytes(
-                self.cpu.mem_read(symbols["g_target_runtime_timing_result"], 248))
+                self.cpu.mem_read(symbols["g_target_runtime_timing_result"], 256))
 
         @property
         def result(self):
             sequence, data = self.snapshot
             assert sequence % 2 == 0
-            values = struct.unpack("<62I", data)
-            result = dict(zip(NAMES, values[:26]))
-            result["rows"] = [values[i:i + 4] for i in range(26, 62, 4)]
+            values = struct.unpack("<64I", data)
+            result = dict(zip(NAMES, values[:28]))
+            result["rows"] = [values[i:i + 4] for i in range(28, 64, 4)]
             return result
 
         @property
@@ -157,7 +163,7 @@ with tempfile.TemporaryDirectory(prefix="g431-runtime-timing-") as directory:
             assert self.result["state"] == READY and self.result["request"] == (nonce << 2) | mode
             assert self.word("g_target_runtime_timing_active") == 1
 
-        def run(self, count=80):
+        def run(self, count=81):
             for _ in range(count):
                 self.call("model_step")
 
@@ -210,15 +216,23 @@ with tempfile.TemporaryDirectory(prefix="g431-runtime-timing-") as directory:
     result = model.result
     assert result["state"] == COMPLETE and result["count"] == result["sinks"] == 80, result
     assert result["stage_calls"] == result["accepted"] == result["enables"] == 0
-    assert result["speeds"] == result["slow"] == 8 and result["observations"] == 4
+    assert result["speeds"] == result["slow"] == 8 and result["observations"] == 8
     assert result["fast"] == 72 and 0 < result["limited"] < 80 and result["faults"] == 0
-    assert [row[0] for row in result["rows"]] == [80] * 5 + [8, 4, 72, 8]
+    assert [row[0] for row in result["rows"]] == [80] * 5 + [8, 8, 72, 8]
     assert model.entries["g431_runtime_timing_runtime_step"] == model.entries["current_controller_update"] == 80
-    assert model.word("model_physical_position_reads") == model.word("model_physical_bus_reads") == 4
-    assert result["over_stage"] == result["over_consumer"] == 80 and result["work"] == 5020
+    assert model.word("model_physical_position_reads") == model.word("model_physical_bus_reads") == 8
+    assert result["over_stage"] == result["over_consumer"] == 0 and result["work"] == 5020
     assert result["rows"][1][3] == result["rows"][0][3] + result["rows"][3][3]
     assert result["rows"][2][3] >= result["rows"][1][3] + result["rows"][4][3]
-    passed("compute-only每拍唯一Runtime/电流控制，跨1700和半周仍测完整调用，80/8/4/72/8覆盖")
+    passed("compute-only每拍唯一Runtime/电流控制，跨1700和半周仍测完整调用，80/8/8/72/8覆盖")
+
+    assert all(math.isclose(value, 0.0001, rel_tol=1e-6) for value in model.current_intervals)
+    assert len(model.current_intervals) == 80
+    assert all(math.isclose(value, 0.001, rel_tol=1e-6) for value in model.speed_intervals)
+    prediction = struct.unpack("<f", model.cpu.mem_read(symbols["s_timing_runtime"]
+        + model.word("model_actuation_prediction_offset"), 4))[0]
+    assert math.isclose(prediction, 0.000125, rel_tol=1e-6)
+    passed("真实Runtime传入电流PI的dt100us、速度PI的dt1ms，施加角预测配置125us")
 
     terminal = model.snapshot
     model.run(3)
@@ -232,9 +246,51 @@ with tempfile.TemporaryDirectory(prefix="g431-runtime-timing-") as directory:
     model.run(79)
     model.call("model_begin_work")
     assert model.word("g_target_runtime_timing_active") == 1 and model.result["state"] == READY
+    stamp_reads = model.word("model_stamp_reads")
     model.call("model_finish_irq")
+    assert model.word("g_target_runtime_timing_active") == 1
+    assert model.word("s_timing_terminal_pending") & 1
+    assert model.result["state"] == READY and model.result["count"] == 0
+    assert model.word("model_stamp_reads") == stamp_reads
+    assert model.word("model_safe_off_count") == 1
+    assert model.entries["g431_runtime_timing_runtime_step"] == 80
+    private80 = bytes(model.cpu.mem_read(symbols["s_timing_result"], 256))
+    model.run(1)
     assert model.result["state"] == COMPLETE and model.result["count"] == 80
-    passed("第80拍计算返回不能提前COMPLETE，必须配对IRQ末端才提交")
+    assert model.entries["g431_runtime_timing_runtime_step"] == 80
+    assert model.result["sinks"] == 80 and model.word("g_target_runtime_timing_active") == 0
+    assert model.snapshot[1][68:] == private80[68:]
+    passed("第80拍立即safe-off但不提前发布；下一许可健康空拍完成且不执行第81次控制、原读数不变")
+
+    model = Model()
+    model.prepare()
+    model.run(80)
+    model.write("model_permitted", 0)
+    model.run(1)
+    model.assert_failed(NOT_READY, 80)
+    assert model.entries["g431_runtime_timing_runtime_step"] == model.result["sinks"] == 80
+    passed("第80拍Platform尾部错误在下一采样撤销许可时失败，80点完成不绕过完整IRQ复核")
+
+    model = Model()
+    model.prepare()
+    model.run(80)
+    model.call("model_regular_irq")
+    assert model.result["state"] == READY and model.word("g_target_runtime_timing_active") == 1
+    model.call("model_without_irq")
+    model.assert_failed(CLOCK, 80)
+    assert model.entries["g431_runtime_timing_runtime_step"] == 80
+    passed("regular-only IRQ不完成待收尾窗口，缺少配对采样IRQ不能绕过上下文检查")
+
+    for reason, function in [(ABORTED, "model_cancel"), (BUSY, "model_busy")]:
+        model = Model()
+        model.prepare()
+        model.run(80)
+        assert model.word("g_target_runtime_timing_active") == 1
+        entries = model.entries["g431_runtime_timing_runtime_step"]
+        model.call(function)
+        model.assert_failed(reason, 80)
+        assert model.entries["g431_runtime_timing_runtime_step"] == entries == 80
+    passed("待收尾窗口仍遵守Stop/BUSY取消与终态冻结，不追加控制或自动重试")
 
     model = Model()
     model.prepare()
@@ -334,27 +390,41 @@ with tempfile.TemporaryDirectory(prefix="g431-runtime-timing-") as directory:
     model.write("model_bad_anchor_read", 2)
     model.run(1)
     model.assert_failed(CLOCK)
-    passed("任一stamp读取失败/MOE打开/锚点被换均失败且真实enable从不执行")
+    model = Model()
+    model.prepare()
+    model.write("model_bad_deadline_read", 2)
+    model.run(1)
+    model.assert_failed(CLOCK)
+    passed("任一stamp读取失败/MOE打开/锚点或绝对截止被换均失败且真实enable从不执行")
+
+    model = Model()
+    model.prepare(mode=1)
+    model.write("model_stamp_extra_cost", 3000)
+    model.run(1)
+    assert model.word("model_stage_count") == 1 and model.word("g_target_runtime_timing_active") == 1
+    model.call("model_cancel")
+    model.assert_failed(ABORTED, 1)
+    passed("真实stage诊断允许跨中间谷底完成，绝对slot截止保持不变")
 
     model = Model()
     model.prepare()
-    model.write("model_compute_cost", 8200)
+    model.write("model_compute_cost", 10600)
     model.run(1)
     model.assert_failed(IRQ_BUDGET)
-    assert model.result["irq"] >= 8500 and model.result["work"] == 8220
-    passed("IRQ达到下一50us采样即冻结并留时长；不放宽原stage/半周保护")
+    assert model.result["irq"] >= model.result["irq_budget"] and model.result["work"] == 10620
+    passed("IRQ达到slot绝对截止即冻结并留时长；不把中间谷底误作预算终点")
 
     for setting in ["model_position_available", "model_bus_available", "model_observation_valid"]:
         model = Model()
         model.prepare()
         model.write(setting, 0)
-        model.run(20)
-        model.assert_failed(NOT_READY, 19)
+        model.run(10)
+        model.assert_failed(NOT_READY, 9)
     passed("真实position/bus getter在刷新拍确实执行，反馈失效不由合成输入遮盖")
 
     model = Model()
     model.prepare()
-    model.write("model_time_step", 2)
+    model.write("model_time_step", 4)
     model.run(2)
     model.assert_failed(CONTROL, 1)
     assert model.result["faults"] != 0

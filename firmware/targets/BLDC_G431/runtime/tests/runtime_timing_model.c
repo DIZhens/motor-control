@@ -19,6 +19,7 @@ uint32_t model_stage_ok = 1U;
 uint32_t model_stamp_fail_read;
 uint32_t model_stamp_fail_early;
 uint32_t model_bad_anchor_read;
+uint32_t model_bad_deadline_read;
 uint32_t model_moe_read;
 uint32_t model_force_enable;
 uint32_t model_sink_override;
@@ -36,7 +37,7 @@ uint32_t model_position_available = 1U;
 uint32_t model_bus_available = 1U;
 uint32_t model_observation_valid = 1U;
 uint32_t model_control_time = 1000U;
-uint32_t model_time_step = 1U;
+uint32_t model_time_step = 2U;
 uint32_t model_permitted = 1U;
 uint32_t model_request = 6U;
 uint32_t model_anchor;
@@ -45,6 +46,9 @@ uint32_t model_returned;
 PhaseDutyRequest model_last_duty;
 
 const uint32_t model_result_size = sizeof(G431RuntimeTimingResult);
+const uint32_t model_current_dt_offset = offsetof(CurrentControllerInput, interval_s);
+const uint32_t model_speed_dt_offset = offsetof(SpeedControllerInput, interval_s);
+const uint32_t model_actuation_prediction_offset = offsetof(ControlRuntime, config.control.actuation_prediction_time_s);
 const uint32_t model_runtime_phase_offset = offsetof(ControlRuntime, phase);
 const uint32_t model_motor_state_offset = offsetof(Motor, state);
 
@@ -74,7 +78,7 @@ bool realtime_motor_io_get_facts(RealtimeMotorIoFacts *facts)
     model_facts_reads++;
     facts->normal_voltage_utilization = 0.45f;
     facts->control_time_ticks_per_second = 20000U;
-    facts->fast_tick_period_ticks = 1U;
+    facts->fast_tick_period_ticks = 2U;
     return true;
 }
 
@@ -132,11 +136,15 @@ static bool timing_model_stamp(void *context, G431RuntimeTimingStamp *stamp)
     stamp->timer_bdtr = model_power_moe;
     stamp->callback_start_cycles = model_anchor;
     stamp->callback_entry_count = model_entry_count;
+    stamp->stage_deadline_cycles = model_anchor + model_entry_count + 8500U - 1700U;
     if (model_stamp_reads == model_moe_read) {
         stamp->timer_bdtr |= TIM_BDTR_MOE;
     }
     if (model_stamp_reads == model_bad_anchor_read) {
         stamp->callback_start_cycles++;
+    }
+    if (model_stamp_reads == model_bad_deadline_read) {
+        stamp->stage_deadline_cycles++;
     }
     model_cycles += model_stamp_extra_cost;
     return model_stamp_reads != model_stamp_fail_read;
@@ -173,7 +181,7 @@ void model_finish_irq(void)
 {
     model_cycles += model_tail_cost;
     g431_runtime_timing_irq_exit(DWT->CYCCNT, model_permitted != 0U);
-    model_cycles = model_anchor + 8500U;
+    model_cycles = model_anchor + 17000U;
 }
 
 void model_step(void)

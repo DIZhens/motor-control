@@ -187,30 +187,30 @@ with tempfile.TemporaryDirectory(prefix="observe-current-capture-") as directory
     offsets = (-0.0124, 0.0003)
     assert model.start(17, 2, offsets)
     model.expect(17)
-    samples = [(offsets[0] + 0.14, offsets[1] - 0.07)] * 4096
-    assert model.batch(samples[:4095], 100, 2) == 0
-    model.expect(17, ACTIVE, NONE, 4095)
-    assert model.update(100 + 4095 * 2, *samples[-1])
-    model.expect(17, COMPLETE, NONE, 4096)
-    assert model.times == (100, 8290)
+    samples = [(offsets[0] + 0.14, offsets[1] - 0.07)] * 2048
+    assert model.batch(samples[:2047], 100, 2) == 0
+    model.expect(17, ACTIVE, NONE, 2047)
+    assert model.update(100 + 2047 * 2, *samples[-1])
+    model.expect(17, COMPLETE, NONE, 2048)
+    assert model.times == (100, 4194)
     model.expect_reference(samples, offsets)
     before = model.snapshot
     assert not model.update(9000, math.nan, math.inf, False)
     assert not model.abort(TIMING) and model.snapshot == before
-    passed("仅第4096个连续样本完成；正负注入、冻结偏置、首末时间及结束后冻结正确")
+    passed("仅第2048个连续样本完成；正负注入、冻结偏置、首末时间及结束后冻结正确")
 
     generator = random.Random(0x431C)
     for signs, request, period in [((1, -1), 23, 1), ((-1, 1), 24, 7)]:
         offsets = (-0.01242, -0.00034)
         samples = [(f32(offsets[0] + signs[0] * 0.128 + generator.uniform(-0.004, 0.004)),
                     f32(offsets[1] + signs[1] * 0.064 + generator.uniform(-0.003, 0.003)))
-                   for _ in range(4096)]
+                   for _ in range(2048)]
         assert model.start(request, period, offsets)
         assert model.batch(samples, 0, period) == 1
-        model.expect(request, COMPLETE, NONE, 4096)
-        assert model.times == (0, 4095 * period)
+        model.expect(request, COMPLETE, NONE, 2048)
+        assert model.times == (0, 2047 * period)
         model.expect_reference(samples, offsets)
-    passed("双方向带噪声4096点窗口与独立双精度两遍方差参考一致")
+    passed("双方向带噪声2048点窗口与独立双精度两遍方差参考一致")
 
     for second_time in [100, 99, 102, 103]:
         model = Model()

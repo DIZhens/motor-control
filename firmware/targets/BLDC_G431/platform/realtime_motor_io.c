@@ -10,6 +10,7 @@
 #include "control_time_source.h"
 #include "position_observation_internal.h"
 #include "realtime_motor_io_config.h"
+#include "realtime_motor_io_internal.h"
 #if defined(BLDC_G431_OBSERVE_ENTRY)
 #include "irq_timing.h"
 #endif
@@ -36,18 +37,30 @@ static volatile bool s_power_enabled;
 static volatile uint32_t s_actuation_epoch;
 static volatile uint32_t s_callback_epoch;
 static volatile uint32_t s_pending_epoch;
-static uint32_t s_pending_start_cycles;
-static uint32_t s_pending_count;
+static volatile uint32_t s_slot_sequence;
+static uint32_t s_pending_slot;
+static uint32_t s_callback_slot;
+static uint32_t s_adc_slot;
+static uint32_t s_adc_epoch;
+static uint32_t s_committed_slot;
+static volatile uint32_t s_slot_start_cycles;
+static uint32_t s_expected_update_cycles;
+static uint32_t s_callback_deadline_cycles;
+static volatile ControlTime s_slot_time;
+static volatile bool s_adc_busy;
+static bool s_adc_injected_irq;
+static volatile bool s_adc_eligible;
+static volatile bool s_slot_valid;
+static volatile bool s_sample_taken;
+static volatile bool s_timing_faulted;
 static uint32_t s_callback_start_cycles;
 static uint32_t s_callback_entry_count;
 
-#if defined(BLDC_G431_OBSERVE_ENTRY) || defined(BLDC_G431_TIMING_ENTRY)
 void realtime_motor_io_stage_anchor(uint32_t *cycles, uint32_t *entry_count)
 {
     *cycles = s_callback_start_cycles;
     *entry_count = s_callback_entry_count;
 }
-#endif
 
 static void restore_interrupts(uint32_t primask)
 {
@@ -63,34 +76,58 @@ static bool timing_configuration_valid(void)
         && ((RCC->CFGR & RCC_CFGR_PPRE2) == 0U)
         && (htim1.Instance->PSC == 0U)
         && (htim1.Instance->ARR == REALTIME_MOTOR_IO_PWM_PERIOD_COUNTS)
-        && (htim1.Instance->RCR == 0U)
+        && (htim1.Instance->RCR == 3U)
         && ((htim1.Instance->CR1 & (TIM_CR1_CMS | TIM_CR1_CKD
                 | TIM_CR1_OPM | TIM_CR1_UDIS)) == TIM_COUNTERMODE_CENTERALIGNED1)
         && ((htim1.Instance->CCMR1 & (TIM_CCMR1_OC1PE | TIM_CCMR1_OC2PE))
             == (TIM_CCMR1_OC1PE | TIM_CCMR1_OC2PE))
         && ((htim1.Instance->CCMR2 & TIM_CCMR2_OC3PE) != 0U)
-        && ((htim1.Instance->DIER & TIM_DIER_UIE) == 0U);
+        && (htim1.Instance->CCR4 == 4240U)
+        && ((htim1.Instance->CCMR2 & TIM_CCMR2_OC4M) == (TIM_OCMODE_PWM2 << 8U));
+}
+
+/* 只关运行期 OC4REF 门；RESET 对 UG 不免疫，因此运行期禁止再发 UG。 */
+static void sample_gate_close(void)
+{
+    MODIFY_REG(htim1.Instance->CR2, TIM_CR2_MMS2, TIM_TRGO2_RESET);
+}
+
+__STATIC_FORCEINLINE bool sample_arm_time_available(void)
+{
+    return ((DWT->CYCCNT - s_slot_start_cycles) < REALTIME_MOTOR_IO_ARM_WINDOW_COUNTS)
+        && (htim1.Instance->CNT < REALTIME_MOTOR_IO_ARM_WINDOW_COUNTS)
+        && ((htim1.Instance->CR1 & (TIM_CR1_CEN | TIM_CR1_DIR | TIM_CR1_UDIS | TIM_CR1_CMS))
+            == (TIM_CR1_CEN | TIM_COUNTERMODE_CENTERALIGNED1))
+        && ((htim1.Instance->SR & TIM_FLAG_UPDATE) == 0U);
+}
+
+__STATIC_FORCEINLINE bool irq_time_available(void)
+{
+    uint32_t cr1 = htim1.Instance->CR1;
+    uint32_t elapsed = DWT->CYCCNT - s_slot_start_cycles;
+    uint32_t mask = TIM_CR1_CEN | TIM_CR1_CMS;
+
+    /* CNT/DIR 每 50 us 重复，不能单独证明当前 sample 的交付身份。
+     * cycle、slot、epoch 与尚未处理的 UIF 一起禁止跨目标 UEV 或旧 IRQ 重放。 */
+    return ((cr1 & mask) == (TIM_CR1_CEN | TIM_COUNTERMODE_CENTERALIGNED1))
+        && ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) != 0U)
+        && ((CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) != 0U)
+        && s_adc_busy && s_adc_eligible && s_slot_valid
+        && (s_adc_slot == s_slot_sequence)
+        && ((htim1.Instance->SR & TIM_FLAG_UPDATE) == 0U)
+        && (elapsed < (REALTIME_MOTOR_IO_CONTROL_PERIOD_CYCLES
+            - REALTIME_MOTOR_IO_STAGE_DEADLINE_COUNTS));
 }
 
 __STATIC_FORCEINLINE bool staging_time_available(void)
 {
-    uint32_t before = htim1.Instance->CR1;
-    uint32_t count = htim1.Instance->CNT;
-    uint32_t after = htim1.Instance->CR1;
-    uint32_t elapsed = DWT->CYCCNT - s_callback_start_cycles;
-    uint32_t required = TIM_CR1_CEN | TIM_CR1_DIR | TIM_COUNTERMODE_CENTERALIGNED1;
-    uint32_t mask = TIM_CR1_CEN | TIM_CR1_DIR | TIM_CR1_CMS;
+    return !s_timing_faulted && (s_callback_slot == s_slot_sequence)
+        && irq_time_available();
+}
 
-    /* DIR/CNT 单独检查会把耗时一整个 PWM 周期的旧 callback 误认作准时。
-     * 入口 cycle/count 锚点把窗口限定在本次 callback 所属的同一谷底之前。
-     * 先读 cycle 再读入口 CNT，使预算保守；无等待、无计数器清零。 */
-    return ((before & mask) == required) && ((after & mask) == required)
-        && ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) != 0U)
-        && ((CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) != 0U)
-        && (s_callback_entry_count > REALTIME_MOTOR_IO_STAGE_DEADLINE_COUNTS)
-        && (count >= REALTIME_MOTOR_IO_STAGE_DEADLINE_COUNTS)
-        && (count <= s_callback_entry_count)
-        && (elapsed < (s_callback_entry_count - REALTIME_MOTOR_IO_STAGE_DEADLINE_COUNTS));
+void realtime_motor_io_stage_deadline(uint32_t *deadline_cycles)
+{
+    *deadline_cycles = s_callback_deadline_cycles;
 }
 
 static float adc_raw_to_phase_current_a(uint32_t raw)
@@ -214,6 +251,27 @@ bool realtime_motor_io_arm(void)
         return false;
     }
 
+    /* neutral、所有 UG 和 RCR 启动相位必须先于 injected external-trigger ready。
+     * RCR=1 的 UG 预置内部重复计数，恢复 3 后首个自然 UEV 位于谷底。 */
+    if (((htim1.Instance->CR1 & TIM_CR1_CEN) != 0U)
+        || !timing_configuration_valid()) {
+        stop_current_acquisition();
+        return false;
+    }
+    CLEAR_BIT(htim1.Instance->BDTR, TIM_BDTR_MOE);
+    sample_gate_close();
+    CLEAR_BIT(htim1.Instance->DIER, TIM_DIER_UIE);
+    stage_neutral_duty();
+    htim1.Instance->RCR = 1U;
+    if (HAL_TIM_GenerateEvent(&htim1, TIM_EVENTSOURCE_UPDATE) != HAL_OK) {
+        htim1.Instance->RCR = 3U;
+        stop_current_acquisition();
+        return false;
+    }
+    htim1.Instance->RCR = 3U;
+    __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_UPDATE);
+    HAL_NVIC_ClearPendingIRQ(TIM1_UP_TIM16_IRQn);
+
     /*
      * ADC2 先进入 external-trigger ready，ADC1 作为唯一 injected IRQ authority。
      * 两路均由同一个 TIM1 TRGO2 触发、单 rank、相同 sampling time。
@@ -260,16 +318,11 @@ bool realtime_motor_io_start_drive_timing(void)
      */
     CLEAR_BIT(htim1.Instance->BDTR, TIM_BDTR_MOE);
 
-    stage_neutral_duty();
-
-    /*
-     * CH1/2/3 已启用 preload。计数器尚未启动时用一次 UG 把 neutral preload
-     * 转入 active register，保证 Drive Timing 从确定的零线电压状态开始。
-     */
-    if (HAL_TIM_GenerateEvent(&htim1, TIM_EVENTSOURCE_UPDATE) != HAL_OK) {
-        return false;
-    }
+    /* arm 已完成 neutral 和重复计数预置；ADC 已 ready 后不能再发 UG。 */
+    sample_gate_close();
     __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_UPDATE);
+    s_stage_window_open = false;
+    HAL_NVIC_ClearPendingIRQ(TIM1_UP_TIM16_IRQn);
 
     output_enable_mask = TIM_CCER_CC1E | TIM_CCER_CC1NE
         | TIM_CCER_CC2E | TIM_CCER_CC2NE
@@ -285,13 +338,182 @@ bool realtime_motor_io_start_drive_timing(void)
     s_stage_committed = false;
     s_power_enabled = false;
 
+    s_adc_busy = false;
+    s_adc_eligible = false;
+    s_slot_valid = false;
+    s_sample_taken = false;
+    s_slot_sequence = 0U;
+    s_timing_faulted = false;
+    s_slot_time = 0U;
+    /* CEN 之前读 cycle：软件写入延迟只会缩短首个 arming 窗口。 */
+    s_expected_update_cycles = DWT->CYCCNT
+        + 2U * REALTIME_MOTOR_IO_PWM_PERIOD_COUNTS;
     s_timing_started = true;
+    SET_BIT(htim1.Instance->DIER, TIM_DIER_UIE);
     __HAL_TIM_ENABLE(&htim1);
 
     return true;
 }
 
-/* 从 ADC 到下一谷底有有限预算；只对运行期热路径启用速度优化。 */
+void realtime_motor_io_update_irq(void)
+{
+    uint32_t primask = __get_PRIMASK();
+    uint32_t now;
+    uint32_t late;
+    uint32_t slots;
+    uint32_t count;
+    uint32_t cr1;
+    bool valid;
+    bool delivery_valid;
+
+    __disable_irq();
+    if ((htim1.Instance->SR & TIM_FLAG_UPDATE) == 0U) {
+        restore_interrupts(primask);
+        return;
+    }
+    now = DWT->CYCCNT;
+    count = htim1.Instance->CNT;
+    cr1 = htim1.Instance->CR1;
+    sample_gate_close();
+    __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_UPDATE);
+    s_stage_window_open = false;
+    if (!s_timing_started) {
+        restore_interrupts(primask);
+        return;
+    }
+
+    late = now - s_expected_update_cycles;
+    /* 在 cycle 上还未到期的 UIF 也不能制造新 slot。差值以有界半回绕解释。 */
+    if (late >= 0x80000000U) {
+        s_timing_faulted = true;
+        safe_off_locked();
+        s_slot_valid = false;
+        restore_interrupts(primask);
+        return;
+    }
+    slots = late / REALTIME_MOTOR_IO_CONTROL_PERIOD_CYCLES + 1U;
+    s_slot_start_cycles = s_expected_update_cycles
+        + (slots - 1U) * REALTIME_MOTOR_IO_CONTROL_PERIOD_CYCLES;
+    s_expected_update_cycles = s_slot_start_cycles
+        + REALTIME_MOTOR_IO_CONTROL_PERIOD_CYCLES;
+    s_slot_sequence += slots;
+    s_slot_time = control_time_source_advance_slots(slots);
+
+    /* 只在指定 UEV 后首个上数半周开门。计数相似不代表 cycle 身份相同。
+     * ADC busy 覆盖 HAL 收尾，UP 不得让旧 IRQ 与下一次 sample 重叠。 */
+    valid = (slots == 1U)
+        && (late < REALTIME_MOTOR_IO_ARM_WINDOW_COUNTS)
+        && (count < REALTIME_MOTOR_IO_ARM_WINDOW_COUNTS)
+        && ((cr1 & (TIM_CR1_CEN | TIM_CR1_DIR | TIM_CR1_UDIS | TIM_CR1_CMS))
+            == (TIM_CR1_CEN | TIM_COUNTERMODE_CENTERALIGNED1))
+        && ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) != 0U)
+        && ((CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) != 0U)
+        && ((hadc1.Instance->ISR & (ADC_FLAG_JEOC | ADC_FLAG_JEOS)) == 0U)
+        && ((hadc2.Instance->ISR & (ADC_FLAG_JEOC | ADC_FLAG_JEOS)) == 0U)
+        && !s_adc_busy;
+    delivery_valid = true;
+    if (s_stage_pending_boundary) {
+        delivery_valid = (s_pending_epoch == s_actuation_epoch)
+            && (s_pending_slot == s_slot_sequence);
+    } else if (s_power_enabled) {
+        delivery_valid = false;
+    }
+    if (!valid || !delivery_valid) {
+        s_timing_faulted = true;
+    }
+    valid = valid && delivery_valid
+        && ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) == 0U);
+    s_stage_committed = false;
+    if (!valid) {
+        safe_off_locked();
+        s_slot_valid = false;
+        s_adc_eligible = false;
+    } else {
+        if (s_stage_pending_boundary) {
+            s_stage_pending_boundary = false;
+            s_stage_committed = true;
+            s_committed_slot = s_slot_sequence;
+        }
+        /* 处理 pending/ControlTime 的成本也属于 arming 窗口，不能只验入口。 */
+        if (sample_arm_time_available()) {
+            s_slot_valid = true;
+            s_sample_taken = false;
+            /* PWM2、CNT < CCR4 共同保证 OC4REF 仍低，开门不会重放第二峰。 */
+            MODIFY_REG(htim1.Instance->CR2, TIM_CR2_MMS2, TIM_TRGO2_OC4REF);
+            __DSB();
+            valid = sample_arm_time_available();
+        } else {
+            valid = false;
+        }
+        if (!valid) {
+            sample_gate_close();
+            s_timing_faulted = true;
+            s_slot_valid = false;
+            safe_off_locked();
+        }
+    }
+    restore_interrupts(primask);
+}
+
+void realtime_motor_io_adc_irq_enter(void)
+{
+    uint32_t primask = __get_PRIMASK();
+    uint32_t elapsed;
+    bool injected;
+
+    __disable_irq();
+    injected = ((hadc1.Instance->ISR & (ADC_FLAG_JEOS | ADC_FLAG_JEOC)) != 0U);
+    s_adc_injected_irq = injected;
+    if (injected) {
+        sample_gate_close();
+    }
+    elapsed = DWT->CYCCNT - s_slot_start_cycles;
+    s_adc_eligible = injected && s_timing_started && s_slot_valid && !s_adc_busy
+        && !s_sample_taken && (elapsed >= 4240U)
+        && (elapsed < (REALTIME_MOTOR_IO_PWM_PERIOD_COUNTS
+            + REALTIME_MOTOR_IO_ARM_WINDOW_COUNTS))
+        && ((htim1.Instance->CR1 & TIM_CR1_DIR) != 0U)
+        && ((htim1.Instance->SR & TIM_FLAG_UPDATE) == 0U);
+    /* 只有 injected 事务拥有 sample slot。Bus 的 regular-only IRQ 可以跨过
+     * UEV；它未消费同步 sample，不得阻止 UP 为下一首峰开门。 */
+    if (injected) {
+        s_adc_busy = true;
+    }
+    if (s_adc_eligible) {
+        s_sample_taken = true;
+        s_adc_slot = s_slot_sequence;
+        s_adc_epoch = s_actuation_epoch;
+    } else if (injected && s_timing_started) {
+        s_timing_faulted = true;
+        safe_off_locked();
+    }
+    restore_interrupts(primask);
+}
+
+void realtime_motor_io_adc_irq_exit(void)
+{
+    uint32_t primask = __get_PRIMASK();
+
+    __disable_irq();
+    /* exit 放在 HAL/诊断尾部之后；10 us 预留还覆盖异常返回与短 UP 延迟。 */
+    if (s_adc_eligible && (!irq_time_available()
+        || (s_callback_epoch != s_actuation_epoch))) {
+        if (!irq_time_available()) {
+            s_timing_faulted = true;
+        }
+        safe_off_locked();
+    }
+    /* ADC2 不启用 injected IRQ；被拒绝的旧事务也须在 HAL 收尾后排空副 ADC flags。 */
+    if (s_adc_injected_irq) {
+        __HAL_ADC_CLEAR_FLAG(&hadc2, ADC_FLAG_JEOC | ADC_FLAG_JEOS);
+    }
+    s_adc_injected_irq = false;
+    s_adc_eligible = false;
+    s_adc_busy = false;
+    restore_interrupts(primask);
+}
+
+/* 从首峰 sample 到下一有效谷底有有限预算；仅运行期热路径启用速度优化。 */
 #if defined(__CC_ARM)
 #pragma push
 #pragma Otime
@@ -328,7 +550,7 @@ bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *request)
         && ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) == 0U)
         && staging_time_available()) {
         /* PRIMASK 只阻止软件抢占；UDIS 阻止硬件在三个 preload 写入之间更新。
-         * OC4REF 触发与计数器继续运行。成功路径必须在同一谷底前释放 UDIS。 */
+         * OC4REF 触发与计数器继续运行。成功路径必须在指定有效谷底前释放 UDIS。 */
         SET_BIT(htim1.Instance->CR1, TIM_CR1_UDIS);
         __DSB();
         if (staging_time_available()) {
@@ -339,10 +561,8 @@ bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *request)
             if (staging_time_available() && s_stage_window_open
                 && (s_callback_epoch == s_actuation_epoch)
                 && ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) == 0U)) {
-                /* 本 Platform 独占 UIF（UIE 关闭），下一次 UEV 才能证明提交生效。 */
-                s_pending_start_cycles = DWT->CYCCNT;
-                s_pending_count = htim1.Instance->CNT;
-                __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_UPDATE);
+                /* UP 独占 UIF；只有该 slot 的下一指定 UEV 能确认成组装载。 */
+                s_pending_slot = s_slot_sequence + 1U;
                 s_pending_epoch = s_actuation_epoch;
                 s_stage_pending_boundary = true;
                 s_staged_this_tick = true;
@@ -376,6 +596,7 @@ bool realtime_motor_io_power_enable(void)
 
     if (s_armed && s_timing_started && s_stage_window_open
         && s_stage_committed && s_staged_this_tick
+        && (s_committed_slot == s_callback_slot)
         && (s_callback_epoch == s_actuation_epoch)
         && ((htim1.Instance->CR1 & TIM_CR1_UDIS) == 0U)
         && staging_time_available()
@@ -414,39 +635,37 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     uint32_t raw_b;
     uint32_t raw_c;
     uint32_t primask;
-    uint32_t entry_cr1;
     bool adc2_complete;
 
-    if ((hadc != &hadc1) || !s_armed || !s_timing_started) {
+    /* Core 入口与 HAL 的 ISR 快照之间可能刚好出现 JEOS：该 IRQ 原先只有
+     * regular EOC，但 HAL 已决定交付 injected callback。此处用同一严格入口
+     * 规则升级 ownership，之后 busy 一直覆盖到整个 HAL/诊断尾部退出。 */
+    if ((hadc == &hadc1) && !s_adc_injected_irq
+        && ((hadc1.Instance->ISR & (ADC_FLAG_JEOS | ADC_FLAG_JEOC)) != 0U)) {
+        realtime_motor_io_adc_irq_enter();
+    }
+    if ((hadc != &hadc1) || !s_armed || !s_timing_started || !s_adc_eligible) {
         return;
     }
 
     primask = __get_PRIMASK();
     __disable_irq();
+    /* UP 或 Stop 可能在入口判断后抢占；旧 JDR 不得借新 slot/epoch 重新获得资格。 */
+    if (!s_adc_eligible || !s_slot_valid || (s_adc_slot != s_slot_sequence)
+        || (s_adc_epoch != s_actuation_epoch)) {
+        restore_interrupts(primask);
+        return;
+    }
     s_callback_start_cycles = DWT->CYCCNT;
-    entry_cr1 = htim1.Instance->CR1;
     s_callback_entry_count = htim1.Instance->CNT;
     s_callback_epoch = s_actuation_epoch;
+    s_callback_slot = s_slot_sequence;
+    s_callback_deadline_cycles = s_slot_start_cycles
+        + REALTIME_MOTOR_IO_CONTROL_PERIOD_CYCLES
+        - REALTIME_MOTOR_IO_STAGE_DEADLINE_COUNTS;
     s_stage_window_open = false;
-
-    /*
-     * stage 在 UDIS 内清过 UIF；只凭后续硬件 UEV 认定已生效。
-     * 重复/过早的 callback 不再被误当成已经跨过更新边界。
-     */
-    if (s_stage_pending_boundary && (s_pending_epoch == s_actuation_epoch)
-        && ((htim1.Instance->SR & TIM_FLAG_UPDATE) != 0U)
-        && ((entry_cr1 & TIM_CR1_UDIS) == 0U)
-        && ((s_callback_start_cycles - s_pending_start_cycles) >= s_pending_count)) {
-        s_stage_pending_boundary = false;
-        s_stage_committed = true;
-    }
-
     s_staged_this_tick = false;
-    /* 入口在向上半周或翻转附近时，本次 consumer 不获得 stage 权限。 */
-    if (((entry_cr1 & TIM_CR1_DIR) == 0U)
-        || ((htim1.Instance->CR1 & TIM_CR1_DIR) == 0U)) {
-        s_callback_entry_count = 0U;
-    }
+    observation_time = s_slot_time;
     restore_interrupts(primask);
 
 #if defined(BLDC_G431_OBSERVE_ENTRY)
@@ -454,8 +673,6 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         g431_irq_timing_platform_enter(s_callback_start_cycles);
     }
 #endif
-    observation_time = control_time_source_advance_fast_tick();
-
     /* 两路均固定单 injected rank；直接读取 JDR1，免去通用 rank 分派。 */
     raw_c = hadc1.Instance->JDR1;
 
@@ -477,7 +694,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 
         observation.phase_b_a = adc_raw_to_phase_current_a(raw_b);
         observation.measured_phases = PHASE_MASK_B | PHASE_MASK_C;
-        observation.acquisition_valid = true;
+        observation.acquisition_valid = !s_timing_faulted;
     }
 
     /*
@@ -502,14 +719,12 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 #endif
     s_stage_window_open = false;
 
-    /*
-     * RUN 中每个 fast tick 都必须提交 fresh actuation。
-     * 无成功 stage 或 consumer 用尽整个半周期时立刻 fail-safe；HAL 在
-     * callback 返回后才清 JEOS，不能让过长 consumer 吞掉下一次采样。
-     */
-    if (s_power_enabled && (!s_staged_this_tick
-        || ((DWT->CYCCNT - s_callback_start_cycles)
-            >= REALTIME_MOTOR_IO_PWM_PERIOD_COUNTS))) {
+    /* 绝对交付截止不随 consumer 时长重置；完整 HAL IRQ 尾部另由 exit 检查。 */
+    if ((s_power_enabled && !s_staged_this_tick)
+        || !staging_time_available()) {
+        if (!irq_time_available() || (s_power_enabled && !s_staged_this_tick)) {
+            s_timing_faulted = true;
+        }
         realtime_motor_io_safe_off();
     }
 

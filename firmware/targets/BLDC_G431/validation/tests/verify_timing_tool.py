@@ -225,6 +225,13 @@ class Tests(unittest.TestCase):
                 with self.subTest(command=command, field=key, value=value), self.assertRaises(RuntimeError):
                     timing.check_capture({**valid, key: value}, command, 1)
 
+    def test_new_slot_configuration_rejected_before_any_write(self):
+        self.session.state["pwm"].update(repetition=3, update_irq_enabled=True)
+        with self.assertRaisesRegex(RuntimeError, "PWM timing configuration"):
+            timing.run(self.session, LAYOUT)
+        self.assertFalse(self.session.write_attempted)
+        self.assertEqual(self.session.calls, [])
+
     def test_deadline_cross_cycle_and_cancel_evidence(self):
         for command, changes in [(10, {"before.cnt": 1700}), (10, {"before.cycles": 102300}),
                 (11, {"before.cnt": 2199}), (11, {"before.cnt": 3001}), (12, {"before.cnt": 1601}),

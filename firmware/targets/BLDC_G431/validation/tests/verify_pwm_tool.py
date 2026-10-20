@@ -26,7 +26,7 @@ def rejected(function):
 
 def healthy():
     block = bytearray(104)
-    for offset, value in [(0, 0xA1), (24, 0x6868), (28, 0x7868), (32, 0x1555),
+    for offset, value in [(0, 0xA1), (12, 1), (48, 3), (24, 0x6868), (28, 0x7868), (32, 0x1555),
                           (44, 4250), (64, 4240), (68, 0x03003400)]:
         struct.pack_into("<I", block, offset, value)
     state = dict(status=1, started=1, state=0, halted=False, core_lockup=False,
@@ -130,7 +130,8 @@ for changes in [dict(moe=True), dict(bus_v=9.9), dict(bus_v=float("nan")), dict(
     assert not session.calls
 
 for name, value in [("center_aligned_mode", 0), ("clock_division", 1), ("prescaler", 1),
-        ("period_counts", 4249), ("repetition", 1), ("output_config", 0x1557),
+        ("period_counts", 4249), ("repetition", 0), ("repetition", 1),
+        ("update_irq_enabled", False), ("output_config", 0x1557),
         ("sample_compare", 4000), ("timer_deadtime_code", 10),
         ("channels", [{"mode": 7, "selection": 0, "preload": True}] * 4),
         ("channels", [{"mode": m, "selection": 1, "preload": True} for m in [6, 6, 6, 7]]),

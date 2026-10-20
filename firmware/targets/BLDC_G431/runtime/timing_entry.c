@@ -13,10 +13,11 @@
 #include "cordic_math.h"
 #include "runtime_timing.h"
 #include "../platform/realtime_motor_io_diagnostic.h"
+#include "../platform/realtime_motor_io_internal.h"
 
 #define CYCLES_PER_US (170U)
-#define SAMPLE_MIN_CYCLES (25U * CYCLES_PER_US)
-#define SAMPLE_MAX_CYCLES (75U * CYCLES_PER_US)
+#define SAMPLE_MIN_CYCLES (75U * CYCLES_PER_US)
+#define SAMPLE_MAX_CYCLES (125U * CYCLES_PER_US)
 #define OBSERVATION_MAX_AGE (100U)
 
 volatile uint32_t g_target_runtime_timing_request;
@@ -62,6 +63,7 @@ static bool read_stamp(void *context, G431RuntimeTimingStamp *stamp)
         return false;
     }
     realtime_motor_io_stage_anchor(&stamp->callback_start_cycles, &stamp->callback_entry_count);
+    realtime_motor_io_stage_deadline(&stamp->stage_deadline_cycles);
     stamp->timer_cr1 = TIM1->CR1;
     stamp->timer_count = TIM1->CNT;
     stamp->timer_bdtr = TIM1->BDTR;
@@ -169,7 +171,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
      * 这里不再执行Observe的OFF Runtime，也不发布伪造的业务状态。 */
     s_health.permitted = timing_entry_permitted();
     s_publication_divider++;
-    if (s_publication_divider >= 200U || old_faults != s_health.faults
+    if (s_publication_divider >= 100U || old_faults != s_health.faults
         || old_guard != s_health.guard_trips || old_permitted != s_health.permitted) {
         s_publication_divider = 0U;
         publish_health();
@@ -223,14 +225,14 @@ void timing_entry_start(void)
     }
     s_attempted = true;
     memset(&s_health, 0, sizeof(s_health));
-    s_health.schema_version = 1U;
+    s_health.schema_version = 2U;
     s_health.power_disabled = 1U;
     realtime_motor_io_safe_off();
     s_cordic_ready = g431_cordic_math_init(&s_cordic);
     g431_runtime_timing_init(g431_cordic_sincos, &s_cordic, read_stamp, NULL);
     if (!s_cordic_ready || SystemCoreClock != 170000000U || TIM6->PSC != 169U
         || !realtime_motor_io_get_facts(&facts)
-        || facts.control_time_ticks_per_second != 20000U || facts.fast_tick_period_ticks != 1U
+        || facts.control_time_ticks_per_second != 20000U || facts.fast_tick_period_ticks != 2U
         || !realtime_motor_io_bind_sample_ready(sample_ready, NULL)
         || !hardware_trip_bind(trip_notify, NULL)
         || !position_observation_arm() || !bus_observation_arm()

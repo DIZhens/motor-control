@@ -8,8 +8,8 @@
 
 #include "bus_observation_internal.h"
 
-/* 当前 20 kHz fast tick 每 20 tick 发起一次 Bus ADC sequence，即 1 kHz。 */
-#define BUS_ACQUISITION_DIVIDER (20U)
+/* 当前 10 kHz 电流采样每 10 拍发起一次 Bus ADC sequence，即 1 kHz。 */
+#define BUS_ACQUISITION_DIVIDER (10U)
 
 #define ADC_FULL_SCALE_COUNTS (4095.0f)
 #define MILLIVOLTS_PER_VOLT (1000.0f)

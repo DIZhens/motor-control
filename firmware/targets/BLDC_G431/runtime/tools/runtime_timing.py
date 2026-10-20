@@ -18,8 +18,8 @@ from current_capture import (CubeBackend, DEFAULT_CLI, DEFAULT_GDB, DHCSR, FLASH
                              digest, read_hex, require, save, validate_map_load_region, word)
 
 
-CLOCK_HZ, SAMPLES, RESULT_SIZE = 170000000, 80, 248
-DEADLINE_COUNT, PERIOD_COUNTS = 1700, 4250
+CLOCK_HZ, SAMPLES, RESULT_SIZE = 170000000, 80, 256
+DEADLINE_COUNT, PERIOD_COUNTS, CONTROL_CYCLES = 1700, 4250, 17000
 EVIDENCE_ROOT = Path(__file__).resolve().parents[2] / "validation/local-evidence"
 MODES = {"stage": 1, "compute": 2}
 ROW_NAMES = ["work 入口至返回", "Platform 锚点至 work 返回", "IRQ C 入口至出口",
@@ -31,6 +31,7 @@ RESULT_FIELDS = {name: "I" for name in [
     "enable_attempts", "speed_updates", "observation_refreshes", "fast_samples", "slow_samples",
     "limited_samples", "last_shadow_faults", "last_work_cycles", "last_anchor_cycles",
     "last_irq_cycles", "last_timer_count", "last_entry_count", "last_cr1", "last_bdtr",
+    "last_stage_budget_cycles", "last_irq_budget_cycles",
     "over_stage_deadline_samples", "over_consumer_budget_samples"]}
 for index in range(9):
     RESULT_FIELDS.update({f"rows[{index}].{field}": "I" for field in
@@ -88,7 +89,7 @@ def next_request(previous, mode):
 
 
 def result_header(result):
-    require(result["schema_version"] == 1, "Runtime 计时 schema 不符")
+    require(result["schema_version"] == 2, "Runtime 计时 schema 不符")
     require(result["state"] in range(5) and result["failure"] in range(10), "计时状态或失败原因非法")
     mode = request_mode(result["request_word"])
     require(result["mode"] == mode, "结果模式与完整请求字不一致")
@@ -129,7 +130,7 @@ def validate_complete(result, request):
     stage = result["mode"] == MODES["stage"]
     expected = {"real_stage_calls": 80 if stage else 0, "real_stage_accepted": 80 if stage else 0,
                 "sink_calls": 0 if stage else 80, "speed_updates": 0 if stage else 8,
-                "observation_refreshes": 0 if stage else 4, "fast_samples": 0 if stage else 72,
+                "observation_refreshes": 0 if stage else 8, "fast_samples": 0 if stage else 72,
                 "slow_samples": 0 if stage else 8}
     require(all(result[field] == value for field, value in expected.items()), "模式专属 stage/sink 或分支次数不符")
     require(result["limited_samples"] == 0 if stage else 0 < result["limited_samples"] < SAMPLES,
@@ -140,15 +141,17 @@ def validate_complete(result, request):
             "最后 work/锚点/IRQ 区间不自洽")
     require(0 <= result["over_stage_deadline_samples"] <= SAMPLES
             and 0 <= result["over_consumer_budget_samples"] <= SAMPLES, "越预算次数异常")
-    if stage:
-        require(result["over_stage_deadline_samples"] == 0
-                and result["last_cr1"] & 0x10
-                and DEADLINE_COUNT <= result["last_timer_count"] <= result["last_entry_count"] <= PERIOD_COUNTS
-                and result["last_anchor_cycles"] < result["last_entry_count"] - DEADLINE_COUNT,
-                "真实 stage 的最后返回点已越原截止")
-    counts = [80] * 5 + ([0] * 4 if stage else [8, 4, 72, 8])
+    require(0 < result["last_stage_budget_cycles"] <= result["last_irq_budget_cycles"] < CONTROL_CYCLES,
+            "slot绝对截止预算非法")
+    require(result["last_anchor_cycles"] < result["last_stage_budget_cycles"]
+            and result["last_irq_cycles"] < result["last_irq_budget_cycles"]
+            and result["over_stage_deadline_samples"] == result["over_consumer_budget_samples"] == 0,
+            "最后返回点或完整窗口超过slot绝对截止")
+    require(result["last_entry_count"] <= PERIOD_COUNTS and result["last_timer_count"] <= PERIOD_COUNTS,
+            "timer读数超出中心对齐范围")
+    counts = [80] * 5 + ([0] * 4 if stage else [8, 8, 72, 8])
     rows = [timing_row(result, index, count) for index, count in enumerate(counts)]
-    require(rows[2]["max_cycles"] < 8500, "COMPLETE 的 IRQ 标记区间达到整周期预算")
+    require(rows[2]["max_cycles"] < CONTROL_CYCLES, "COMPLETE 的 IRQ 标记区间达到100us控制周期预算")
     require(rows[1]["sum_cycles"] == rows[0]["sum_cycles"] + rows[3]["sum_cycles"],
             "work 与同锚点前段统计不自洽")
     require(rows[2]["sum_cycles"] >= rows[1]["sum_cycles"] + rows[4]["sum_cycles"],
@@ -158,9 +161,6 @@ def validate_complete(result, request):
                     for field in ["min_cycles", "max_cycles", "sum_cycles"]), "嵌套计时区间极值异常")
     for key, row in [("last_work_cycles", 0), ("last_anchor_cycles", 1), ("last_irq_cycles", 2)]:
         require(rows[row]["min_cycles"] <= result[key] <= rows[row]["max_cycles"], "最后读数不在对应行极值内")
-    low, high, over = rows[1]["min_cycles"], rows[1]["max_cycles"], result["over_consumer_budget_samples"]
-    require((low >= PERIOD_COUNTS and over == SAMPLES) or (high < PERIOD_COUNTS and over == 0)
-            or (low < PERIOD_COUNTS <= high and 0 < over < SAMPLES), "半周期越限次数与锚点极值不符")
     if not stage:
         require(rows[0]["sum_cycles"] == rows[7]["sum_cycles"] + rows[8]["sum_cycles"],
                 "快慢拍没有完整分割 compute 统计")
@@ -196,7 +196,7 @@ def validate_layout(layout):
     require(all(first[1] <= second[0] for first, second in zip(ordered, ordered[1:])), "计时符号重叠")
     require(all(layout[key + "_size"] == 4 for key in SYMBOLS if key not in ("result", "health")),
             "计时控制字不是 uint32")
-    require(layout["result_size"] == RESULT_SIZE and layout["row_count"] == 9, "计时结果不是固定 248 字节/九行")
+    require(layout["result_size"] == RESULT_SIZE and layout["row_count"] == 9, "计时结果不是固定 256 字节/九行")
     require(layout["health_size"] == 64, "计时健康结果不是固定 64 字节")
     require(layout["bdtr"] == TIM1_BASE + 0x44, "TIM1 BDTR 地址不符")
     for prefix, fields in [("result", RESULT_FIELDS), ("health", HEALTH_FIELDS)]:
@@ -306,7 +306,7 @@ def read_result(backend, layout, tag, timeout_s=2.0, clock=time.monotonic):
     raise RuntimeError("计时结果三次只读均未取得一致版本")
 
 
-def read_health(backend, layout, conditions, tag, timeout_s=2.0, clock=time.monotonic, sleep=time.sleep):
+def read_health(backend, layout, conditions, tag, timeout_s=10.0, clock=time.monotonic, sleep=time.sleep):
     blocks = [("guard_before", layout["guard"], 4), ("bdtr_before", layout["bdtr"], 4), ("cpu_before", DHCSR, 4),
               ("seq_before", layout["health_sequence"], 4), ("health", layout["health"], 64),
               ("seq_after", layout["health_sequence"], 4), ("request", layout["request"], 4),
@@ -332,14 +332,14 @@ def read_health(backend, layout, conditions, tag, timeout_s=2.0, clock=time.mono
     else:
         return {"coherent": False, "words": words, "issues": ["八次只读均未取得一致健康快照"]}
     health = decode(raw["health"], "health", HEALTH_FIELDS, layout)
-    if health["schema_version"] != 1 or health["reserved"] != 0:
+    if health["schema_version"] != 2 or health["reserved"] != 0:
         issues.append("健康 schema 或保留字段不符")
     if health["faults"] != 0 or health["guard_trips"] != 0:
         issues.append("入口存在采样或保护故障")
     for field in ["drive_started", "current_valid", "power_disabled", "bus_valid", "position_valid", "permitted"]:
         if health[field] != 1:
             issues.append("缺少计时健康许可：" + field)
-    if health["sample_count"] < 2 or not 4250 <= health["last_sample_interval_cycles"] <= 12750:
+    if health["sample_count"] < 2 or not 12750 <= health["last_sample_interval_cycles"] <= 21250:
         issues.append("采样尚未持续或间隔异常")
     bus = health["bus_voltage_v"]
     if not (math.isfinite(bus) and 0.0 <= bus <= 3.6 and abs(bus - conditions.vbus_dmm_v) <= 0.3):
@@ -437,7 +437,7 @@ def run_measurement(backend, prepared, conditions, mode, clock=time.monotonic, s
             "work_us": result["last_work_cycles"] * 1e6 / CLOCK_HZ,
             "anchor_us": result["last_anchor_cycles"] * 1e6 / CLOCK_HZ,
             "irq_marked_us": result["last_irq_cycles"] * 1e6 / CLOCK_HZ,
-            "entry_to_deadline_cycles": result["last_entry_count"] - DEADLINE_COUNT,
+            "entry_to_deadline_cycles": result["last_stage_budget_cycles"],
             "limit": "只有已记录字段可解释本次返回点；compute 的 sink 不具备真实 stage 接受含义，IRQ末标记后仍有开销。"}
     report["success"] = not report.get("primary_failure") and report["result"] is not None and report["result"]["state"] == 3
     report["status"] = ("PASS_POWERLESS_REAL_STAGE_WINDOW_ONLY" if mode == "stage" else

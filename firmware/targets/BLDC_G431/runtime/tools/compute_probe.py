@@ -95,6 +95,7 @@ class Conditions:
 
 def layout_spec():
     spec = {}
+    spec["config.fast_tick_period_ticks"] = "s_control_config.fast_tick_period_ticks"
     for key, name in SYMBOLS.items():
         spec[key], spec[key + "_size"] = "&" + name, "sizeof(" + name + ")"
     spec["bdtr"] = f"&((TIM_TypeDef*){TIM1_BASE})->BDTR"
@@ -111,6 +112,8 @@ def layout_spec():
 
 
 def validate_layout(layout):
+    require(layout.get("config.fast_tick_period_ticks") == 1,
+            "此历史Observe诊断仅支持50us采样；100us slot请使用 runtime_timing.py 与Timing入口")
     require(set(layout) == set(layout_spec()), "AXF 类型布局项目不完整")
     regions = []
     for key in SYMBOLS:

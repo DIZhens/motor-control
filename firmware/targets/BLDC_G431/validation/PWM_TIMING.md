@@ -1,15 +1,15 @@
 # G431 PWM 提交时序验证
 
 本流程验证 `realtime_motor_io_stage_phase_duty()` 对下一确定更新边界的承诺，
-覆盖真实 Platform 的提交、使能与关断。公共 HCC 和 CubeMX 外设配置保持不变；
+覆盖真实 Platform 的提交、使能与关断。当前采用下述 20 / 10 / 1 kHz 配置；
 `main()` 的 SysInit 用户区在时钟初始化后开启 Flash 预取。
-当前候选与验收结果统一维护于 [VALIDATION.md](../VALIDATION.md#当前验收2026-10-18)，
+当前候选与验收结果统一维护于 [VALIDATION.md](../VALIDATION.md)，
 本页保存机制、复用命令及限制，不维护另一套阶段状态。
 
-## 20 / 10 / 1 kHz 时序设计
+## 20 / 10 / 1 kHz 时序
 
-本节定义下一轮实现和验收的目标。下面的「既有实现」仍描述当前源码与历史证据；
-本节不是新配置已经构建、烧录或实测通过的声明。
+本节描述当前源码的 slot 时序；离线与实机结论分别记录在 Target 验证页。
+后文的 RCR=0 流程只用于解释历史证据，不能继续用于当前镜像。
 
 ### 参考依据与频率
 
@@ -28,7 +28,7 @@
 参考这些时序原则，继续使用本工程自己的 Platform 合同、固定 B/C 采样和 Motor 状态机，
 不整体移植 MCSDK。速度环仍在同一采样时基上整数分频，不照搬独立 SysTick 慢环。
 
-| 项目 | 目标 |
+| 项目 | 配置 |
 | --- | --- |
 | TIM1 PWM | 170 MHz、PSC=0、ARR=4250、中心对齐，20 kHz 不变 |
 | 有效 update event（UEV） | RCR=3，每 100 µs 一个指定谷底，三相 preload 同时装载 |
@@ -80,40 +80,64 @@ CCR 生效延迟与保持区间中点不能混称，角度外推也不消除电�
 - 原 25 µs consumer guard 不能直接保留，也不能只改为 100 µs。新 guard 必须检查指定
   UEV 的绝对截止；完整 ADC IRQ 还须包含观测尾部、HAL 收尾和异常返回的余量。
   实现前先在模型中确定各检查点，实测分别记录 stage、consumer 与完整 IRQ 的范围。
-- 拟采用 Break/UP 优先级 0、ADC 优先级 1、SPI 优先级 2，让 UP 可以打断超时的 ADC。
+- 采用 Break/UP 优先级 0、ADC 优先级 1、SPI 优先级 2，让 UP 可以打断超时的 ADC。
   UP 检查上一 slot 是否完整结束、fresh stage 是否具备；超时立即关 MOE、失效 epoch，
   旧 ADC 服务尚未退出时不得开放新采样。仍须直接检查 UIF/cycle；优先级不能替代迟到判断。
-  ADC busy 必须覆盖整个 IRQ 和 HAL 收尾；fresh stage 交付要求按已使能/预热交付状态判定，
+  injected busy 必须覆盖该样本的整个 IRQ 和 HAL 收尾；纯 regular ADC 服务不占用
+  电流 sample slot，可以跨过 UEV。若 JEOS 在 regular IRQ 入口之后到达并由同一次 HAL
+  分发回调，须重新按真实首峰窗口认领 injected 身份，不能丢弃或借用旧样本。
+  fresh stage 交付要求按已使能/预热交付状态判定，
   首次 UEV、IDLE/FAULT 观察和 Start 的 quiet slot 不得因本就无需提交而误报漏交付。
   PRIMASK 临界区、同级中断和 CPU 故障仍可能延迟软件关断，不宣称此机制替代独立硬件 Trip。
+- UP/Break 的 Core USER CODE 在进入通用 HAL TIM 分发前先服务 Platform 的 UIF，
+  并暂时屏蔽 HAL 的 UIE 来源，返回后只恢复原 UIE 位；UEV 本身继续运行，期间新到的
+  UIF 保留给 Platform，避免 HAL 在两次读取间吞掉新更新，也不复活已经关闭的 Break 中断。
 - Start 先保持 MOE=0，提交本次 Start 的安全预热输出，并经真实目标 UEV 确认生效；
   后续 sample 再提交 fresh 请求并核对使能条件。不能把首次 sample 或旧 pending 当作预热完成。
   Stop/Trip 立即关 MOE、写 neutral 并取消 pending/committed/enable 资格，Drive Timing 持续。
 - neutral、启动重复计数相位与所有 UG 必须在注入 ADC 接受外部触发之前完成。
   `TIM_TRGO2_RESET` 在 UG 时也可能输出触发，不能把它当作对 UG 永久免疫的关闭状态。
   清除启动 UIF/待处理中断后，才开放运行期 UIE 与计数；运行期禁止额外 UG。
+- 真正的 slot、采样到达或完整 ADC IRQ 截止违规锁存为 Platform 时序失效；之后仍可
+  交付标为 invalid 的采样供故障观察，但 stage/enable 拒绝，须板级复位后重新建立时序。
+  普通 Stop/safe-off/Break 本身不设置这个锁存位。该后效也覆盖功率原本关闭的计时诊断，
+  不能因 MOE 始终为零而把末标记后的超时判为健康。
 
 ### 实现范围与最小验收
 
-静态配置先通过 `.ioc` / CubeMX 改 RCR 和 UP IRQ，再调整 Platform 的触发门、slot、
-stage/commit/enable。同步修改 ControlTime 推进、Runtime 装配、1 kHz 分频和心跳门限，
-检查零偏等待/窗口样本数对应的实际时长。长期架构不增加线程、队列或第二个控制状态所有者。
-HCC 对「下一 PWM 周期」的表述需明确为 Target 声明的下一有效更新边界；本配置中它
-间隔两个载波周期。Runtime 的预测参数必须与该具体时序核对，不沿用旧值，也不把
+静态配置由 `.ioc` 经 CubeMX 生成 RCR 和 UP IRQ；Platform 提供私有 update IRQ 及 ADC
+IRQ enter/exit 接口，分别拥有触发门、slot 和完整 ADC 服务区间。ControlTime、Runtime
+装配及 1 kHz 分频同步调整；采样间隔门限为 75～125 µs，独立 TIM6 仍每 50 µs 检查。
+Observe 零偏等待 100 拍、窗口 2048 点，保持原来的 10 ms / 204.8 ms 物理时长；
+旧台架固定 4096 点 ABI 保留，窗口改为约 409.6 ms。长期架构不增加线程或第二个控制状态所有者。
+HCC 明确 Target 声明的下一有效更新边界；本配置中它间隔两个载波周期。
+Runtime 的预测参数必须与该具体时序核对，不沿用旧值，也不把
 定时器重复计数、UIF 或 slot 实现泄漏给可移植控制算法。
-三个 Keil Target 共享静态 MCU 配置，必须检查全部构建与受影响诊断；旧工具不得按新镜像
-继续套用 50 µs 采样、原截止或原二进制布局。历史证据仍归原镜像，不改写为新版本通过。
+三个 Keil Target 共享静态 MCU 配置，全部构建与受影响诊断均须检查；旧半周台架命令和
+Observe 的 compute/stage 诊断在新时序下明确拒绝，使用独立 Timing schema=2 / 256 B
+结果和 Platform 给出的绝对截止。历史证据仍归原镜像，不改写为新版本通过。
 
 离线模型重点覆盖首次相位、100 µs 采样、第二峰抑制、同一 UEV 三相装载、slot/epoch
 失配、UP 迟到、ADC 超时、跨周期别名、UDIS 截止及 Start/Stop/Trip 交错。
 候选稳定后只做受影响的无功率时序验收：频率、相位、完整最慢控制路径和截止失败关断；
 不重跑无关的全部历史台架流程，也不以构建或模型成功替代实物时序通过。
 
-SSI 接收及 OVR 后收尾仍是独立未解决项：在高优先级 ADC 尾部启动 RX-only IT，可能在
-SPI 获得服务前溢出。降低采样频率不能消除单次接收的这个风险；正式 RUN 许可冻结前必须
-完成有界接收和错误清理的针对性验证。当前未因此增加带电操作或宣称闭环预算通过。
+SSI 已改用 Target 私有有限事务：`.ioc` 保留 RX-only 的 SCK/MISO 引脚配置，
+position arm 仅在 SPE=0 时切换内部 2LINES 时钟控制，不路由 MOSI、不占用 PA7/PB5。
+Core 的 SPI1 IRQ 只进入私有 backend，最多写入四个 dummy byte、接收四个 byte，
+产生有限 32 个 SCK；不进入 HAL 的忙等收尾。BSY 未释放时由后续 fast tick 确认，
+4 个 ControlTime tick（名义 200 µs）超时或传输错误会复位 SPI 并锁存隔离至板复位，
+不自动重试；完整帧的 CRC/状态无效只发布无效观测，下一周期仍可接收正常帧。
+观测时间仍标记发起事务的 fast tick，并非首个 SCK 或编码器内部采样的精确时刻。
+离线模型覆盖有限字节、故障隔离和抢占发布；实物位相、CRC、观测延迟及控制预算须按
+同一候选分别验证，不以模型或构建结果宣称正式 RUN、带电闭环或最坏时序通过。
 
-## 既有实现：固定时序与截止
+## 历史 RCR=0 流程（当前候选不适用）
+
+以下机制、工具解释与命令用于旧镜像。当前 RCR=3 候选明确拒绝旧半周计时命令，
+不得据这些说明对当前镜像发请求或解释截止；当前工具入口见 runtime/README.md。
+
+### 固定时序与截止
 
 TIM1 与 CPU 同为 170 MHz，PSC=0、ARR=4250、RCR=0，中心对齐模式 1。
 完整 PWM 周期 50 us，峰值和谷底各一次 update；CH4 为 PWM2、CCR4=4240，
@@ -145,7 +169,7 @@ UDIS 阻止 preload → active 更新，不停止计数器；PRIMASK 防软件�
 现有证据尚未量化改变该值所需的总线/临界区最小余量，不能据注释认定 10 µs 已通过
 最坏情况论证。低侧采样窗口是另一项物理约束，不能用它直接替换该预留。
 
-## 资源与失败语义
+### 资源与失败语义
 
 Platform 启动时开启 DWT CYCCNT 而不清零，其他运行期模块不得停用或重置它。
 32 位差值允许短窗口跨回绕，不证明任意长挂起后的请求仍新鲜。
@@ -161,7 +185,7 @@ safe-off 先关 MOE、再失效旧请求；Drive Timing 和采样继续。
 TIM6 独立动作截止属于验证入口，本修复不覆盖 CPU 挂死、调试 halt 或任意时钟修改，
 也不替代独立 Hardware Trip。更换正式消费者时须明确这些保障的所有者。
 
-## 本地检查
+### 本地检查
 
 在仓库根目录按修改影响选择检查：
 
@@ -185,7 +209,7 @@ python firmware/targets/BLDC_G431/validation/tests/verify_candidate_tool.py
 模型不模拟真实 Flash 时序；调用图补计函数指针后仍不含异常压栈、被抢占上下文和嵌套，
 不代替 1024-byte 启动栈的实物高水位验收。各轮构建与测试原值保留在对应本地候选目录。
 
-## 候选身份准备
+### 候选身份准备
 
 全量构建后，将同次 HEX、AXF、MAP 保存到新的本地候选目录；冻结本轮固件与工具，
 再离线生成清单。输出文件必须尚不存在，命令从仓库根目录运行：
@@ -200,7 +224,7 @@ python firmware/targets/BLDC_G431/validation/tools/candidate_manifest.py --build
 后续实测带同一 `--candidate-manifest`，工具位置可用 `--cli` / `--gdb` 指定。
 旧镜像前序摘要不能进入新候选事务链，必须从实际新启动建立证据；身份选择不等于功率授权。
 
-## 功率关闭时序注入
+### 功率关闭时序注入
 
 `timing_probe.c` 从真实 ADC consumer 调用正式 Platform 的 stage/safe-off。
 受理时清理前态，下一采样才执行；保留旧 mailbox/snapshot 布局，结果另存

@@ -22,6 +22,8 @@
 #include "stm32g4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "../../platform/realtime_motor_io_internal.h"
+#include "../../platform/position_observation_internal.h"
 #if defined(BLDC_G431_TIMING_ENTRY)
 #include "timing_entry.h"
 #include "runtime_timing.h"
@@ -231,6 +233,7 @@ void SysTick_Handler(void)
 void ADC1_2_IRQHandler(void)
 {
   /* USER CODE BEGIN ADC1_2_IRQn 0 */
+  realtime_motor_io_adc_irq_enter();
 #if defined(BLDC_G431_TIMING_ENTRY)
   g431_runtime_timing_irq_enter(DWT->CYCCNT);
 #elif defined(BLDC_G431_OBSERVE_ENTRY)
@@ -264,6 +267,8 @@ void ADC1_2_IRQHandler(void)
     g431_irq_timing_irq_exit(timing_end, target_runtime_timing_permitted());
   }
 #endif
+  /* 覆盖 HAL 与诊断尾部；UP IRQ 不得在旧 ADC 服务未退出时重新开放采样。 */
+  realtime_motor_io_adc_irq_exit();
 
   /* USER CODE END ADC1_2_IRQn 1 */
 }
@@ -274,6 +279,11 @@ void ADC1_2_IRQHandler(void)
 void TIM1_BRK_TIM15_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM1_BRK_TIM15_IRQn 0 */
+  /* HAL 的 TIM 总入口也会清 UIF；先将同时到达的 UEV 交回 Platform 所有者。 */
+  realtime_motor_io_update_irq();
+  uint32_t update_irq_enabled = TIM1->DIER & TIM_DIER_UIE;
+  /* 保留新到 UIF，避免通用 HAL 在两次读取间吞掉下一次更新。 */
+  CLEAR_BIT(TIM1->DIER, TIM_DIER_UIE);
 #if defined(BLDC_G431_OBSERVE_ENTRY)
   g_target_runtime_irq_entries[5]++;
 #endif
@@ -281,8 +291,28 @@ void TIM1_BRK_TIM15_IRQHandler(void)
   /* USER CODE END TIM1_BRK_TIM15_IRQn 0 */
   HAL_TIM_IRQHandler(&htim1);
   /* USER CODE BEGIN TIM1_BRK_TIM15_IRQn 1 */
-
+  if (update_irq_enabled != 0U) {
+    SET_BIT(TIM1->DIER, TIM_DIER_UIE);
+  }
   /* USER CODE END TIM1_BRK_TIM15_IRQn 1 */
+}
+
+/**
+  * @brief This function handles TIM1 update interrupt and TIM16 global interrupt.
+  */
+void TIM1_UP_TIM16_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM1_UP_TIM16_IRQn 0 */
+  realtime_motor_io_update_irq();
+  uint32_t update_irq_enabled = TIM1->DIER & TIM_DIER_UIE;
+  CLEAR_BIT(TIM1->DIER, TIM_DIER_UIE);
+  /* USER CODE END TIM1_UP_TIM16_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim1);
+  /* USER CODE BEGIN TIM1_UP_TIM16_IRQn 1 */
+  if (update_irq_enabled != 0U) {
+    SET_BIT(TIM1->DIER, TIM_DIER_UIE);
+  }
+  /* USER CODE END TIM1_UP_TIM16_IRQn 1 */
 }
 
 /**
@@ -294,11 +324,14 @@ void SPI1_IRQHandler(void)
 #if defined(BLDC_G431_OBSERVE_ENTRY)
   g_target_runtime_irq_entries[6]++;
 #endif
-
+  /* 私有有限长度 SSI 事务独占 SPI1，中断内不得进入 HAL 的等待收尾路径。 */
+  position_observation_irq();
+  /* CubeMX 保留通用入口；生成区由条件编译排除，避免再次分发同一 IRQ。 */
+#if 0
   /* USER CODE END SPI1_IRQn 0 */
   HAL_SPI_IRQHandler(&hspi1);
   /* USER CODE BEGIN SPI1_IRQn 1 */
-
+#endif
   /* USER CODE END SPI1_IRQn 1 */
 }
 

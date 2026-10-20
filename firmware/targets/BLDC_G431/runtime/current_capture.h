@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define OBSERVE_CURRENT_CAPTURE_SAMPLES (4096U)
+#define OBSERVE_CURRENT_CAPTURE_SAMPLES (2048U)
 
 typedef enum {
     OBSERVE_CURRENT_CAPTURE_IDLE = 0, /* 尚未收到本次统计请求。 */
@@ -34,7 +34,7 @@ typedef struct {
     uint32_t request_sequence; /* 本次请求身份；成功启动要求非零。 */
     ObserveCurrentCaptureState state; /* COMPLETE 才能作为完整窗口使用。 */
     ObserveCurrentCaptureFailure failure; /* 首个失败原因，失败后不再覆盖。 */
-    uint32_t sample_count; /* 已接受的连续合法样本数，最大为 4096。 */
+    uint32_t sample_count; /* 已接受的连续合法样本数，最大为 2048。 */
     uint64_t first_sample_time; /* 首个已接受样本的控制时间，单位由装配方说明。 */
     uint64_t last_sample_time; /* 最后一个已接受样本的控制时间。 */
     float offset_b_a; /* start 时复制冻结的 B 相零偏 [A]，本模块不学习也不应用。 */
@@ -68,7 +68,7 @@ bool observe_current_capture_start(ObserveCurrentCapture *capture, uint32_t requ
  * 只在 ACTIVE 接收原始名义 B/C 电流；valid=false 或非有限输入以 INVALID_SAMPLE 失败。
  * 首拍时间可为零；后续要求 time>last 且 time-last==period，不接受时间回绕。
  * 两相均计算合法后才提交本拍，任何统计异常以 NUMERIC 失败并保留上拍诊断。
- * 第 4096 点成为 COMPLETE；其他状态下不读取输入、不改变结果。
+ * 第 2048 点成为 COMPLETE；其他状态下不读取输入、不改变结果。
  * 返回仅表示本次调用发生 ACTIVE→COMPLETE/FAILED，适合触发一次结果发布。
  */
 bool observe_current_capture_update(ObserveCurrentCapture *capture, uint64_t time,

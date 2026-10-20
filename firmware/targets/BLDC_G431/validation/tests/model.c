@@ -10,8 +10,8 @@ uint32_t SystemCoreClock = 170000000U;
 TIM_HandleTypeDef htim1 = { .Instance = TIM1 };
 TIM_HandleTypeDef htim6 = { .Instance = TIM6 };
 uint64_t model_time;
-uint32_t model_step_ticks = 1U;
-uint32_t model_step_us = 50U;
+uint32_t model_step_ticks = 2U;
+uint32_t model_step_us = 100U;
 uint32_t model_current_valid = 1U;
 uint32_t model_current_mask = PHASE_MASK_B | PHASE_MASK_C;
 float model_current_b_a;
@@ -85,7 +85,7 @@ bool realtime_motor_io_get_facts(RealtimeMotorIoFacts *facts)
 {
     facts->normal_voltage_utilization = 0.45f;
     facts->control_time_ticks_per_second = 20000U;
-    facts->fast_tick_period_ticks = 1U;
+    facts->fast_tick_period_ticks = 2U;
     return model_facts_ok != 0U;
 }
 bool realtime_motor_io_bind_sample_ready(PhaseCurrentSampleReadyHandler fn, void *ctx)

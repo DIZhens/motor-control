@@ -383,20 +383,20 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         def angle_position(self, turns: float, observed_at: int | None = None) -> None:
             # 独立 Runtime 的合成 source；按其真实分频计数交付新观测。
             counter_address = self.symbols["model_angle_runtime"] + self.word("model_observation_counter_offset")
-            next_read = self.control_time() + 20 - self.memory_word(counter_address)
+            next_read = self.control_time() + 2 * (10 - self.memory_word(counter_address))
             self.write("model_position_available", 1)
             self.write("model_position_turns", turns, "f")
             self.write("model_position_time", next_read if observed_at is None else observed_at, "Q")
-            self.angle_sample(next_read - self.control_time())
+            self.angle_sample((next_read - self.control_time()) // 2)
 
         def begin_current_window(self) -> None:
             self.write("model_position_available", 1)
             self.write("model_position_use_fixed_time", 0)
             self.write("model_current_b", 0.02, "f")
             self.write("model_current_c", -0.03, "f")
-            self.sample(238)
+            self.sample(118)
             current = self.current()
-            assert current["state"] == CURRENT_WAITING and current["settle"] == 199, current
+            assert current["state"] == CURRENT_WAITING and current["settle"] == 99, current
             assert current["count"] == 0 and not current["valid"]
             self.sample()
             current = self.current()
@@ -404,13 +404,13 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
 
         def complete_current_window(self) -> None:
             self.begin_current_window()
-            self.sample(4094)
+            self.sample(2046)
             current = self.current()
-            assert current["state"] == CURRENT_CALIBRATING and current["count"] == 4095
+            assert current["state"] == CURRENT_CALIBRATING and current["count"] == 2047
             assert current["offset"] == (0.0, 0.0, 0.0) and not current["valid"]
             self.sample()
             current = self.current()
-            assert current["state"] == CURRENT_READY and current["count"] == 4096, current
+            assert current["state"] == CURRENT_READY and current["count"] == 2048, current
             assert current["failure"] == 0 and current["valid"], current
 
         def uart_read(self, cpu, access, address, size, value, user_data) -> None:
@@ -535,7 +535,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             self.write("model_position_available", 1)
             self.write("model_position_turns", turns, "f")
             self.write("model_position_time", next_read if observed_at is None else observed_at, "Q")
-            self.sample(next_read - now)
+            self.sample((next_read - now) // 2)
 
         def snapshot_frame(self) -> tuple[float, ...]:
             # 健康 IDLE 的 clear 只触发本拍一致发布，不改变反馈或开放功率。
@@ -568,7 +568,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         assert model.memory_word(TIM6) & 1 == 0
         frame = model.frame()
         assert frame[6:9] == (float(FAULT), float(FAULT_STARTUP), float(VALID_STATUS)), name
-    for settings in [{"model_facts_rate": 10000}, {"model_facts_period": 2},
+    for settings in [{"model_facts_rate": 10000}, {"model_facts_period": 1},
                      {"model_trip_active": 1}, {"model_trip_causes": 2}]:
         model = Model(settings)
         assert model.motor()[0:2] == (FAULT, FAULT_STARTUP)
@@ -648,7 +648,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     for _ in range(100):
         model.service()
     assert model.output == b"" and model.motor()[3] == 0
-    model.sample(200)
+    model.sample(100)
     frame = model.frame()
     assert math.isnan(frame[0]) and frame[8] == VALID_STATUS
     frame = model.frame()
@@ -663,13 +663,13 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     for settings in [{"model_bus_available": 0}, {"model_bus_valid": 0},
                      {"model_bus_age": 101}, {"model_bus_future": 1}]:
         model = Model(settings)
-        model.sample(200)
+        model.sample(100)
         frame = model.frame()
         assert math.isnan(frame[5]) and int(frame[8]) & VALID_BUS == 0
     for value in [-1.0, float("nan"), float("inf")]:
         model = Model()
         model.write("model_bus_voltage", value, "f")
-        model.sample(200)
+        model.sample(100)
         frame = model.frame()
         assert math.isnan(frame[5]) and int(frame[8]) & VALID_BUS == 0
     passed("bus publication failure, stale/future timestamp and invalid voltage stay invalid")
@@ -705,7 +705,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     assert frame[9] == float(NOT_READY)
     passed("sample faults use authoritative evidence, latch, safe-off and survive Stop/Clear")
 
-    for cycles in [24 * 170, 76 * 170]:
+    for cycles in [74 * 170, 126 * 170]:
         model = Model()
         model.sample()
         model.write("model_tick_cycles", cycles)
@@ -714,10 +714,10 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     for first_sample in [False, True]:
         model = Model()
         if first_sample:
-            model.sample(200)
+            model.sample(100)
         previous = model.motor()
         before = model.word("model_safeoff_count")
-        model.guard(76)
+        model.guard(126)
         assert model.word("g_target_runtime_guard_faults") & FAULT_CADENCE
         assert model.word("model_safeoff_count") == before + 1
         assert model.motor() == previous
@@ -737,7 +737,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
 
     model = Model()
     model.sample()
-    model.guard(50, interrupt_clock=True)
+    model.guard(100, interrupt_clock=True)
     assert model.interruptions == 1
     assert model.word("g_target_runtime_guard_faults") == 0, "ADC preemption invented guard fault"
     assert model.interrupt_masks == [0]
@@ -745,8 +745,8 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     model.sample()
     model.assert_default_off()
     model = Model()
-    model.sample(200)
-    model.memory_write(DWT_CYCCNT, model.memory_word(DWT_CYCCNT) + 50 * 170)
+    model.sample(100)
+    model.memory_write(DWT_CYCCNT, model.memory_word(DWT_CYCCNT) + 100 * 170)
     model.write("model_ms", 10)
     model.service(TXE, interrupt_clock=True)
     for _ in range(43):
@@ -780,7 +780,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     first_frame = model.snapshot_frame()
     # 同时间戳即使载荷变化也不能成为新采集，更不能对重复位置求出零速度。
     model.write("model_position_turns", 0.4, "f")
-    model.sample(39)
+    model.sample(20)
     frame = model.snapshot_frame()
     assert frame[2] == first_frame[2] and int(frame[8]) & VALID_VELOCITY
     assert model.word("model_position_read_count") == 4
@@ -795,12 +795,12 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     model.position(0.10)
     model.position(0.11)
     model.write("model_position_available", 0)
-    model.sample(40)
+    model.sample(20)
     frame = model.snapshot_frame()
     assert math.isclose(frame[2], 600.0, abs_tol=0.01)
     assert int(frame[8]) & VALID_VELOCITY
-    # 到 140 拍恰好为 5 ms；到第 141 拍便应失效，无需等下一次 20 拍轮询。
-    model.sample(139 - model.control_time())
+    # 到 140 拍恰好为 5 ms；到142tick便应失效，无需等下一次 10 样本轮询。
+    model.sample((138 - model.control_time()) // 2)
     frame = model.snapshot_frame()
     assert model.control_time() == 140
     assert math.isclose(frame[2], 600.0, abs_tol=0.01)
@@ -834,7 +834,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         elif invalid == "rollback":
             timestamp = 39
         elif invalid == "stale":
-            model.sample(100)
+            model.sample(50)
             timestamp = 59  # 下一次读取在 160 拍，年龄为 101 tick。
         else:
             turns = {"negative": -0.1, "one_turn": 1.0,
@@ -866,7 +866,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     frame = model.frame()
     assert frame[9] == float(NOT_READY) and int(frame[8]) & VALID_VELOCITY
     previous = model.motor()
-    model.guard(76)
+    model.guard(126)
     assert model.motor() == previous
     frame = model.frame()
     assert frame[8] == 0.0
@@ -883,14 +883,14 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         assert int(frame[8]) & VALID_VELOCITY
         assert model.motor()[3] == 0, "feedback publication must not depend on a command"
         model.write("model_position_available", 0)
-        model.sample(100)
+        model.sample(50)
         assert model.control_time() == 140
         frame = model.frame()
         assert math.isclose(frame[2], direction * 660.0, abs_tol=0.01)
         assert int(frame[8]) & VALID_VELOCITY
         model.sample()
         frame = model.frame()
-        assert model.control_time() == 141
+        assert model.control_time() == 142
         assert math.isnan(frame[2]) and int(frame[8]) & VALID_VELOCITY == 0
         model.position(0.20)
         frame = model.frame()
@@ -911,7 +911,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         assert int(frame[8]) & VALID_VELOCITY
         model.write(rejected, 0)
         model.position(0.12)
-        assert model.control_time() == 60  # 未到 200 拍周期发布，必须由失效变化触发。
+        assert model.control_time() == 60  # 未到 100 拍周期发布，必须由失效变化触发。
         frame = model.frame()
         assert math.isnan(frame[2]) and int(frame[8]) & VALID_VELOCITY == 0
         model.write(rejected, 1)
@@ -933,7 +933,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         model.service(TXE)
     assert len(model.output) == 5
     model.write("model_position_available", 0)
-    model.sample(101)
+    model.sample(51)
     # 已经开始发送的旧帧保持完整；下份帧必须来自已撤销速度的新版快照。
     for _ in range(39):
         model.service(TXE)
@@ -947,25 +947,25 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     passed("an in-flight frame completes consistently and the next frame reflects feedback expiry without a command")
 
     model = Model()
-    model.sample(20)
+    model.sample(10)
     frame = model.frame()
     assert frame[5] == 24.0 and int(frame[8]) & VALID_BUS
     model.write("model_bus_available", 0)
-    model.sample(100)
+    model.sample(50)
     assert model.control_time() == 120
     frame = model.frame()
     assert frame[5] == 24.0 and int(frame[8]) & VALID_BUS
     model.sample()
     frame = model.frame()
-    assert model.control_time() == 121
+    assert model.control_time() == 122
     assert math.isnan(frame[5]) and int(frame[8]) & VALID_BUS == 0
     model.write("model_bus_available", 1)
-    model.sample(19)
+    model.sample(9)
     frame = model.frame()
     assert model.control_time() == 140
     assert frame[5] == 24.0 and int(frame[8]) & VALID_BUS
     model.write("model_bus_valid", 0)
-    model.sample(20)
+    model.sample(10)
     frame = model.frame()
     assert model.control_time() == 160
     assert math.isnan(frame[5]) and int(frame[8]) & VALID_BUS == 0
@@ -995,19 +995,19 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     passed("装配方未授予无外部电流许可时，即使位置静止且功率关闭也不启动校零")
 
     model = Model({"model_position_available": 1, "model_position_use_fixed_time": 0})
-    model.sample(140)
-    assert model.current()["state"] == CURRENT_WAITING and model.current()["settle"] == 101
+    model.sample(70)
+    assert model.current()["state"] == CURRENT_WAITING and model.current()["settle"] == 51
     model.write("model_position_valid", 0)
     model.sample(20)
     assert model.current()["state"] == CURRENT_WAITING and model.current()["settle"] == 0
     model.write("model_position_valid", 1)
-    model.sample(238)
+    model.sample(118)
     current = model.current()
-    assert current["state"] == CURRENT_WAITING and current["settle"] == 199, current
+    assert current["state"] == CURRENT_WAITING and current["settle"] == 99, current
     model.sample()
     assert model.current()["state"] == CURRENT_CALIBRATING and model.current()["count"] == 1
     model.assert_current_unpublished()
-    passed("等待阶段位置失效清空静止计数，恢复后重新连续等待 200 拍才开始完整窗口")
+    passed("等待阶段位置失效清空静止计数，恢复后重新连续等待 100 拍才开始完整窗口")
 
     model = Model()
     model.complete_current_window()
@@ -1021,7 +1021,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     model.sample()
     current = model.current()
     assert current["state"] == CURRENT_READY and current["valid"], current
-    assert current["count"] == 4096 and current["offset"] == frozen
+    assert current["count"] == 2048 and current["offset"] == frozen
     assert all(math.isclose(value, expected, abs_tol=1e-6)
                for value, expected in zip(current["phase"], (-0.2, 0.3, -0.1))), current
     assert math.isclose(current["alpha"], -0.2, abs_tol=1e-6)
@@ -1030,12 +1030,12 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     model.sample(20)
     assert model.current()["state"] == CURRENT_READY and model.current()["offset"] == frozen
     model.sample(500)
-    assert model.current()["count"] == 4096 and model.current()["offset"] == frozen
+    assert model.current()["count"] == 2048 and model.current()["offset"] == frozen
     model.receive(b"start:100\n")
     model.sample()
     assert model.motor()[0:3] == (IDLE, 0, NOT_READY)
     model.assert_current_unpublished()
-    passed("完整 4096 点后冻结 BC 零偏，逐拍重构三相和 Clarke，手转不重学且仍不发布 Id/Iq")
+    passed("完整 2048 点后冻结 BC 零偏，逐拍重构三相和 Clarke，手转不重学且仍不发布 Id/Iq")
 
     model = Model()
     model.begin_current_window()
@@ -1081,7 +1081,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             elif failure == "current":
                 model.write("model_current_valid", 0)
             elif failure == "cadence":
-                model.write("model_tick_cycles", 76 * 170)
+                model.write("model_tick_cycles", 126 * 170)
             else:
                 model.memory_write(TIM1 + 0x44, MOE)
             model.sample()
@@ -1093,7 +1093,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     passed("采集中或 READY 后出现硬件故障、坏电流、采样节拍故障和意外功率均撤销零偏并关断")
 
     for completed in [False, True]:
-        for time_step in [0, 2]:
+        for time_step in [0, 4]:
             model = Model()
             if completed:
                 model.complete_current_window()
@@ -1105,7 +1105,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             assert current["state"] == CURRENT_FAILED and current["failure"] == CURRENT_ABORTED, current
             assert current["offset"] == (0.0, 0.0, 0.0) and not current["valid"]
             stopped_count = current["count"]
-            model.write("model_current_time_step", 1)
+            model.write("model_current_time_step", 2)
             model.sample(500)
             assert model.current()["state"] == CURRENT_FAILED and model.current()["count"] == stopped_count
             assert model.motor()[0:2] == (IDLE, 0)
@@ -1175,17 +1175,17 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         model.assert_angle_invalid("model_angle_runtime")
         model.angle_position(0.11)
         assert model.control_time() == 40
-        for ticks in range(41):
+        for ticks in range(21):
             if ticks:
                 model.angle_sample()
             angle = model.angle("model_angle_runtime")
-            expected = (7 * direction * (0.11 + 600 / 60 * ticks / 20000) - 0.125) % 1
+            expected = (7 * direction * (0.11 + 600 / 60 * (2 * ticks) / 20000) - 0.125) % 1
             assert angle["valid"] and math.isclose(angle["turns"], expected, abs_tol=2e-6), (ticks, angle)
             assert math.isclose(angle["sin"], math.sin(2 * math.pi * expected), abs_tol=1e-5)
             assert math.isclose(angle["cos"], math.cos(2 * math.pi * expected), abs_tol=1e-5)
         model.angle_sample()
         angle = model.angle("model_angle_runtime")
-        assert model.control_time() == 81 and angle["velocity_valid"]
+        assert model.control_time() == 82 and angle["velocity_valid"]
         model.assert_angle_invalid("model_angle_runtime")
     passed("合成正反方向以位置采集时刻外推，每个 fast tick 更新且预测年龄恰好 2ms 可用")
 
@@ -1223,14 +1223,14 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     model.angle_position(0.10)
     model.angle_position(0.11)
     model.write("model_position_available", 0)
-    model.angle_sample(41)
+    model.angle_sample(21)
     assert model.angle("model_angle_runtime")["velocity_valid"]
     model.assert_angle_invalid("model_angle_runtime")
     # 外推超时只使电角度失效，未抛弃尚在 5ms 范围内的速度历史。
     model.angle_position(0.13)
     assert model.angle("model_angle_runtime")["valid"]
     model.write("model_position_available", 0)
-    model.angle_sample(100)
+    model.angle_sample(50)
     assert model.angle("model_angle_runtime")["velocity_valid"]
     model.assert_angle_invalid("model_angle_runtime")
     model.angle_sample()
@@ -1258,7 +1258,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             captured = 39
         elif invalid == "stale":
             captured = 0
-            model.angle_sample(100)
+            model.angle_sample(50)
         else:
             turns = float("nan")
         model.angle_position(turns, captured)
@@ -1273,7 +1273,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         model.assert_default_off()
     passed("位置坏值、失去参考及未来回退过期时间立即撤销电角度，恢复需两份新观测")
 
-    for step in [0, 2, 0xFFFFFFFF]:
+    for step in [0, 4, 0xFFFFFFFF]:
         model = Model()
         model.call("model_angle_start")
         model.angle_position(0.10)
@@ -1282,14 +1282,14 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         if step == 0xFFFFFFFF:
             # ControlTime 为 uint64；用模型时钟回退而非无符号步长相加。
             model.write("model_control_time", 38, "Q")
-            model.write("model_current_time_step", 1)
+            model.write("model_current_time_step", 2)
         else:
             model.write("model_current_time_step", step)
         model.angle_sample()
         model.assert_angle_invalid("model_angle_runtime")
         assert not model.angle("model_angle_runtime")["velocity_valid"]
         assert model.word("model_position_read_count") == before_reads
-        model.write("model_current_time_step", 1)
+        model.write("model_current_time_step", 2)
         model.angle_position(0.20)
         model.assert_angle_invalid("model_angle_runtime")
         model.angle_position(0.21)
@@ -1323,8 +1323,8 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     model.write("model_position_use_fixed_time", 0)
     model.write("model_current_b", 0.02, "f")
     model.write("model_current_c", -0.03, "f")
-    model.sample(4334 - model.control_time())
-    assert model.current()["state"] == CURRENT_READY and model.current()["count"] == 4096
+    model.sample((4334 - model.control_time()) // 2)
+    assert model.current()["state"] == CURRENT_READY and model.current()["count"] == 2048
     before = model.capture_bytes(), model.capture()["sequence"]
     # 同一序号既不能在条件变好后重放，也不能因主机重复写入自动重试。
     model.request_capture(1)
@@ -1340,20 +1340,20 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     frozen = model.current()["offset"]
     model.write("model_current_b", 0.12, "f")
     model.write("model_current_c", -0.23, "f")
-    requested_at = model.control_time() + 1
+    requested_at = model.control_time() + 2
     active = model.request_capture(1)
     assert active["state"] == CAPTURE_ACTIVE
     latched_active = model.capture_bytes(), active["sequence"]
-    model.sample(2047)
+    model.sample(1023)
     model.write("model_current_b", 0.32, "f")
     model.write("model_current_c", -0.43, "f")
-    model.sample(2047)
+    model.sample(1023)
     assert (model.capture_bytes(), model.capture()["sequence"]) == latched_active
     model.sample()
     capture = model.capture()
     assert capture["state"] == CAPTURE_COMPLETE and capture["failure"] == 0
-    assert capture["count"] == 4096 and capture["first"] == requested_at
-    assert capture["last"] - capture["first"] == 4095
+    assert capture["count"] == 2048 and capture["first"] == requested_at
+    assert capture["last"] - capture["first"] == 4094
     assert capture["sequence"] > active["sequence"] and capture["sequence"] % 2 == 0
     # 不发额外命令/采样催更；完成当拍须发布健康时间，不能仍是较早的100Hz快照。
     frame = model.frame()
@@ -1362,7 +1362,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     assert model.current()["offset"] == frozen
     assert all(math.isclose(actual, expected, abs_tol=1e-6)
                for actual, expected in zip(capture["offset"], frozen[1:]))
-    expected_variance = 4096 / 4095 * 0.1 ** 2
+    expected_variance = 2048 / 2047 * 0.1 ** 2
     for phase, expected in [("b", (0.22, 0.12, 0.32)), ("c", (-0.33, -0.43, -0.23))]:
         assert all(math.isclose(actual, value, abs_tol=3e-6)
                    for actual, value in zip(capture[phase][:3], expected)), capture
@@ -1376,19 +1376,19 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     model.request_capture(1)
     model.sample(100)
     assert (model.capture_bytes(), model.capture()["sequence"]) == first_read
-    requested_at = model.control_time() + 1
+    requested_at = model.control_time() + 2
     assert model.request_capture(2)["state"] == CAPTURE_ACTIVE
-    model.sample(4095)
+    model.sample(2047)
     capture = model.capture()
     assert capture["request"] == 2 and capture["state"] == CAPTURE_COMPLETE
-    assert capture["count"] == 4096 and capture["first"] == requested_at
-    assert capture["last"] - capture["first"] == 4095
+    assert capture["count"] == 2048 and capture["first"] == requested_at
+    assert capture["last"] - capture["first"] == 4094
     assert math.isclose(capture["b"][0], 0.32, abs_tol=1e-6)
     assert math.isclose(capture["c"][0], -0.43, abs_tol=1e-6)
     assert capture["b"][3] == capture["c"][3] == 0.0
     assert model.current()["offset"] == frozen
     model.assert_current_unpublished()
-    passed("单次4096点保存原始BC统计与冻结零偏，首点属于请求当拍、活动期锁存不变、完成后新请求另开窗口")
+    passed("单次2048点保存原始BC统计与冻结零偏，首点属于请求当拍、活动期锁存不变、完成后新请求另开窗口")
 
     model = Model()
     model.complete_current_window()
@@ -1420,7 +1420,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             assert capture["count"] == 0
         else:
             assert capture["request"] == 1 and capture["failure"] == CAPTURE_ABORTED
-            assert 0 < capture["count"] < 4096
+            assert 0 < capture["count"] < 2048
         before = model.capture_bytes(), capture["sequence"]
         model.sample(100)
         assert (model.capture_bytes(), model.capture()["sequence"]) == before
@@ -1438,7 +1438,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         elif failure == "current":
             model.write("model_current_valid", 0)
         elif failure in ["time_duplicate", "time_skip"]:
-            model.write("model_current_time_step", 0 if failure == "time_duplicate" else 2)
+            model.write("model_current_time_step", 0 if failure == "time_duplicate" else 4)
         elif failure == "motion":
             model.write("model_position_turns", 0.01, "f")
         elif failure == "unexpected_power":
@@ -1448,10 +1448,10 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         model.sample(20 if failure in ["motion", "position"] else 1)
         capture = model.capture()
         assert capture["state"] == CAPTURE_FAILED and capture["failure"] != 0, (failure, capture)
-        assert capture["request"] == 1 and 0 < capture["count"] < 4096, (failure, capture)
+        assert capture["request"] == 1 and 0 < capture["count"] < 2048, (failure, capture)
         assert capture["sequence"] % 2 == 0
         before = model.capture_bytes(), capture["sequence"]
-        model.write("model_current_time_step", 1)
+        model.write("model_current_time_step", 2)
         model.sample(100)
         assert (model.capture_bytes(), model.capture()["sequence"]) == before, failure
         model.assert_current_unpublished()
@@ -1468,429 +1468,23 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     model.assert_default_off()
     passed("计时诊断在无真实采样或时钟许可时拒绝，拒绝身份在条件改善后不自动重放")
 
-    model = Model()
-    model.prepare_compute()
-    model.write("g_target_runtime_compute_request", 1)
-    model.service()
-    assert model.compute()["state"] == 1 and model.compute()["steps"] == 0
-    active = model.compute()
-    for step in range(448):
-        model.sample()
-        model.service()
-        if step < 447:
-            assert model.compute() == active
-        assert model.irq_timing()["state"] == 0
-    complete = model.compute()
-    assert complete["state"] == 2 and complete["failure"] == 0
-    assert complete["steps"] == 192 and complete["counts"] == complete["hardware_counts"] == [16] * 6
-    assert complete["sweep"] == 257 and complete["schema"] == 1
-    assert complete["errors"][:2] == (0.0, 0.0) and complete["errors"][2] <= 2e-5
-    assert complete["errors"][3:] == (0.0, 0.0)
-    assert model.word("model_cordic_calls") == 353 and model.word("model_cordic_init_count") == 1
-    assert complete["sequence"] % 2 == 0
-    # 后台计时已完整冻结，再用一拍准备和后续256拍观测真实IRQ包装。
-    model.sample(257)
-    model.service()
-    assert model.compute() == complete
-    assert model.current()["state"] == CURRENT_WAITING
-    model.assert_default_off()
-    passed("后台逐轮配对192例及全周257点后冻结，活动快照不变，真实Runtime保持未标定且没有stage或enable")
-
-    irq = model.irq_timing()
-    controller = model.controller_profile()
-    assert irq["request"] == controller["request"] == complete["request"] == 1
-    assert irq["state"] == controller["state"] == 2 and irq["failure"] == controller["failure"] == 0
-    assert irq["schema"] == 1 and irq["count"] == 256
-    assert all(row[0] == 256 and 0 < row[1] <= row[2] <= 34000 and row[3] > 0 for row in irq["rows"])
-    assert (controller["calls"], controller["valid"], controller["rejected"]) == (160, 128, 32)
-    assert controller["rows"] == [(128, 128, 0)] * 7
-    model.sample()
-    model.service()
-    assert model.irq_timing() == irq and model.controller_profile() == controller
-    model.assert_default_off()
-    passed("同一nonce完成算法对照、256拍IRQ四段和160次控制器七段，全部冻结且未开放功率")
-
-    model = Model()
-    model.prepare_compute()
-    model.write("g_target_runtime_compute_request", 1)
-    model.service()
-    model.write("g_target_runtime_compute_request", 2)
-    model.service()
-    result = model.compute()
-    assert result["request"] == 2 and result["state"] == 3 and result["failure"] == 5
-    assert result["steps"] == 0 and result["counts"] == [0] * 6
-    model.service()
-    assert model.compute() == result
-    model.assert_default_off()
-    passed("活动计时遇新身份明确BUSY，不把旧统计冠到新请求或自动替代运行")
-
-    model = Model()
-    model.prepare_compute()
-    model.write("g_target_runtime_compute_request", 1)
-    model.service()
-    model.write("model_bus_voltage", 12.0, "f")
-    model.sample(20)
-    assert model.control_time() == 40  # 尚未到 200 拍周期发布点。
-    model.service()
-    assert model.compute()["state"] == 3 and model.compute()["failure"] == 1
-    assert model.compute()["steps"] == 1
-    model.assert_default_off()
-    passed("新母线观测越过逻辑供电门限立即撤销诊断许可，不与旧100Hz低压快照混用")
-
-    for failure in ["stale", "clock_disabled", "guard", "publication"]:
+    for request_name, failure_field in [("g_target_runtime_compute_request", "compute"),
+                                        ("g_target_runtime_stage_request", "stage")]:
         model = Model()
         model.prepare_compute()
-        model.write("g_target_runtime_compute_request", 1)
+        model.write(request_name, 1)
         model.service()
-        if failure == "stale":
-            model.memory_write(DWT_CYCCNT, model.memory_word(DWT_CYCCNT) + 13000)
-        elif failure == "clock_disabled":
-            model.memory_write(0xE0001000, 0)
-        elif failure == "guard":
-            model.write("g_target_runtime_guard_faults", FAULT_CADENCE)
-        else:
-            model.write("s_publication_sequence", model.word("s_publication_sequence") | 1)
+        model.sample()
+        result = model.compute() if failure_field == "compute" else model.stage_budget()
+        assert result["state"] in (3, 4) and result["failure"] == 1, result
+        assert model.word("model_stage_count") == model.word("model_enable_count") == 0
+        frozen = result
+        model.sample(10)
         model.service()
-        assert model.compute()["state"] == 3 and model.compute()["failure"] == 1, failure
-        assert model.compute()["steps"] == 1
+        assert (model.compute() if failure_field == "compute" else model.stage_budget()) == frozen
         model.assert_default_off()
-    passed("完整旧快照不能替代ADCheartbeat，时钟禁用、guard或发布冲突均有界终止计时")
+    passed("100us入口明确拒绝旧compute/stage诊断并冻结NOT_READY，不执行stage或enable")
 
-    for simultaneous_request in [False, True]:
-        model = Model()
-        model.prepare_compute()
-        model.write("g_target_runtime_compute_request", 1)
-        model.service()
-        model.receive(b"stop")
-        if simultaneous_request:
-            model.write("g_target_runtime_compute_request", 2)
-        model.service(RXNE, ord("\n"), interrupt_write=symbols["s_stop_pending"],
-                      interrupt_step_cycles=8500)
-        result = model.compute()
-        assert model.interruptions == 1 and model.motor()[0:3] == (IDLE, 0, ACCEPTED)
-        assert result["state"] == 3
-        controller = model.controller_profile()
-        assert controller["state"] == 3 and controller["failure"] != 0
-        assert controller["calls"] < 160
-        if simultaneous_request:
-            assert result["request"] == 2 and result["failure"] == 1 and result["steps"] == 0
-        else:
-            assert result["request"] == 1 and result["failure"] == 2 and result["steps"] > 0
-        frozen = model.compute()
-        model.sample()
-        model.service()
-        assert model.compute() == frozen
-        assert model.controller_profile() == controller
-        model.assert_default_off()
-    passed("真实ADC抢占消费Stop后仍取消后台计时，同轮新请求不能利用清掉的pending绕过Stop")
-
-    model = Model()
-    model.prepare_compute()
-    model.write("g_target_runtime_compute_request", 1)
-    model.service()
-    for _ in range(447):
-        model.sample()
-        model.service()
-    model.sample()
-    # 最后全周点的硬件回调完成后置入 guard，验证 Target 发布前复核。
-    model.write("model_cordic_guard_after_call", model.word("model_cordic_calls") + 1)
-    model.service()
-    result = model.compute()
-    assert result["state"] == 3 and result["failure"] == 1
-    assert result["steps"] == 192 and result["counts"] == result["hardware_counts"] == [16] * 6
-    assert result["sweep"] == 257
-    model.assert_default_off()
-    passed("末步算法完成后健康复核失败会撤销COMPLETE，完整计数也不被误报为合格结果")
-
-    model = Model({"model_cordic_ok": 0})
-    assert model.motor() == (IDLE, 0, NONE, 0, 0.0)
-    assert model.word("model_cordic_init_count") == 1
-    model.prepare_compute()
-    model.write("g_target_runtime_compute_request", 1)
-    model.service()
-    result = model.compute()
-    assert result["state"] == 3 and result["failure"] == 1 and result["steps"] == 0
-    assert result["counts"] == result["hardware_counts"] == [0] * 6
-    assert model.word("model_cordic_calls") == 0
-    model.receive(b"start:120\n")
-    model.sample()
-    assert model.motor()[0:3] == (IDLE, 0, NOT_READY)
-    frame = model.frame()
-    assert int(frame[6]) == IDLE and int(frame[7]) == 0
-    model.assert_current_unpublished()
-    model.assert_default_off()
-    passed("CORDIC初始化失败仅拒绝对照，不破坏默认关断观察、UART或Start拒绝语义")
-
-    for failure in ["backend", "phase"]:
-        model = Model()
-        model.prepare_compute()
-        model.write("g_target_runtime_compute_request", 1)
-        model.service()  # 软件首例成功，下一轮才使用硬件替身。
-        model.write("model_cordic_runtime_ok" if failure == "backend" else "model_cordic_phase_error",
-                    0 if failure == "backend" else 1)
-        model.sample()
-        model.service()
-        result = model.compute()
-        assert result["state"] == 3 and result["failure"] == 4, (failure, result)
-        assert result["steps"] == (1 if failure == "backend" else 2)
-        assert result["counts"] == [1, 0, 0, 0, 0, 0]
-        assert result["hardware_counts"] == ([0] * 6 if failure == "backend" else [1, 0, 0, 0, 0, 0])
-        assert result["sweep"] == 0
-        frozen = model.compute()
-        model.write("model_cordic_runtime_ok", 1)
-        model.write("model_cordic_phase_error", 0)
-        model.sample()
-        model.service()
-        assert model.compute() == frozen
-        model.assert_default_off()
-    passed("后端失败与错误相位都锁存ALGORITHM，不回退软件或自动重试，失败计数保留真实完成边界")
-
-    model = Model()
-    model.prepare_compute()
-    model.write("model_cordic_irq_after_call", 1)
-    model.write("model_cordic_irq_slot", 7)
-    model.write("g_target_runtime_compute_request", 1)
-    model.service()
-    for _ in range(448):
-        model.sample()
-        model.service()
-    result = model.compute()
-    assert result["state"] == 2 and result["failure"] == 0
-    assert result["software_segments"][0][0] == (16, 16, 0)
-    assert result["hardware_segments"][0][0] == (16, 15, 1)
-    assert result["hardware_segments"][0][2] == (16, 15, 1)
-    assert result["hardware_segments"][0][1] == (16, 16, 0)
-    assert model.memory_word(symbols["g_target_runtime_irq_entries"] + 7 * 4) == 1
-    model.assert_default_off()
-    passed("Target稳定stamp分段记录IRQ差，受抢占硬件角度及total不计clean，独立未受抢占段保持clean")
-
-    model = Model()
-    model.prepare_compute()
-    model.write("g_target_runtime_compute_request", 1)
-    model.service()
-    model.sample()
-    stamp_reads = [0]
-    def interrupt_every_stamp(cpu, access, address, size, value, user_data):
-        stamp_reads[0] += 1
-        model.write("g_target_runtime_irq_entries", model.word("g_target_runtime_irq_entries") + 1)
-    hook = model.cpu.hook_add(UC_HOOK_MEM_READ, interrupt_every_stamp,
-                             begin=DWT_CYCCNT, end=DWT_CYCCNT + 3)
-    model.service()
-    model.cpu.hook_del(hook)
-    result = model.compute()
-    assert result["state"] == 3 and result["failure"] == 3 and result["steps"] == 1
-    assert result["hardware_counts"] == [0] * 6
-    assert stamp_reads[0] == 5  # 前后许可各一次，stamp 恰好三次有界尝试。
-    model.assert_default_off()
-    passed("三次stamp读取均被IRQ计数打断时有界失败CLOCK，不提交部分分段统计或关中断等待")
-
-    model = Model()
-    model.prepare_compute()
-    model.write("g_target_runtime_compute_request", 1)
-    model.service()
-    for _ in range(211):
-        model.sample()
-        model.service()
-    model.receive(b"stop\n")
-    model.sample()
-    result = model.compute()
-    assert result["state"] == 3 and result["failure"] == 2 and result["steps"] == 192
-    assert result["counts"] == result["hardware_counts"] == [16] * 6
-    assert 0 < result["sweep"] < 257
-    assert model.motor()[0:3] == (IDLE, 0, ACCEPTED)
-    model.sample()
-    model.service()
-    assert model.compute() == result
-    model.assert_default_off()
-    passed("全周扫描期间Stop仍立即取消并冻结已配对数据，ADC消费Stop后旧身份也不会继续扫描")
-
-    for failure in ["backend", "phase"]:
-        model = Model()
-        model.prepare_compute()
-        model.write("g_target_runtime_compute_request", 1)
-        model.service()
-        for _ in range(191):
-            model.sample()
-            model.service()
-        model.write("model_cordic_runtime_ok" if failure == "backend" else "model_cordic_phase_error",
-                    0 if failure == "backend" else 1)
-        model.sample()
-        model.service()
-        result = model.compute()
-        assert result["state"] == 3 and result["failure"] == 4 and result["steps"] == 192
-        assert result["sweep"] == 0 and result["counts"] == result["hardware_counts"] == [16] * 6
-        model.assert_default_off()
-    passed("正式配对已完成后，全周首点的后端失败或相位错误仍拒绝COMPLETE，完整计时不能替代精度对照")
-
-    model = Model()
-    model.prepare_stage()
-    assert model.stage_budget()["state"] == STAGE_IDLE
-    assert model.motor() == (IDLE, 0, NONE, 0, 0.0)
-    ready = model.request_stage(91)
-    assert ready["schema"] == 1 and ready["request"] == 91
-    assert ready["state"] == STAGE_READY and ready["failure"] == 0 and ready["active"] == 1
-    assert model.runtime_status()["last_current_time"] == model.control_time() == 21
-    model.service()
-    assert model.stage_budget() == ready  # 后台不能代替 ADC 推进或执行 stage。
-    model.sample()
-    failed = model.stage_budget()
-    assert failed["request"] == 91 and failed["state"] == STAGE_FAILED
-    assert failed["failure"] == STAGE_CLOCK and failed["active"] == 0
-    assert failed["sequence"] == ready["sequence"] + 2
-    assert model.runtime_status()["last_current_time"] == model.control_time() == 22
-    # 本模型不伪造有效计时正例：TIM1 缺少下数时基，下一拍必须先失败 CLOCK。
-    model.memory_write(TIM1, 1 | 16 | 32)
-    model.memory_write(TIM1 + 0x24, 4000)
-    model.sample(3)
-    assert model.stage_budget() == failed
-    model.write("g_target_runtime_stage_request", 0)
-    model.sample()
-    model.write("g_target_runtime_stage_request", 91)
-    model.sample()
-    assert model.stage_budget() == failed
-    # 终态不因后来的现场故障改写首因，也不自动重开同身份。
-    model.write("g_target_runtime_guard_faults", FAULT_TRIP)
-    model.sample()
-    assert model.stage_budget() == failed
-    model.assert_stage_unpowered()
-    passed("stage新身份仅ADC准备READY而不stage，下一拍无有效TIM1锚点冻结CLOCK；重复身份、零后重放和后续故障均不改首因")
-
-    model = Model()
-    model.prepare_stage()
-    ready = model.request_stage(3)
-    assert ready["state"] == STAGE_READY
-    failed = model.request_stage(4)
-    assert failed["state"] == STAGE_FAILED and failed["failure"] == STAGE_BUSY
-    assert failed["request"] == 3 and failed["active"] == 0
-    model.sample(3)
-    assert model.stage_budget() == failed
-    assert model.motor() == (IDLE, 0, NONE, 0, 0.0)
-    passed("stage活动时新nonce按BUSY终止旧窗口，冻结仍标旧身份且不会把旧结果冠名或自动重开新请求")
-
-    model = Model()
-    model.prepare_stage()
-    ready = model.request_stage()
-    model.receive(b"start:90\nclear\nstop\nstart:120\n")
-    assert model.stage_budget() == ready and model.motor()[3] == 0
-    safe_offs = model.word("model_safeoff_count")
-    model.sample()
-    stopped = model.stage_budget()
-    assert stopped["state"] == STAGE_FAILED and stopped["failure"] == STAGE_ABORTED
-    assert stopped["request"] == 1 and stopped["active"] == 0
-    assert model.motor() == (IDLE, 0, ACCEPTED, 1, 0.0)
-    assert model.word("model_safeoff_count") == safe_offs + 2  # 试具取消与真实 Motor Stop 各自执行关断。
-    model.sample(3)
-    assert model.stage_budget() == stopped and model.motor()[2:4] == (ACCEPTED, 1)
-    model.assert_stage_unpowered()
-    passed("READY期间Stop优先撤销排队普通命令，冻结ABORTED且真实Motor同拍消费Stop，不执行stage或enable")
-
-    for ordinary_command in [b"clear\n", b"start:90\n"]:
-        for simultaneous_request in [False, True]:
-            model = Model()
-            model.prepare_stage()
-            if not simultaneous_request:
-                assert model.request_stage()["state"] == STAGE_READY
-            else:
-                model.write("g_target_runtime_stage_request", 1)
-            model.receive(ordinary_command)
-            model.sample()
-            failed = model.stage_budget()
-            assert failed["request"] == 1 and failed["state"] == STAGE_FAILED
-            assert failed["failure"] == STAGE_NOT_READY and failed["active"] == 0
-            assert model.motor() == (IDLE, 0, BAD_COMMAND, 1, 0.0)
-            model.sample(3)
-            assert model.stage_budget() == failed and model.motor()[2:4] == (BAD_COMMAND, 1)
-            model.assert_stage_unpowered()
-    passed("Clear或Start与stage新请求同拍或READY时均作为拒绝事件终止窗口，真实Motor报告BAD_COMMAND且不开放功率")
-
-    for failure in ["bus", "guard", "current_pending", "compute_pending", "clock", "cordic"]:
-        model = Model({"model_cordic_ok": 0} if failure == "cordic" else None)
-        model.prepare_stage()
-        if failure == "bus":
-            model.write("model_bus_voltage", 12.0, "f")
-            model.sample(20)
-        elif failure == "guard":
-            model.write("g_target_runtime_guard_faults", FAULT_CADENCE)
-        elif failure == "current_pending":
-            model.write("g_target_runtime_current_request", 1)
-        elif failure == "compute_pending":
-            model.write("g_target_runtime_compute_request", 1)
-        elif failure == "clock":
-            model.memory_write(0xE0001000, 0)
-        failed = model.request_stage(7)
-        assert failed["state"] == STAGE_FAILED and failed["failure"] == STAGE_NOT_READY, failure
-        assert failed["request"] == 7 and failed["active"] == 0
-        if failure == "bus":
-            model.write("model_bus_voltage", 2.7, "f")
-        elif failure == "compute_pending":
-            model.write("g_target_runtime_compute_request", 0)
-        elif failure == "clock":
-            model.memory_write(0xE0001000, 1)
-        model.sample(20)
-        assert model.stage_budget() == failed, failure
-        model.assert_stage_unpowered()
-        if failure in ["bus", "current_pending", "compute_pending", "clock"]:
-            # 条件恢复只能接受新显式身份，不自动复用失败请求。
-            assert model.request_stage(8)["state"] == STAGE_READY, failure
-    passed("高母线、guard、未消费的电流/计算诊断、禁用时钟和CORDIC失败均前置拒绝stage，条件恢复不自动重试")
-
-    model, reference = Model(), Model()
-    for fixture in [model, reference]:
-        fixture.prepare_stage()
-        fixture.write("model_position_available", 1)
-        fixture.write("model_position_use_fixed_time", 0)
-        fixture.write("model_current_b", 0.02, "f")
-        fixture.write("model_current_c", -0.03, "f")
-        fixture.sample(239)  # 两个真实观察实例均已经进入零偏窗口。
-        assert fixture.current()["state"] == CURRENT_CALIBRATING
-    old_count = model.current()["count"]
-    for index in range(5):
-        if index == 0:
-            model.write("g_target_runtime_stage_request", 11)
-        model.sample()
-        reference.sample()
-        assert model.current() == reference.current()
-        assert model.runtime_status() == reference.runtime_status()
-        assert model.runtime_status()["last_current_time"] == model.control_time()
-        assert model.current()["count"] == old_count + index + 1
-        assert model.current()["offset"] == (0.0, 0.0, 0.0)
-        model.assert_stage_unpowered()
-    assert model.stage_budget()["state"] == STAGE_FAILED
-    assert model.stage_budget()["failure"] == STAGE_CLOCK
-    passed("stage准备、CLOCK失败和冻结后的每拍仍推进真实Runtime采样时间及零偏窗口，与无诊断观察实例逐拍一致")
-
-    # 原57组保留插桩构建；另链接独立无插桩镜像，直接执行实际宏关闭后的分派。
-    plain_command = [argument for argument in command if argument != "-DCONTROL_CURRENT_PROFILE"]
-    plain_objects = list(objects)
-    for source in [TARGET / "runtime/target_runtime.c", TARGET / "runtime/compute_probe.c",
-                   REPOSITORY / "control/current_controller.c"]:
-        obj = temporary / ("plain_" + source.stem + ".o")
-        run_checked(plain_command + ["-c", str(source), "-o", str(obj)], temporary)
-        plain_objects = [str(obj) if Path(old).stem == source.stem else old for old in plain_objects]
-    plain_executable = temporary / "plain_model.axf"
-    run_checked(
-        [str(COMPILER / "armlink.exe"), "--cpu=Cortex-M4.fp", "--scatter", str(scatter),
-         "--entry=model_start", "--keep=model.o(*)", "-o", str(plain_executable), *plain_objects],
-        temporary,
-    )
-    model = Model(image=read_image(plain_executable))
-    model.prepare_stage()
-    model.write("g_target_runtime_compute_request", 13)
-    model.service()
-    denied = model.compute()
-    assert denied["request"] == 13 and denied["state"] == 3 and denied["failure"] == 1
-    assert denied["steps"] == 0 and denied["counts"] == denied["hardware_counts"] == [0] * 6
-    assert model.word("model_cordic_calls") == 0
-    ready = model.request_stage(14)
-    assert ready["request"] == 14 and ready["state"] == STAGE_READY and ready["active"] == 1
-    assert ready["failure"] == 0 and model.controller_profile()["calls"] == 0
-    model.sample()
-    assert model.stage_budget()["state"] == STAGE_FAILED
-    assert model.stage_budget()["failure"] == STAGE_CLOCK
-    assert model.compute() == denied
-    model.assert_stage_unpowered()
-    passed("实际取消CONTROL_CURRENT_PROFILE的独立ARM镜像拒绝旧compute且仍许可stage准备，未偷偷启用内部探针或功率")
-
-print(f"PASS: {len(CASES)} G431 runtime C behavior groups")
-for name in CASES:
-    print("  " + name)
+    print(f"PASS: {len(CASES)} 组 Observe Runtime ARM 集成模型；实际100us采样配置，HCC/MMIO为替身")
+    for name in CASES:
+        print("  " + name)

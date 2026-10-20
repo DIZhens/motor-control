@@ -59,8 +59,8 @@ def packed_word(value):
 
 
 def complete_capture(sequence=1):
-    result = {"request_sequence": sequence, "state": 2, "failure": 0, "sample_count": 4096,
-              "first_sample_time": 201, "last_sample_time": 4296,
+    result = {"request_sequence": sequence, "state": 2, "failure": 0, "sample_count": 2048,
+              "first_sample_time": 201, "last_sample_time": 4295,
               "offset_b_a": 0.01, "offset_c_a": -0.002}
     for phase, mean in [("b", 0.1), ("c", -0.002)]:
         result.update({f"phase_{phase}.mean_a": mean, f"phase_{phase}.min_a": mean - 0.01,
@@ -117,9 +117,9 @@ class FakeBackend:
                            "snapshot.state": 1, "snapshot.faults": 0, "snapshot.bus_voltage_v": 2.68,
                            "snapshot.status_valid": 1, "snapshot.control_time_valid": 1,
                            "snapshot.bus_voltage_valid": 1, "has_sample": 1}
-            zero = {"state": 3, "failure": 0, "sample_count": 4096,
+            zero = {"state": 3, "failure": 0, "sample_count": 2048,
                     "offset_a[1]": 0.01, "offset_a[2]": -0.002,
-                    "config.calibration_sample_count": 4096, "config.measured_phases": 6}
+                    "config.calibration_sample_count": 2048, "config.measured_phases": 6}
             zero_raw = encode("zero", tool.ZERO_FIELDS, zero, layout)
             result = {"guard_before": packed_word(0), "guard_after": packed_word(0),
                       "bdtr_before": packed_word(0), "bdtr_after": packed_word(0),
@@ -261,8 +261,8 @@ class Tests(unittest.TestCase):
             ("publication", "snapshot.bus_voltage_valid", 0), ("publication", "has_sample", 0),
             ("publication", "snapshot.bus_voltage_v", 3.7), ("publication", "snapshot.bus_voltage_v", -0.01),
             ("publication", "snapshot.bus_voltage_v", 2.0), ("publication", "snapshot.bus_voltage_v", math.nan),
-            ("zero", "state", 2), ("zero", "failure", 1), ("zero", "sample_count", 4095),
-            ("zero", "config.calibration_sample_count", 4095), ("zero", "config.measured_phases", 7),
+            ("zero", "state", 2), ("zero", "failure", 1), ("zero", "sample_count", 2047),
+            ("zero", "config.calibration_sample_count", 2047), ("zero", "config.measured_phases", 7),
             ("zero", "offset_a[1]", math.inf),
         ]:
             self.backend = FakeBackend(self.prepared)
@@ -295,7 +295,7 @@ class Tests(unittest.TestCase):
             self.assertEqual(self.backend.writes, [])
 
     def test_partial_failed_wrong_identity_or_bad_statistics_never_repeat_request(self):
-        mutations = [{"sample_count": 4095}, {"last_sample_time": 4295}, {"state": 3, "failure": 3},
+        mutations = [{"sample_count": 2047}, {"last_sample_time": 4294}, {"state": 3, "failure": 3},
                      {"first_sample_time": 200, "last_sample_time": 4295},
                      {"request_sequence": 22}, {"phase_b.mean_a": math.nan}, {"phase_c.min_a": math.inf},
                      {"phase_b.mean_a": 0.2}, {"phase_c.variance_a2": -0.01}, {"offset_b_a": 0.02},

@@ -23,7 +23,7 @@ CASES = []
 NAMES = ["schema", "request", "mode", "state", "failure", "expected", "count",
          "stage_calls", "accepted", "sinks", "enables", "speeds", "observations",
          "fast", "slow", "limited", "faults", "work", "anchor", "irq", "timer",
-         "entry", "cr1", "bdtr", "over_stage", "over_consumer"]
+         "entry", "cr1", "bdtr", "stage_budget", "irq_budget", "over_stage", "over_consumer"]
 
 
 def checked(arguments, directory):
@@ -150,9 +150,9 @@ with tempfile.TemporaryDirectory(prefix="g431-timing-entry-") as directory:
         @property
         def result(self):
             assert self.word("g_target_runtime_timing_sequence") % 2 == 0
-            values = struct.unpack("<62I", self.cpu.mem_read(symbols["g_target_runtime_timing_result"], 248))
-            result = dict(zip(NAMES, values[:26]))
-            result["rows"] = [values[i:i + 4] for i in range(26, 62, 4)]
+            values = struct.unpack("<64I", self.cpu.mem_read(symbols["g_target_runtime_timing_result"], 256))
+            result = dict(zip(NAMES, values[:28]))
+            result["rows"] = [values[i:i + 4] for i in range(28, 64, 4)]
             return result
 
         def tick(self, count=1):
@@ -179,7 +179,7 @@ with tempfile.TemporaryDirectory(prefix="g431-timing-entry-") as directory:
     passed("真实入口只启动持续采样，不使能/不rearm/无业务Runtime；start不自动重试")
 
     for setting, value in [("entry_cordic_ok", 0), ("entry_facts_ok", 0), ("entry_rate", 10000),
-                           ("entry_period", 2), ("entry_bind_ok", 0), ("entry_arm_ok", 0),
+                           ("entry_period", 1), ("entry_bind_ok", 0), ("entry_arm_ok", 0),
                            ("entry_start_ok", 0), ("entry_trip_ok", 0), ("entry_trip_causes", 2)]:
         model = Model({setting: value})
         assert model.health["faults"] & 1 and model.health["started"] == 0
@@ -194,19 +194,31 @@ with tempfile.TemporaryDirectory(prefix="g431-timing-entry-") as directory:
     assert model.result["state"] == 1 and model.result["count"] == 0
     assert model.entries["g431_runtime_timing_prepare"] == 1
     assert model.entries["g431_runtime_timing_runtime_step"] == 0
-    model.tick(80)
+    model.tick(81)
     result = model.result
     assert result["state"] == 3 and result["count"] == result["sinks"] == 80, result
     assert model.entries["g431_runtime_timing_runtime_step"] == model.entries["current_controller_update"] == 80
-    assert model.entries["g431_runtime_timing_step"] == 80
+    assert model.entries["g431_runtime_timing_step"] == 81
     assert result["stage_calls"] == result["accepted"] == result["enables"] == 0
-    assert [row[0] for row in result["rows"]] == [80] * 5 + [8, 4, 72, 8]
-    assert model.word("model_physical_position_reads") == model.word("model_physical_bus_reads") == 85
+    assert [row[0] for row in result["rows"]] == [80] * 5 + [8, 8, 72, 8]
+    assert model.word("model_physical_position_reads") == model.word("model_physical_bus_reads") == 90
     passed("准备拍不计算；后80拍各单次同源Runtime，真实prefix getter与刷新getter开销均存在")
 
     model = Model()
-    model.request(mode=1)
+    model.request()
     model.tick(80)
+    assert model.result["state"] == 1 and model.word("g_target_runtime_timing_active") == 1
+    assert model.entries["g431_runtime_timing_runtime_step"] == 80
+    model.write("entry_current_valid", 0)
+    model.tick()
+    assert model.result["state"] == 4 and model.result["failure"] == 1 and model.result["count"] == 80
+    assert model.health["faults"] & 8 and model.permission() == 0
+    assert model.entries["g431_runtime_timing_runtime_step"] == model.result["sinks"] == 80
+    passed("第80拍后采样被Platform判无效时，空拍收尾发布FAILED且不运行第81次控制")
+
+    model = Model()
+    model.request(mode=1)
+    model.tick(81)
     assert model.result["state"] == 3 and model.result["accepted"] == model.result["stage_calls"] == 80
     assert model.result["sinks"] == model.entries["g431_runtime_timing_runtime_step"] == 0
     assert model.result["rows"][4][0] == 80 and model.result["rows"][4][1] >= 400
@@ -223,7 +235,7 @@ with tempfile.TemporaryDirectory(prefix="g431-timing-entry-") as directory:
     assert model.entries["g431_runtime_timing_prepare"] == prepares
     assert model.entries["g431_runtime_timing_runtime_step"] == steps
     model.request(nonce=3)
-    model.tick(80)
+    model.tick(81)
     assert model.result["state"] == 3 and model.result["request"] == 14
     passed("活动时新nonce只BUSY取消，不执行/重开；终态只有再次显式新nonce可测")
 
@@ -231,13 +243,13 @@ with tempfile.TemporaryDirectory(prefix="g431-timing-entry-") as directory:
     model.tick()
     sequence, public_samples = model.word("g_target_runtime_timing_health_sequence"), model.health["samples"]
     previous = model.word("s_last_sample_cycles")
-    model.tick(199)
+    model.tick(99)
     assert model.word("s_last_sample_cycles") != previous
     assert model.word("g_target_runtime_timing_health_sequence") == sequence
     assert model.health["samples"] == public_samples == 1
     model.tick()
-    assert model.health["samples"] == 201 and model.word("g_target_runtime_timing_health_sequence") == sequence + 2
-    passed("心跳每拍更新而health按200拍低频发布，不以发布周期冒充采样心跳")
+    assert model.health["samples"] == 101 and model.word("g_target_runtime_timing_health_sequence") == sequence + 2
+    passed("心跳每拍更新而health按100拍低频发布，不以发布周期冒充采样心跳")
 
     for setting, value in [("entry_current_valid", 0), ("entry_current_mask", 4),
                            ("entry_current_b", float("nan")), ("entry_current_c", float("inf"))]:
@@ -293,10 +305,10 @@ with tempfile.TemporaryDirectory(prefix="g431-timing-entry-") as directory:
     model.tick()
     model.write("model_clock_step", 0)
     sample = model.word("s_last_sample_cycles")
-    model.write("model_cycles", sample + 12750)
+    model.write("model_cycles", sample + 21250)
     model.call("entry_model_guard")
     assert model.word("g_target_runtime_timing_guard_faults") == 0
-    model.write("model_cycles", sample + 12751)
+    model.write("model_cycles", sample + 21251)
     model.call("entry_model_guard")
     assert model.word("g_target_runtime_timing_guard_faults") & 4
     assert model.permission() == 0
@@ -307,16 +319,16 @@ with tempfile.TemporaryDirectory(prefix="g431-timing-entry-") as directory:
     model.call("entry_model_guard")
     model.call("entry_model_guard")
     assert model.word("g_target_runtime_timing_guard_faults") & 2
-    passed("独立TIM6 guard保留75us严格上界和DWT停滞检测，故障后许可立即撤销")
+    passed("独立TIM6 guard保留125us严格上界和DWT停滞检测，故障后许可立即撤销")
 
-    for cycles in [4249, 12751]:
+    for cycles in [12749, 21251]:
         model = Model()
         model.tick()
         model.write("entry_tick_cycles", cycles)
         model.tick(2)
         assert model.health["faults"] & 4 and model.permission() == 0, (cycles, model.health,
             struct.unpack("<16I", model.cpu.mem_read(symbols["s_health"], 64)))
-    passed("真实consumer入口25..75us间隔越界锁存CADENCE，不自动清故障")
+    passed("真实consumer入口75..125us间隔越界锁存CADENCE，不自动清故障")
 
     model = Model()
     model.request()

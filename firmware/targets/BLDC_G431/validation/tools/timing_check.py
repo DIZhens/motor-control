@@ -150,7 +150,8 @@ def healthy_pair(session, tag):
     second, _ = session.read(tag + "-2")
     for state in [first, second]:
         common.check_logic_idle(state)
-        pwm.check_configuration(state)
+        # 此工具的捕获 ABI/截止判定仅适用于历史 RCR=0，拒绝新 slot 配置且不发请求。
+        pwm.check_configuration(state, expected_repetition=0)
         require(state["bus_v"] >= 0.0, "Timing checks require a nonnegative bus observation")
     require(second["fast_tick_count"] != first["fast_tick_count"] and second["uw_tick"] != first["uw_tick"],
             "Sampling or SysTick stopped")

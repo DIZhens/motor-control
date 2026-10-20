@@ -31,6 +31,7 @@ def decode_pwm(block):
                          "preload": bool(value & (1 << (shift + 3)))})
     return {"center_aligned_mode": (word(block) >> 5) & 3,
             "clock_division": (word(block) >> 8) & 3, "prescaler": word(block, 40),
+            "update_irq_enabled": bool(word(block, 12) & 1),
             "period_counts": word(block, 44), "repetition": word(block, 48),
             "channels": channels, "output_config": word(block, 32) & 0x3FFF,
             "sample_compare": word(block, 64), "timer_deadtime_code": word(block, 68) & 0xFF}
@@ -46,10 +47,13 @@ class Session(common.Session):
         return state, blocks
 
 
-def check_configuration(state):
+def check_configuration(state, expected_repetition=3):
     cfg = state["pwm"]
     require(cfg["center_aligned_mode"] == 1 and cfg["clock_division"] == cfg["prescaler"] == 0
-            and cfg["period_counts"] == 4250 and cfg["repetition"] == 0, "Unexpected PWM timing configuration")
+            and cfg["period_counts"] == 4250 and cfg["repetition"] == expected_repetition,
+            "Unexpected PWM timing configuration")
+    require(cfg["update_irq_enabled"] == (expected_repetition == 3),
+            "Unexpected PWM update IRQ ownership")
     require([item["mode"] for item in cfg["channels"]] == [6, 6, 6, 7]
             and all(item["selection"] == 0 and item["preload"] for item in cfg["channels"]),
             "Unexpected PWM mode/preload configuration")
@@ -113,7 +117,8 @@ def run(session, previous, action, percent):
             "before": before, "final": after, "capture": updated, "scope_qualified": False,
             "requested_common_duty_percent": percent, "mailbox_duty_bits": bits,
             "duration_us_including_staging": DURATION_US,
-            "expected_nominal_period_us": 50, "expected_LA_high_us_before_driver_effects": (100 - percent) / 2,
+            "expected_nominal_period_us": 50, "expected_control_period_us": 100,
+            "expected_LA_high_us_before_driver_effects": (100 - percent) / 2,
             "note": "Counters are sanity checks, not physical packet-duration or Gate-delay measurements."}
 
 

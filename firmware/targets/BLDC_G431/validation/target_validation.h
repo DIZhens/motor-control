@@ -120,7 +120,7 @@ typedef struct {
     uint32_t sample_count;
     uint32_t interval_min_cycles;
     uint32_t interval_max_cycles;
-    ControlTime first_sample_time; /* 本 Target 1 tick = 50 us，不是 us。 */
+    ControlTime first_sample_time; /* 1 tick = 50 us；正常相邻样本相差 2 tick。 */
     ControlTime last_sample_time;
     TargetValidationPhaseStatistics phase_b;
     TargetValidationPhaseStatistics phase_c;

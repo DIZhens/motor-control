@@ -22,7 +22,7 @@ def fixture_layout():
     for key, address, size in [("request", 0x20000000, 4), ("sequence", 0x20000004, 4),
                                ("active", 0x20000008, 4), ("guard", 0x2000000C, 4),
                                ("health_sequence", 0x20000010, 4), ("health", 0x20000100, 64),
-                               ("result", 0x20000200, 248)]:
+                               ("result", 0x20000200, 256)]:
         layout[key], layout[key + "_size"] = address, size
     layout["bdtr"], layout["row_count"] = tool.TIM1_BASE + 0x44, 9
     for prefix, fields in [("result", tool.RESULT_FIELDS), ("health", tool.HEALTH_FIELDS)]:
@@ -44,18 +44,19 @@ def encode(prefix, fields, values, layout):
 def complete(request):
     stage = request & 3 == 1
     result = {field: 0 for field in tool.RESULT_FIELDS}
-    result.update(schema_version=1, request_word=request, mode=request & 3, state=3, expected_samples=80,
+    result.update(schema_version=2, request_word=request, mode=request & 3, state=3, expected_samples=80,
                   completed_samples=80, real_stage_calls=80 if stage else 0,
                   real_stage_accepted=80 if stage else 0, sink_calls=0 if stage else 80,
-                  speed_updates=0 if stage else 8, observation_refreshes=0 if stage else 4,
+                  speed_updates=0 if stage else 8, observation_refreshes=0 if stage else 8,
                   fast_samples=0 if stage else 72, slow_samples=0 if stage else 8,
                   limited_samples=0 if stage else 40, last_work_cycles=500 if stage else 5000,
                   last_anchor_cycles=1500 if stage else 6000, last_irq_cycles=2000 if stage else 7000,
                   last_timer_count=2400 if stage else 2000, last_entry_count=4000,
                   last_cr1=0xB1 if stage else 0xA1,
-                  over_stage_deadline_samples=0 if stage else 80,
-                  over_consumer_budget_samples=0 if stage else 80)
-    counts = [80] * 5 + ([0] * 4 if stage else [8, 4, 72, 8])
+                  last_stage_budget_cycles=10800, last_irq_budget_cycles=10900,
+                  over_stage_deadline_samples=0,
+                  over_consumer_budget_samples=0)
+    counts = [80] * 5 + ([0] * 4 if stage else [8, 8, 72, 8])
     cycles = [500, 1500, 2000, 1000, 400] if stage else [5000, 6000, 7000, 1000, 900]
     cycles += [0] * 4 if stage else [5000] * 4
     for index, count in enumerate(counts):
@@ -82,10 +83,10 @@ class FakeBackend:
         self.write_attempted = False
         self.request = 0
         self.result = {field: 0 for field in tool.RESULT_FIELDS}
-        self.result["schema_version"] = 1
+        self.result["schema_version"] = 2
         self.health = {field: 0 for field in tool.HEALTH_FIELDS}
-        self.health.update(schema_version=1, sample_count=100, time_low=100,
-                           last_sample_interval_cycles=8500, drive_started=1, current_valid=1,
+        self.health.update(schema_version=2, sample_count=100, time_low=100,
+                           last_sample_interval_cycles=17000, drive_started=1, current_valid=1,
                            power_disabled=1, bus_valid=1, bus_voltage_v=2.7, position_valid=1, permitted=1)
         self.guard = self.bdtr = self.cpu = self.active = 0
         self.flash = bytes(tool.FLASH_SIZE)
@@ -168,9 +169,9 @@ class TimingToolTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.measure()
             self.assertEqual(self.backend.writes, [])
-        for field, value in [("schema_version", 2), ("current_valid", 0), ("bus_voltage_v", math.nan),
+        for field, value in [("schema_version", 1), ("current_valid", 0), ("bus_voltage_v", math.nan),
                              ("bus_voltage_v", 3.5), ("faults", 4), ("guard_trips", 1),
-                             ("permitted", 0), ("last_sample_interval_cycles", 13000)]:
+                             ("permitted", 0), ("last_sample_interval_cycles", 23000)]:
             self.backend = FakeBackend(self.layout)
             self.backend.health[field] = value
             with self.assertRaises(RuntimeError):
@@ -229,15 +230,15 @@ class TimingToolTests(unittest.TestCase):
     def test_compute_cannot_claim_real_stage_or_lose_slow_branch_coverage(self):
         for field, value in [("real_stage_calls", 1), ("real_stage_accepted", 80), ("sink_calls", 79),
                              ("speed_updates", 7), ("observation_refreshes", 3), ("fast_samples", 71),
-                             ("limited_samples", 0), ("rows[8].count", 7), ("rows[2].max_cycles", 8500),
-                             ("over_consumer_budget_samples", 0)]:
+                             ("limited_samples", 0), ("rows[8].count", 7), ("rows[2].max_cycles", 17000),
+                             ("over_consumer_budget_samples", 1)]:
             self.backend = FakeBackend(self.layout)
             self.backend.on_write = lambda backend, f=field, v=value: backend.result.__setitem__(f, v)
             self.assertFalse(self.measure("compute")["success"], field)
             self.assertEqual(len(self.backend.writes), 1)
 
     def test_bad_schema_mode_and_foreign_identity_fail_after_one_write(self):
-        for field, value in [("schema_version", 2), ("mode", 2), ("request_word", 9), ("failure", 10)]:
+        for field, value in [("schema_version", 1), ("mode", 2), ("request_word", 9), ("failure", 10)]:
             self.backend = FakeBackend(self.layout)
             self.backend.on_write = lambda backend, f=field, v=value: backend.result.__setitem__(f, v)
             self.assertFalse(self.measure()["success"])
@@ -271,6 +272,24 @@ class TimingToolTests(unittest.TestCase):
     def test_terminal_health_failure_prevents_pass(self):
         self.backend.on_write = lambda backend: setattr(backend, "bdtr", 0x8000)
         self.assertFalse(self.measure()["success"])
+        self.assertEqual(len(self.backend.writes), 1)
+
+    def test_complete_before_full_irq_exit_fault_still_fails_post_health_with_moe_zero(self):
+        def full_irq_exit_late(backend, tag):
+            if "post-health" in tag:
+                backend.health.update(faults=8, current_valid=0, permitted=0)
+        self.backend.on_read = full_irq_exit_late
+        report = self.measure("compute")
+        self.assertEqual(report["result"]["schema_version"], 2)
+        self.assertEqual(report["result"]["state"], 3)
+        self.assertTrue(report["result_reread_unchanged"])
+        self.assertFalse(report["success"])
+        self.assertEqual(report["status"], "FAILED")
+        self.assertTrue(report.get("primary_failure"))
+        self.assertIn("入口存在采样或保护故障", report["issues"])
+        self.assertIn("缺少计时健康许可：current_valid", report["issues"])
+        self.assertNotIn("检测到 MOE 功率使能", report["issues"])
+        self.assertEqual(self.backend.bdtr, 0)
         self.assertEqual(len(self.backend.writes), 1)
 
     def test_health_coherence_failure_is_bounded_and_has_zero_writes(self):

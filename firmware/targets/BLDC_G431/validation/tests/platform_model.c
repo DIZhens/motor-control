@@ -1,6 +1,7 @@
 /* 为正式 G431 Realtime Motor I/O 提供外设与服务替身。 */
 #include "realtime_motor_io.h"
 #include "realtime_motor_io_config.h"
+#include "realtime_motor_io_internal.h"
 #include "control_time_source.h"
 #include "adc.h"
 #include "opamp.h"
@@ -34,6 +35,9 @@ volatile uint32_t model_position_ticks;
 volatile uint32_t model_bus_ticks;
 volatile uint32_t model_hal_ok = 1U;
 volatile uint32_t model_auto_start = 1U;
+volatile uint32_t model_adc_started;
+volatile uint32_t model_ug_after_adc;
+volatile uint32_t model_observation_time;
 PhaseDutyRequest model_request = { 0.2f, 0.5f, 0.8f };
 static ControlTime model_control_time;
 #ifdef PLATFORM_MODEL_TIMING_PROBE
@@ -53,6 +57,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *observati
     model_observation_mask = observation->measured_phases;
     model_observation_b_a = observation->phase_b_a;
     model_observation_c_a = observation->phase_c_a;
+    model_observation_time = (uint32_t)observation->observation_time;
     model_marker = 1U;
 #ifdef PLATFORM_MODEL_TIMING_PROBE
     if ((model_actions & 128U) != 0U) {
@@ -88,15 +93,15 @@ void platform_model_init(void)
     htim1.Init.Period = REALTIME_MOTOR_IO_PWM_PERIOD_COUNTS;
     htim1.Init.Prescaler = 0U;
     htim1.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED1;
-    htim1.Init.RepetitionCounter = 0U;
+    htim1.Init.RepetitionCounter = 3U;
     htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
     TIM1->CR1 = TIM_CR1_ARPE | TIM_COUNTERMODE_CENTERALIGNED1;
     TIM1->PSC = 0U;
     TIM1->ARR = REALTIME_MOTOR_IO_PWM_PERIOD_COUNTS;
-    TIM1->RCR = 0U;
+    TIM1->RCR = 3U;
     TIM1->CCR4 = 4240U;
     TIM1->CCMR1 = TIM_CCMR1_OC1PE | TIM_CCMR1_OC2PE;
-    TIM1->CCMR2 = TIM_CCMR2_OC3PE | TIM_CCMR2_OC4PE;
+    TIM1->CCMR2 = TIM_CCMR2_OC3PE | TIM_CCMR2_OC4PE | (TIM_OCMODE_PWM2 << 8U);
     TIM1->BDTR = TIM_BDTR_OSSI | TIM_BDTR_BKE | TIM_BDTR_BK2E;
     ADC1->JDR1 = 2048U;
     ADC2->JDR1 = 2048U;
@@ -114,8 +119,34 @@ void platform_model_start(void)
 
 void platform_model_tick(void)
 {
+    realtime_motor_io_adc_irq_enter();
     HAL_ADCEx_InjectedConvCpltCallback(&hadc1);
+    model_marker = 4U; /* 模拟 HAL 清 injected flags 等剩余尾部。 */
+    ADC1->ISR = ADC_FLAG_JEOC | ADC_FLAG_JEOS;
+    realtime_motor_io_adc_irq_exit();
 }
+
+void platform_model_update_irq(void) { realtime_motor_io_update_irq(); }
+void platform_model_adc_enter(void) { realtime_motor_io_adc_irq_enter(); }
+void platform_model_adc_callback(void) { HAL_ADCEx_InjectedConvCpltCallback(&hadc1); }
+void platform_model_adc_exit(void)
+{
+    ADC1->ISR = ADC_FLAG_JEOC | ADC_FLAG_JEOS;
+    realtime_motor_io_adc_irq_exit();
+}
+void platform_model_regular_exit(void)
+{
+    /* HAL 的 regular-only ISR 快照只清 EOC/EOS，不消费后来到达的 JEOS。 */
+    ADC1->ISR = ADC_FLAG_EOC | ADC_FLAG_EOS;
+    realtime_motor_io_adc_irq_exit();
+}
+
+#ifdef PLATFORM_MODEL_CORE_IRQ
+void TIM1_UP_TIM16_IRQHandler(void);
+void TIM1_BRK_TIM15_IRQHandler(void);
+void platform_model_core_up(void) { TIM1_UP_TIM16_IRQHandler(); }
+void platform_model_core_break(void) { TIM1_BRK_TIM15_IRQHandler(); }
+#endif
 
 void platform_model_wrong_adc_tick(void)
 {
@@ -133,7 +164,8 @@ void platform_model_enable_outside(void)
 }
 
 void control_time_source_reset(void) { model_control_time = 0U; }
-ControlTime control_time_source_advance_fast_tick(void) { return ++model_control_time; }
+ControlTime control_time_source_advance_fast_tick(void) { return control_time_source_advance_slots(1U); }
+ControlTime control_time_source_advance_slots(uint32_t slots) { model_control_time += 2U * slots; return model_control_time; }
 ControlTime control_time_source_now(void) { return model_control_time; }
 void position_observation_fast_tick(ControlTime time) { (void)time; model_position_ticks++; }
 void bus_observation_fast_tick(ControlTime time) { (void)time; model_bus_ticks++; }
@@ -141,9 +173,9 @@ void bus_observation_fast_tick(ControlTime time) { (void)time; model_bus_ticks++
 HAL_StatusTypeDef HAL_ADCEx_Calibration_Start(ADC_HandleTypeDef *adc, uint32_t mode)
 { (void)adc; (void)mode; return model_hal_ok ? HAL_OK : HAL_ERROR; }
 HAL_StatusTypeDef HAL_ADCEx_InjectedStart(ADC_HandleTypeDef *adc)
-{ (void)adc; return model_hal_ok ? HAL_OK : HAL_ERROR; }
+{ (void)adc; model_adc_started++; return model_hal_ok ? HAL_OK : HAL_ERROR; }
 HAL_StatusTypeDef HAL_ADCEx_InjectedStart_IT(ADC_HandleTypeDef *adc)
-{ (void)adc; return model_hal_ok ? HAL_OK : HAL_ERROR; }
+{ (void)adc; model_adc_started++; return model_hal_ok ? HAL_OK : HAL_ERROR; }
 HAL_StatusTypeDef HAL_ADCEx_InjectedStop(ADC_HandleTypeDef *adc)
 { (void)adc; return HAL_OK; }
 HAL_StatusTypeDef HAL_ADCEx_InjectedStop_IT(ADC_HandleTypeDef *adc)
@@ -153,4 +185,5 @@ HAL_StatusTypeDef HAL_OPAMP_Start(OPAMP_HandleTypeDef *opamp)
 HAL_StatusTypeDef HAL_OPAMP_Stop(OPAMP_HandleTypeDef *opamp)
 { (void)opamp; return HAL_OK; }
 HAL_StatusTypeDef HAL_TIM_GenerateEvent(TIM_HandleTypeDef *timer, uint32_t event)
-{ timer->Instance->EGR = event; return HAL_OK; }
+{ if (model_adc_started != 0U) { model_ug_after_adc++; } timer->Instance->EGR = event; return HAL_OK; }
+void HAL_NVIC_ClearPendingIRQ(IRQn_Type irq) { (void)irq; }

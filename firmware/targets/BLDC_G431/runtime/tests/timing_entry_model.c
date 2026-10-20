@@ -20,7 +20,7 @@ uint32_t SystemCoreClock = 170000000U;
 TIM_HandleTypeDef htim6 = {TIM6};
 uint32_t entry_facts_ok = 1U;
 uint32_t entry_rate = 20000U;
-uint32_t entry_period = 1U;
+uint32_t entry_period = 2U;
 uint32_t entry_bind_ok = 1U;
 uint32_t entry_arm_ok = 1U;
 uint32_t entry_start_ok = 1U;
@@ -41,7 +41,7 @@ uint32_t entry_current_valid = 1U;
 uint32_t entry_current_mask = PHASE_MASK_B | PHASE_MASK_C;
 float entry_current_b;
 float entry_current_c;
-uint32_t entry_tick_cycles = 8500U;
+uint32_t entry_tick_cycles = 17000U;
 uint32_t entry_sample_count;
 uint32_t entry_bind_count;
 uint32_t entry_arm_count;
@@ -157,6 +157,11 @@ void realtime_motor_io_stage_anchor(uint32_t *cycles, uint32_t *count)
 {
     *cycles = model_anchor;
     *count = model_entry_count;
+}
+
+void realtime_motor_io_stage_deadline(uint32_t *deadline)
+{
+    *deadline = model_anchor + model_entry_count + 8500U - 1700U;
 }
 
 void entry_model_start(void)

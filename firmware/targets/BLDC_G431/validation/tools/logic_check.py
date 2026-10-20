@@ -261,7 +261,7 @@ def run(session, inspect_only):
         check_logic_idle(before)
         sequence = session.submit_logic(command, "submit-command-" + str(command))
         if command == 4:
-            time.sleep(0.3)
+            time.sleep(0.5)
         after, data = session.read("after-command-" + str(command))
         check_logic_idle(after)
         require(after["command_sequence"] == sequence and after["result"] == expected, "Wrong command result")

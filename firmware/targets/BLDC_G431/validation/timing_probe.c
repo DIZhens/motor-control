@@ -11,6 +11,8 @@
 #include "realtime_motor_io.h"
 #include "../platform/realtime_motor_io_config.h"
 
+/* 历史 RCR=0 专用探针；baseline_valid 在新 RCR=3/UIE 配置下明确拒绝。
+ * 保留旧捕获 ABI 和原窗口算法，不把新 slot 的中间谷底误认作 actuation。 */
 #define TIMING_WAIT_CYCLES (17000U)
 #define TIMING_MAX_POLLS (4096U) /* CYCCNT 停止时仍有独立的有限退出路径。 */
 #define TIMING_FULL_CYCLE (2U * REALTIME_MOTOR_IO_PWM_PERIOD_COUNTS)

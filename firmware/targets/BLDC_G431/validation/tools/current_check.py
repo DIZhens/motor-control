@@ -58,10 +58,10 @@ def decode_capture(data, layout, request):
     stats = {name.removeprefix("statistics."): value for name, value in fields.items() if name != "sequence"}
     require(stats["request_sequence"] == request and stats["result"] == 1
             and stats["sample_count"] == 4096, "Wrong or partial current window")
-    require((stats["last_sample_time"] - stats["first_sample_time"]) % (1 << 64) == 4095,
+    require((stats["last_sample_time"] - stats["first_sample_time"]) % (1 << 64) == 8190,
             "Non-contiguous ControlTime window")
-    require(4250 <= stats["interval_min_cycles"] <= stats["interval_max_cycles"] <= 12750,
-            "Consumer interval outside 25..75 us")
+    require(12750 <= stats["interval_min_cycles"] <= stats["interval_max_cycles"] <= 21250,
+            "Consumer interval outside 75..125 us")
     for phase in ["b", "c"]:
         vals = {name: stats["phase_" + phase + "." + name] for name in ["mean_a", "min_a", "max_a", "variance_a2"]}
         require(all(math.isfinite(v) for v in vals.values()) and vals["variance_a2"] >= 0
@@ -98,7 +98,7 @@ def window(session, layout, index, previous=None):
             checks.check_anchor(state, previous)
         require(probe == previous["capture"], "Probe evidence changed between windows")
     request = session.submit_logic(4, prefix + "-submit-capture")
-    time.sleep(0.3)
+    time.sleep(0.5)
     first, after, updated = healthy_pair(session, prefix + "-after")
     for state in [first, after]:
         require(state["command_sequence"] == state["active_request_sequence"] == request
@@ -142,6 +142,7 @@ def main():
         require(probe == reports[-1]["capture"], "Final probe changed")
         report = {"result": "CURRENT_WINDOWS_COMPLETE_OUTPUT_OFF", "hex_sha256": common.EXPECTED,
                   "window_count": len(reports), "total_samples": 4096 * len(reports),
+                  "sample_period_us": 100, "control_time_step_ticks": 2,
                   "powered_requests_this_run": 0, "calibration_applied": False, "final": final,
                   "windows": [r["statistics"] for r in reports]}
     except Exception as error:

@@ -20,6 +20,7 @@ import test_compute_probe_tool as shared
 
 def fixture_layout():
     layout = {key: 0 for key in tool.layout_spec()}
+    layout["config.fast_tick_period_ticks"] = 1
     for key, address, size in [("request", 0x20000018, 4), ("sequence", 0x2000001C, 4),
                                ("active", 0x20000020, 4), ("guard", 0x20000008, 4),
                                ("publication_sequence", 0x2000000C, 4),
@@ -415,6 +416,12 @@ class Tests(unittest.TestCase):
                 backend.write_request(self.layout["request"], 2)
             self.assertEqual(run.call_count, 1)
             self.assertIn(hex(self.layout["request"]), run.call_args.args[0])
+
+    def test_new_100us_slot_layout_is_explicitly_rejected(self):
+        layout = dict(self.layout)
+        layout["config.fast_tick_period_ticks"] = 2
+        with self.assertRaisesRegex(RuntimeError, "100us slot"):
+            tool.validate_layout(layout)
 
 
 if __name__ == "__main__":

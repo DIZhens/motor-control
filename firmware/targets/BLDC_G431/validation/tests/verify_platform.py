@@ -24,7 +24,10 @@ CR1, SR, EGR, CNT, ARR = TIM1, TIM1 + 0x10, TIM1 + 0x14, TIM1 + 0x24, TIM1 + 0x2
 CCRS = (TIM1 + 0x34, TIM1 + 0x38, TIM1 + 0x3C)
 BDTR = TIM1 + 0x44
 DWT_CTRL, DWT_CYCCNT = 0xE0001000, 0xE0001004
+ADC1_ISR = 0x50000000
 ADC2_ISR = 0x50000100
+CR2, DIER, RCR = TIM1 + 4, TIM1 + 0x0C, TIM1 + 0x30
+GATE = 7 << 20
 CEN, UDIS, DIR, MOE = 1, 2, 16, 1 << 15
 BREAKS = (1 << 7) | (1 << 8)
 STOP = 0x0801F000
@@ -88,6 +91,13 @@ class Model:
         self.pending_fixes = {}
         self.pending_delay = 0
         self.pending_irq = False
+        self.pending_update = False
+        self.in_update = False
+        self.running = 0
+        self.repetition = 0
+        self.triggers = []
+        self.uevs = []
+        self.deferred_advance = 0
         self.interrupted = False
         self.in_irq = False
         self.on_marker = None
@@ -99,7 +109,7 @@ class Model:
         self.instruction_budget = 200000
         # Unicorn 2.1.4's global RAM-write hook misexecutes ARMCC memclr's IT tail.
         # Observe only modeled MMIO and the explicit marker, leaving bulk RAM alone.
-        for start, end in [(TIM1, TIM1 + 0x7F), (ADC2_ISR, ADC2_ISR + 3),
+        for start, end in [(TIM1, TIM1 + 0x7F), (ADC1_ISR, ADC1_ISR + 3), (ADC2_ISR, ADC2_ISR + 3),
                            (DWT_CTRL, DWT_CYCCNT + 3),
                            (self.symbols["model_marker"], self.symbols["model_marker"] + 3)]:
             self.cpu.hook_add(UC_HOOK_MEM_WRITE, self.memory_write, begin=start, end=end)
@@ -131,23 +141,48 @@ class Model:
         if not suppressed:
             self.active = tuple(self.shadow)
             self.put(SR, self.get(SR) | 1)
+            self.uevs.append((cause, self.get(DWT_CYCCNT)))
+            if cause != "UG" and self.get(DIER) & 1:
+                self.pending_update = True
         self.transfers.append((cause, suppressed, self.active, tuple(self.shadow)))
 
     def advance(self, cycles):
-        if self.get(DWT_CTRL) & 1:
-            self.put(DWT_CYCCNT, self.get(DWT_CYCCNT) + cycles)
-        while cycles and self.get(CR1) & CEN:
+        while cycles:
+            if not self.get(CR1) & CEN:
+                if self.get(DWT_CTRL) & 1:
+                    self.put(DWT_CYCCNT, self.get(DWT_CYCCNT) + cycles)
+                break
             down = bool(self.get(CR1) & DIR)
             count, top = self.get(CNT), self.get(ARR)
-            distance = count if down else top - count
-            assert distance >= 0 and top > 0
-            if cycles < distance:
-                self.put(CNT, count - cycles if down else count + cycles)
-                break
+            boundary = count if down else top - count
+            distance = min(cycles, boundary)
+            # PWM2 的 OC4REF 仅在上数跨过 compare 时产生上升沿。
+            compare = self.get(TIM1 + 0x40)
+            if not down and count < compare <= count + distance and self.get(CR2) & GATE == GATE:
+                self.triggers.append((self.get(DWT_CYCCNT) + compare - count) & 0xFFFFFFFF)
+                # 显式 callback 前模拟转换完成；不从 Unicorn 指令数推断真实转换延迟。
+                self.put(ADC1_ISR, self.get(ADC1_ISR) | 96)
+                self.put(ADC2_ISR, self.get(ADC2_ISR) | 96)
+            if self.get(DWT_CTRL) & 1:
+                self.put(DWT_CYCCNT, self.get(DWT_CYCCNT) + distance)
+            self.put(CNT, count - distance if down else count + distance)
             cycles -= distance
-            self.put(CNT, 0 if down else top)
+            if distance < boundary:
+                break
             self.put(CR1, self.get(CR1) ^ DIR)
-            self.transfer("bottom" if down else "top")
+            if self.repetition == 0:
+                self.repetition = self.get(RCR)
+                self.transfer("bottom" if down else "top")
+            else:
+                self.repetition -= 1
+            if self.pending_update and not self.cpu.reg_read(UC_ARM_REG_PRIMASK):
+                if self.running:
+                    self.deferred_advance += cycles
+                    break
+                self.pending_update = False
+                self.in_update = True
+                self.call("platform_model_update_irq")
+                self.in_update = False
 
     def position(self, count=4000, down=True):
         self.put(CNT, count)
@@ -158,9 +193,10 @@ class Model:
             self.on_write(self, address, value)
         if address == SR:
             self.pending_fixes[address] = self.get(SR) & value
-        elif address == ADC2_ISR:
-            self.pending_fixes[address] = self.get(ADC2_ISR) & ~value
+        elif address in (ADC1_ISR, ADC2_ISR):
+            self.pending_fixes[address] = self.get(address) & ~value
         elif address == EGR and value & 1:
+            self.repetition = self.get(RCR)
             self.transfer("UG")
         elif address in CCRS:
             self.shadow[CCRS.index(address)] = value
@@ -178,12 +214,15 @@ class Model:
         for target, value in self.pending_fixes.items():
             self.put(target, value)
         self.pending_fixes.clear()
+        if not self.in_update and not self.pending_update and self.deferred_advance:
+            delay, self.deferred_advance = self.deferred_advance, 0
+            self.advance(delay)
         if self.pending_delay:
             delay, self.pending_delay = self.pending_delay, 0
             self.advance(delay)
         if self.on_instruction and not self.in_irq:
             self.on_instruction(self, address)
-        if self.pending_irq and not self.in_irq and not cpu.reg_read(UC_ARM_REG_PRIMASK):
+        if (self.pending_update and not self.in_update or self.pending_irq and not self.in_irq) and not cpu.reg_read(UC_ARM_REG_PRIMASK):
             self.interrupted = True
             cpu.emu_stop()
 
@@ -193,23 +232,45 @@ class Model:
         self.cpu.reg_write(UC_ARM_REG_PC, self.symbols[name] | 1)
         for _ in range(20):
             self.interrupted = False
+            self.running += 1
             self.cpu.emu_start(self.cpu.reg_read(UC_ARM_REG_PC) | 1, STOP, count=self.instruction_budget)
+            self.running -= 1
             if self.interrupted:
                 context = self.cpu.context_save()
-                self.in_irq, self.pending_irq = True, False
-                self.call("realtime_motor_io_safe_off", stack=0x20007000)
-                self.irq_calls += 1
-                self.in_irq = False
+                if self.pending_update:
+                    self.in_update, self.pending_update = True, False
+                    self.call("platform_model_update_irq", stack=0x20007000)
+                    self.in_update = False
+                else:
+                    self.in_irq, self.pending_irq = True, False
+                    self.call("realtime_motor_io_safe_off", stack=0x20007000)
+                    self.irq_calls += 1
+                    self.in_irq = False
                 self.cpu.context_restore(context)
             else:
                 assert self.cpu.reg_read(UC_ARM_REG_PC) == STOP, name
                 return
         raise AssertionError("interrupt injection did not settle")
 
-    def tick(self, actions=STAGE, count=4000, down=True, advance=8500):
-        self.advance(advance)
-        self.position(count, down)
-        self.put(ADC2_ISR, 1 << 6)
+    def next_sample(self):
+        # 推进到真正开放的首峰，再模拟 CNT=4000 下数时的转换完成入口。
+        old = len(self.triggers)
+        for _ in range(300):
+            self.advance(250)
+            if len(self.triggers) > old:
+                age = (self.get(DWT_CYCCNT) - self.triggers[-1]) & 0xFFFFFFFF
+                if age < 260:
+                    self.advance(260 - age)
+                return
+        raise AssertionError("no gated sample")
+
+    def tick(self, actions=STAGE, count=4000, down=True, advance=17000):
+        if advance:
+            self.next_sample()
+        elif count is not None:
+            self.position(count, down)
+        self.put(ADC1_ISR, (1 << 5) | (1 << 6))
+        self.put(ADC2_ISR, (1 << 5) | (1 << 6))
         self.write("model_actions", actions)
         for name in ["model_stage_result", "model_second_stage_result", "model_enable_result",
                      "model_early_enable_result"]:
@@ -226,276 +287,281 @@ class Model:
 
 def run(image):
     cases = []
-
-    def passed(name):
-        cases.append(name)
-
+    def passed(name): cases.append(name)
     m = Model(image)
     assert m.word("model_bind_result") == m.word("model_arm_result") == m.word("model_start_result") == 1
-    assert not m.moe() and m.active == NEUTRAL and m.get(CR1) & CEN
-    assert m.get(DWT_CTRL) & 1 and m.get(DWT_CYCCNT) == 123456
-    passed("startup seeds neutral with power off and preserves the shared DWT epoch")
+    assert m.word("model_ug_after_adc") == 0 and m.active == NEUTRAL and not m.moe()
+    assert m.get(DWT_CYCCNT) == 123456 and m.get(CR2) & GATE == 0
+    assert [x[0] for x in m.uevs] == ["UG"] and m.repetition == 1
+    passed("UG/neutral/RCR phase precede external ADC arm; start has no UG")
+    m.advance(4250); assert len(m.uevs) == 1 and not m.triggers
+    m.advance(4250); assert m.uevs[-1][0] == "bottom" and m.get(CR2) & GATE == GATE
+    m.advance(4500); m.tick(0, advance=0)
+    assert m.word("model_observation_time") == 2
+    before = len(m.triggers); m.advance(8500)
+    assert len(m.triggers) == before
+    passed("first effective bottom opens first peak only; second peak suppressed")
+    m.tick(0); assert m.word("model_observation_time") == 4
+    assert (m.triggers[-1] - m.triggers[-2]) & 0xFFFFFFFF == 17000
+    passed("100 us current samples advance the 20 kHz ControlTime by two")
 
-    m.call("platform_model_stage_outside"); m.call("platform_model_enable_outside")
-    assert m.word("model_stage_result") == m.word("model_enable_result") == 0 and not m.moe()
-    passed("background stage and enable are rejected")
-
+    m = Model(image); m.call("platform_model_stage_outside"); m.call("platform_model_enable_outside")
+    assert m.word("model_stage_result") == m.word("model_enable_result") == 0
+    passed("background stage and enable rejected")
     m = Model(image, hal_ok=False)
-    assert m.word("model_arm_result") == m.word("model_start_result") == 0 and not m.moe()
-    passed("arm failure cannot start or enable")
-
-    m = Model(image); m.call("platform_model_wrong_adc_tick")
-    assert m.word("model_callbacks") == 0
-    passed("ADC2 cannot create an extra control callback")
-
-    def measured_current(model, phase):
-        return struct.unpack("<f", model.cpu.mem_read(model.symbols["model_observation_" + phase + "_a"], 4))[0]
+    assert m.word("model_arm_result") == m.word("model_start_result") == 0
+    passed("arm failure cannot start")
+    m = Model(image); m.call("platform_model_wrong_adc_tick"); assert m.word("model_callbacks") == 0
+    passed("ADC2 cannot duplicate the authority callback")
 
     for raw_b, raw_c in [(0, 4095), (4095, 0), (2048, 2014)]:
-        m = Model(image)
-        m.put(0x50000180, raw_b); m.put(0x50000080, raw_c)
-        m.tick(0)
+        m = Model(image); m.put(0x50000180, raw_b); m.put(0x50000080, raw_c); m.tick(0)
         assert m.word("model_observation_valid") == 1 and m.word("model_observation_mask") == 6
         for phase, raw in [("b", raw_b), ("c", raw_c)]:
-            expected = (raw * 3.3 / 4095.0 - 1.623) / 0.7049
-            assert abs(measured_current(m, phase) - expected) < 0.000002
-        passed("fixed injected ranks preserve B/C channel mapping and nominal conversion: " + str((raw_b, raw_c)))
+            actual = struct.unpack("<f", m.cpu.mem_read(m.symbols["model_observation_" + phase + "_a"], 4))[0]
+            assert abs(actual - (raw * 3.3 / 4095.0 - 1.623) / .7049) < .000002
+        passed("fixed ADC B/C mapping " + str((raw_b, raw_c)))
+    m = Model(image); m.next_sample(); m.put(ADC1_ISR, 96); m.put(ADC2_ISR, 0)
+    m.call("platform_model_tick"); assert m.word("model_observation_valid") == 0
+    m.tick(0); assert m.word("model_observation_valid") == 0
+    passed("incomplete ADC pair remains invalid")
 
-    m = Model(image); m.position(4000, True); m.put(ADC2_ISR, 0)
-    m.put(0x50000180, 4095); m.put(0x50000080, 0)
-    m.call("platform_model_tick")
-    assert m.word("model_observation_valid") == 0 and m.word("model_observation_mask") == 4
-    assert measured_current(m, "b") == 0.0 and measured_current(m, "c") < -2.0
-    m.tick(0)
-    assert m.word("model_observation_valid") == 0 and m.word("model_observation_mask") == 4
-    passed("missing ADC2 completion invalidates pair and cannot reuse stale B data")
-
-    invalid_configurations = [
-        ("prescaler", TIM1 + 0x28, 1), ("period", ARR, 4249),
-        ("repetition counter", TIM1 + 0x30, 1),
-        ("counting mode", CR1, 0x80), ("clock division", CR1, 0x120),
-        ("one pulse mode", CR1, 0xA8), ("update disabled", CR1, 0xA2),
-        ("CCR1 preload", TIM1 + 0x18, 1 << 11),
-        ("CCR2 preload", TIM1 + 0x18, 1 << 3),
-        ("CCR3 preload", TIM1 + 0x1C, 1 << 11),
-        ("update IRQ ownership", TIM1 + 0x0C, 1),
-        ("APB2 prescaler", 0x40021008, 4 << 11),
-    ]
-    for name, register, value in invalid_configurations:
-        m = Model(image, auto_start=False); m.put(register, value)
-        m.call("platform_model_start")
-        assert m.word("model_start_result") == 0 and not m.moe() and not m.get(CR1) & CEN
-        passed("unsupported " + name + " cannot start Drive Timing")
-    m = Model(image, auto_start=False); m.write("SystemCoreClock", 160000000)
-    m.call("platform_model_start")
-    assert m.word("model_start_result") == 0 and not m.moe()
-    passed("unsupported core clock cannot start Drive Timing")
+    invalid = [
+        (TIM1 + 0x28, 1), (ARR, 4249), (RCR, 0), (CR1, 0x80),
+        (CR1, 0x120), (CR1, 0xA8), (CR1, 0xA2),
+        (TIM1 + 0x18, 1 << 11), (TIM1 + 0x18, 1 << 3),
+        (TIM1 + 0x1C, 1 << 11), (0x40021008, 4 << 11), (TIM1 + 0x40, 4230)]
+    for register, value in invalid:
+        m = Model(image, auto_start=False); m.put(register, value); m.call("platform_model_start")
+        assert m.word("model_start_result") == 0 and not m.moe()
+        passed(f"unsupported configuration {register:x}/{value:x}")
 
     m = Model(image); m.tick(STAGE | DUPLICATE)
     assert m.word("model_stage_result") == 1 and m.word("model_second_stage_result") == 0
     assert m.active == NEUTRAL and tuple(m.shadow) == REQUEST
-    writes = m.writes[-3:]
-    assert [item[0] for item in writes] == list(CCRS)
-    assert all(item[2] & UDIS and item[3] == 1 for item in writes)
-    m.advance(m.get(CNT))
-    assert m.active == REQUEST and not m.get(CR1) & UDIS
-    passed("one whole unequal three-phase request transfers at the next boundary")
-
+    assert all(x[2] & UDIS and x[3] for x in m.writes[-3:])
+    m.advance(4000); assert m.active == NEUTRAL
+    m.advance(8500); assert m.active == REQUEST
+    passed("three preloads remain unchanged at intermediate bottom and commit together at target UEV")
     m = Model(image); m.tick(STAGE | ENABLE)
-    assert m.word("model_stage_result") == 1 and m.word("model_enable_result") == 0
-    assert not m.moe() and tuple(m.shadow) == NEUTRAL
-    m.tick(STAGE); m.tick(STAGE | ENABLE)
-    assert m.moe()
-    passed("premature enable fails safe and requires a fresh stage-boundary-stage sequence")
+    assert m.word("model_enable_result") == 0 and not m.moe()
+    m.tick(STAGE); m.tick(STAGE | ENABLE); assert m.moe()
+    passed("warmup must commit at a true UEV before fresh stage and enable")
 
-    m = Model(image); m.tick(1 | STAGE)
-    assert m.word("model_early_enable_result") == m.word("model_stage_result") == 0
-    assert not m.moe() and tuple(m.shadow) == NEUTRAL
-    passed("enable before current submission closes the stale callback window")
-
-    m = Model(image).powered()
-    assert m.active == REQUEST and m.word("model_position_ticks") == m.word("model_bus_ticks") == 2
-    passed("fresh stage, boundary, and current callback stage allow enable")
-
-    for elapsed, fake_uif in [(0, False), (0, True), (3999, True)]:
-        m = Model(image); m.tick()
-        if fake_uif:
-            m.put(SR, m.get(SR) | 1)
-        m.tick(STAGE | ENABLE, advance=elapsed)
-        assert m.word("model_enable_result") == 0 and not m.moe()
-        passed(f"duplicate callback or stale UIF cannot prove a commit ({elapsed}/{fake_uif})")
-
-    for register, bit in [(DWT_CTRL, 1), (0xE000EDFC, 1 << 24)]:
-        m = Model(image); m.put(register, m.get(register) & ~bit); m.tick()
-        assert m.word("model_stage_result") == 0 and not m.moe()
-        passed(f"missing cycle-clock prerequisite 0x{register:X} rejects stage")
-
-    for count, down, accepted in [(4250, True, True), (1701, True, True),
-                                   (1700, True, False), (1699, True, False),
-                                   (1, True, False), (4000, False, False), (0, False, False)]:
-        m = Model(image); before = tuple(m.shadow); m.tick(count=count, down=down)
-        assert m.word("model_stage_result") == int(accepted), (count, down)
-        if not accepted:
-            assert tuple(m.shadow) == before and not m.moe()
-        passed(f"counter/direction deadline {count}/{down}: {'accept' if accepted else 'reject'}")
-
-    for delay in [2300, 2301, 4000, 8500, 17000]:
+    for delay, accepted in [(0, True), (4000, True), (8500, True), (10799, True), (10800, False), (12500, False), (17000, False), (25500, False)]:
         m = Model(image)
         m.on_marker = lambda model, marker, delay=delay: model.advance(delay) if marker == 1 else None
-        m.tick()
-        assert m.word("model_stage_result") == 0 and not m.moe() and tuple(m.shadow) == NEUTRAL
-        passed(f"callback delay {delay} cycles cannot masquerade as a fresh submission")
-
-    m = Model(image, cycle_counter=0xFFFFFF00)
-    m.on_marker = lambda model, marker: model.advance(500) if marker == 1 else None
-    m.tick(advance=0)
-    assert m.word("model_stage_result") == 1
-    passed("short bounded callback remains valid across DWT wrap")
-
-    m = Model(image)
-    def change_direction(model, marker):
-        if marker == 1:
-            def read_count(model, address):
-                if address == CNT:
-                    model.put(CR1, model.get(CR1) & ~DIR)
-                    model.on_read = None
-            model.on_read = read_count
-    m.on_marker = change_direction
-    m.tick()
-    assert m.word("model_stage_result") == 0 and tuple(m.shadow) == NEUTRAL
-    passed("direction change between CR1/CNT reads cannot validate an inconsistent snapshot")
+        m.tick(STAGE)
+        assert m.word("model_stage_result") == int(accepted), (delay, m.word("model_stage_result"))
+        if not accepted: assert not m.moe() and tuple(m.shadow) == NEUTRAL
+        passed(f"slot absolute deadline and cross-carrier alias {delay}/{accepted}")
 
     for phase in range(3):
-        for invalid in [-0.1, 0.099, 0.901, 1.1, float("nan"), float("inf"), -float("inf")]:
-            m = Model(image)
-            request = [0.2, 0.5, 0.8]; request[phase] = invalid
-            m.cpu.mem_write(m.symbols["model_request"], struct.pack("<fff", *request))
-            m.tick(STAGE | ENABLE)
-            assert m.word("model_stage_result") == m.word("model_enable_result") == 0
-            assert tuple(m.shadow) == NEUTRAL and not m.moe()
-            passed(f"invalid duty phase {phase} value {invalid}")
-    m = Model(image); m.tick(STAGE | NULL_REQUEST)
-    assert m.word("model_stage_result") == 0 and tuple(m.shadow) == NEUTRAL
-    passed("null request does not touch CCRs")
-
-    for duty in [0.1, 0.9]:
-        m = Model(image)
-        m.cpu.mem_write(m.symbols["model_request"], struct.pack("<fff", duty, duty, duty))
-        m.tick()
+        for invalid_value in [-.1, .099, .901, 1.1, float("nan"), float("inf"), -float("inf")]:
+            m = Model(image); req = [.2, .5, .8]; req[phase] = invalid_value
+            m.cpu.mem_write(m.symbols["model_request"], struct.pack("<fff", *req)); m.tick(STAGE | ENABLE)
+            assert m.word("model_stage_result") == m.word("model_enable_result") == 0 and not m.moe()
+            passed(f"invalid duty {phase}/{invalid_value}")
+    m = Model(image); m.tick(STAGE | NULL_REQUEST); assert m.word("model_stage_result") == 0
+    passed("null duty rejected")
+    for duty in [.1, .9]:
+        m = Model(image); m.cpu.mem_write(m.symbols["model_request"], struct.pack("<fff", duty, duty, duty)); m.tick()
         assert m.word("model_stage_result") == 1
-        passed(f"inclusive supported duty envelope {duty}")
+        passed(f"inclusive duty edge {duty}")
 
     m = Model(image).powered(); m.tick(0)
     assert not m.moe() and tuple(m.shadow) == NEUTRAL and m.get(CR1) & CEN
-    passed("missing running submission turns power off without stopping timing")
-
-    m = Model(image).powered()
-    m.on_marker = lambda model, marker: model.advance(4250) if marker == 3 else None
-    m.tick()
-    assert m.word("model_stage_result") == 1 and not m.moe() and tuple(m.shadow) == NEUTRAL
-    passed("consumer overrun after a successful stage also fails safe before callback return")
-
-    for flag in [1 << 7, 1 << 8, BREAKS]:
-        m = Model(image); m.tick(); m.put(SR, m.get(SR) | flag); m.tick(STAGE | ENABLE)
-        assert m.word("model_enable_result") == 0 and not m.moe() and m.get(SR) & flag == flag
-        passed(f"latched hardware break {flag} cannot be cleared by stage or enable")
-
+    passed("missing RUN submission fails off while timing continues")
+    for marker in [3, 4]:
+        m = Model(image).powered()
+        m.on_marker = lambda model, point, marker=marker: model.advance(10800) if point == marker else None
+        m.tick(STAGE)
+        assert not m.moe() and tuple(m.shadow) == NEUTRAL
+        m.on_marker = None
+        m.tick(0); assert m.word("model_observation_valid") == 0
+        m.tick(STAGE | ENABLE)
+        assert m.word("model_stage_result") == m.word("model_enable_result") == 0 and not m.moe()
+        passed(f"consumer/HAL tail overrun at marker {marker} stays observable even with MOE already off")
     m = Model(image).powered(); m.tick(STAGE | OFF | ENABLE | 64)
     assert not m.moe() and m.word("model_enable_result") == m.word("model_second_stage_result") == 0
-    assert tuple(m.shadow) == NEUTRAL
-    m.tick(STAGE | ENABLE); assert not m.moe() and m.word("model_enable_result") == 0
-    m.tick(STAGE); assert not m.moe()
-    m.tick(STAGE | ENABLE); assert m.moe() and m.word("model_enable_result") == 1
-    passed("safe-off invalidates the current callback and requires a new complete enable sequence")
+    m.tick(STAGE | ENABLE); assert not m.moe()
+    m.tick(STAGE); m.tick(STAGE | ENABLE); assert m.moe()
+    assert m.word("model_observation_valid") == 1
+    passed("Stop invalidates pending/committed epoch without latching a timing defect")
+    for flag in [1 << 7, 1 << 8, BREAKS]:
+        m = Model(image).powered(); m.next_sample(); m.put(SR, m.get(SR) | flag); m.tick(STAGE | ENABLE, advance=0)
+        assert not m.moe() and m.word("model_enable_result") == 0 and m.get(SR) & flag == flag
+        passed(f"break remains latched {flag}")
 
-    m = Model(image); m.tick(); m.call("realtime_motor_io_safe_off")
-    m.call("realtime_motor_io_safe_off"); m.tick(STAGE | ENABLE)
-    assert m.word("model_enable_result") == 0 and not m.moe()
-    passed("repeated safe-off cannot resurrect pending duty at a later boundary")
-
-    for crossing_after in [CCRS[0], CCRS[1], CCRS[2]]:
-        m = Model(image).powered(); old = m.active
-        m.cpu.mem_write(m.symbols["model_request"], struct.pack("<fff", 0.3, 0.4, 0.7))
-        def crossing(model, address, value, target=crossing_after):
-            if address == target:
-                model.on_ccr = None
-                model.pending_delay = 4500
-        m.on_ccr = crossing
-        transfers = len(m.transfers)
-        m.tick(STAGE | ENABLE)
-        assert m.word("model_stage_result") == 0 and not m.moe() and tuple(m.shadow) == NEUTRAL
-        assert not m.get(CR1) & UDIS
-        assert all(event[2] in [old, NEUTRAL] for event in m.transfers[transfers:])
-        assert any(event[1] for event in m.transfers[transfers:])
-        passed(f"update during CCR{CCRS.index(crossing_after) + 1} write cannot expose a partial group")
-
-    for delay in [2300, 4500]:
+    for at in CCRS:
         m = Model(image).powered()
-        def delay_release(model, address, value, delay=delay):
-            if address == CR1 and model.get(CR1) & UDIS and not value & UDIS:
-                model.pending_delay = delay
-                model.on_write = None
-        m.on_write = delay_release
-        m.tick(STAGE | ENABLE)
-        assert m.word("model_stage_result") == 0 and not m.moe() and tuple(m.shadow) == NEUTRAL
-        assert not m.get(CR1) & UDIS
-        passed(f"deadline loss immediately after UDIS release ({delay}) returns failure and disables power")
+        def cross(model, address, value, at=at):
+            if address == at:
+                model.on_ccr = None; model.pending_delay = 13000
+        m.on_ccr = cross; m.tick(STAGE)
+        assert m.word("model_stage_result") == 0 and not m.moe() and not m.get(CR1) & UDIS
+        assert tuple(m.shadow) == NEUTRAL
+        passed(f"UDIS transaction crossing target during CCR{CCRS.index(at)+1} fails safe")
+    m = Model(image).powered()
+    def release(model, address, value):
+        if address == CR1 and model.get(CR1) & UDIS and not value & UDIS:
+            model.on_write = None; model.pending_delay = 10800
+    m.on_write = release; m.tick(STAGE)
+    assert m.word("model_stage_result") == 0 and not m.moe()
+    passed("deadline checked after UDIS release")
+
+    # 迟到 UP 即使碰巧恢复相同 CNT/DIR，或已跨整 slot，也不能开门。
+    for delay in [1700, 8500, 17000, 25500]:
+        m = Model(image); m.cpu.reg_write(UC_ARM_REG_PRIMASK, 1)
+        m.advance(8500 + delay); m.cpu.reg_write(UC_ARM_REG_PRIMASK, 0)
+        m.call("platform_model_update_irq"); m.pending_update = False
+        assert m.get(CR2) & GATE == 0 and not m.moe()
+        m.next_sample(); m.tick(0, advance=0)
+        expected = 2 * (delay // 17000 + 2)
+        assert m.word("model_observation_time") == expected, (delay, m.word("model_observation_time"), expected)
+        passed(f"late/aliased UP skips sample and preserves ControlTime gap {delay}")
+
+    for point in ["before gate", "after gate write"]:
+        m = Model(image)
+        if point == "before gate":
+            reads = [0]
+            def stall(model, address):
+                if address == DWT_CYCCNT and model.in_update:
+                    reads[0] += 1
+                    if reads[0] == 2:
+                        model.on_read = None; model.advance(1700)
+            m.on_read = stall
+        else:
+            def stall(model, address, value):
+                if address == CR2 and value & GATE == GATE:
+                    model.on_write = None; model.pending_delay = 1700
+            m.on_write = stall
+        m.advance(8500)
+        assert m.get(CR2) & GATE == 0 and not m.moe() and not m.triggers
+        passed("arming transaction rechecks deadline " + point)
+
+    m = Model(image).powered(); m.next_sample(); m.put(ADC1_ISR, 96); m.call("platform_model_adc_enter")
+    m.advance(12500)
+    assert not m.moe() and m.get(CR2) & GATE == 0
+    before = m.word("model_callbacks"); m.call("platform_model_adc_callback"); m.call("platform_model_adc_exit")
+    assert m.word("model_callbacks") == before
+    m.put(ADC1_ISR, 0); m.tick(0)
+    assert not m.moe()
+    passed("UP preempts old ADC busy; stale callback cannot publish as the new slot")
+
+    for before_sample in [False, True]:
+        m = Model(image).powered()
+        if before_sample:
+            # 当前 slot 完成后执行 UP，在首峰之前保持门开放。
+            m.advance(12500)
+            assert m.get(CR2) & GATE == GATE
+        gate = m.get(CR2) & GATE
+        m.put(ADC1_ISR, 1 << 2); m.call("platform_model_adc_enter"); m.call("platform_model_adc_exit")
+        assert m.moe() and m.get(CR2) & GATE == gate
+        m.tick(STAGE | ENABLE); assert m.moe()
+        passed(f"regular-only ADC IRQ preserves power, pending and gate before_sample={before_sample}")
+    m = Model(image).powered()
+    m.put(ADC1_ISR, 4); m.call("platform_model_adc_enter")
+    m.advance(12500)
+    assert m.moe() and m.get(CR2) & GATE == GATE
+    m.call("platform_model_regular_exit")
+    m.tick(STAGE | ENABLE)
+    assert m.word("model_observation_time") == 6 and m.word("model_observation_valid") == 1
+    assert m.word("model_stage_result") == m.word("model_enable_result") == 1 and m.moe()
+    passed("regular-only IRQ crossing UEV keeps gate and fresh sample continuity")
+
+    for same_irq in [True, False]:
+        m = Model(image).powered(); m.advance(12500); m.advance(4200)
+        m.put(ADC1_ISR, 4); m.call("platform_model_adc_enter")
+        m.advance(300)
+        m.write("model_actions", STAGE | ENABLE)
+        if same_irq:
+            m.call("platform_model_adc_callback")
+            m.call("platform_model_adc_exit")
+        else:
+            m.call("platform_model_regular_exit")
+            assert m.get(ADC1_ISR) & 96 == 96 and m.get(ADC2_ISR) & 96 == 96
+            m.tick(STAGE | ENABLE, advance=0, count=None)
+        assert m.word("model_observation_time") == 6 and m.word("model_observation_valid") == 1
+        assert m.word("model_stage_result") == m.word("model_enable_result") == 1 and m.moe()
+        passed("regular-to-injected arrival upgrades same HAL IRQ" if same_irq else
+               "JEOS after regular HAL snapshot remains pending for the next IRQ")
+
+    for flags in [96, 100]:
+        m = Model(image).powered(); m.next_sample()
+        m.put(ADC1_ISR, flags); m.call("platform_model_adc_enter")
+        m.advance(12500)
+        assert not m.moe() and m.get(CR2) & GATE == 0
+        before = m.word("model_callbacks")
+        m.call("platform_model_adc_callback"); m.call("platform_model_adc_exit")
+        assert m.word("model_callbacks") == before
+        passed(f"injected or mixed EOC/JEOS still owns busy through full HAL tail: {flags}")
+    m = Model(image).powered(); m.next_sample()
+    m.advance(12500)
+    assert not m.moe() and m.get(CR2) & GATE == 0
+    passed("unclaimed old JEOS at UEV still rejects new sample arming")
+
+    for delay in [1450, 4000, 8500, 17000]:
+        m = Model(image); m.next_sample(); m.advance(delay)
+        m.tick(STAGE, advance=0, count=None)
+        assert m.word("model_callbacks") == 0 and not m.moe() and m.get(CR2) & GATE == 0
+        assert tuple(m.shadow) == NEUTRAL
+        passed(f"delayed injected entry {delay} cannot relabel a second peak or stale JDR")
+    m = Model(image); m.next_sample(); m.put(ADC1_ISR, 96); m.put(ADC2_ISR, 96)
+    m.call("platform_model_adc_enter"); m.call("realtime_motor_io_safe_off")
+    m.write("model_actions", STAGE | ENABLE); m.call("platform_model_adc_callback"); m.call("platform_model_adc_exit")
+    assert m.word("model_callbacks") == 0 and not m.moe() and tuple(m.shadow) == NEUTRAL
+    m.put(ADC1_ISR, 0); m.tick(STAGE); m.tick(STAGE | ENABLE); assert m.moe()
+    passed("Stop between IRQ enter and callback invalidates original ADC epoch")
 
     for point in ["CCR group", "UDIS release", "MOE set"]:
         m = Model(image).powered()
-        def break_at_write(model, address, value, point=point):
-            selected = (point == "CCR group" and address == CCRS[1])
-            selected |= (point == "UDIS release" and address == CR1
-                         and model.get(CR1) & UDIS and not value & UDIS)
-            selected |= (point == "MOE set" and address == BDTR and value & MOE)
-            if selected:
-                model.put(SR, model.get(SR) | BREAKS)
-                model.put(BDTR, model.get(BDTR) & ~MOE)
-                # The hardware break holds MOE low even when software writes it high.
-                if address == BDTR:
-                    model.pending_fixes[BDTR] = value & ~MOE
+        def break_write(model, address, value, point=point):
+            match = point == "CCR group" and address == CCRS[1]
+            match |= point == "UDIS release" and address == CR1 and model.get(CR1) & UDIS and not value & UDIS
+            match |= point == "MOE set" and address == BDTR and value & MOE
+            if match:
+                model.put(SR, model.get(SR) | BREAKS); model.put(BDTR, model.get(BDTR) & ~MOE)
+                if address == BDTR: model.pending_fixes[BDTR] = value & ~MOE
                 model.on_write = None
-        m.on_write = break_at_write
-        m.tick(STAGE | ENABLE)
-        assert m.word("model_stage_result") == int(point == "MOE set"), point
-        assert not m.moe() and m.word("model_enable_result") == 0
-        assert m.get(SR) & BREAKS == BREAKS and tuple(m.shadow) == NEUTRAL
-        passed("asynchronous hardware break at " + point + " cannot be reported as successful enable")
-
+        m.on_write = break_write; m.tick(STAGE | ENABLE)
+        assert not m.moe() and m.word("model_enable_result") == 0 and tuple(m.shadow) == NEUTRAL
+        passed("asynchronous hardware Break at " + point)
     for point in ["before stage", "between CCR writes", "before enable"]:
         m = Model(image).powered()
-        if point == "before stage":
-            def interrupt(model, marker):
-                if marker == 1:
-                    model.pending_irq = True; model.on_marker = None
-            m.on_marker = interrupt
-        elif point == "between CCR writes":
+        if point == "between CCR writes":
             def interrupt(model, address, value):
-                if address == CCRS[0]:
-                    model.pending_irq = True; model.on_ccr = None
+                if address == CCRS[0]: model.pending_irq = True; model.on_ccr = None
             m.on_ccr = interrupt
         else:
-            def interrupt(model, marker):
-                if marker == 2:
-                    model.pending_irq = True; model.on_marker = None
+            def interrupt(model, marker, point=point):
+                if marker == (1 if point == "before stage" else 2): model.pending_irq = True; model.on_marker = None
             m.on_marker = interrupt
         m.tick(STAGE | ENABLE)
         assert m.irq_calls == 1 and not m.moe() and m.word("model_enable_result") == 0
-        assert tuple(m.shadow) == NEUTRAL and not m.get(CR1) & UDIS
-        m.tick(STAGE | ENABLE); assert not m.moe()
-        passed(f"safe-off IRQ {point} blocks stale enable and requires fresh actuation")
-
-    m = Model(image)
-    m.cpu.reg_write(UC_ARM_REG_PRIMASK, 1); m.tick()
+        passed("asynchronous safe-off " + point)
+    m = Model(image).powered(); m.put(SR, m.get(SR) | BREAKS); m.put(BDTR, m.get(BDTR) & ~MOE)
+    m.advance(12500)
+    assert m.get(SR) & 1 == 0 and m.get(SR) & BREAKS == BREAKS
+    assert not m.moe() and m.get(CR2) & GATE == 0
+    m.put(SR, m.get(SR) & ~BREAKS); m.tick(0)
+    assert m.word("model_observation_time") == 8 and not m.moe()
+    passed("simultaneous Break and UEV is owned once, fails off and preserves the skipped sample time")
+    for register, bit in [(DWT_CTRL, 1), (0xE000EDFC, 1 << 24)]:
+        m = Model(image); m.next_sample(); m.put(register, m.get(register) & ~bit); m.tick(STAGE, advance=0)
+        assert m.word("model_stage_result") == 0 and not m.moe()
+        passed(f"missing cycle-clock prerequisite {register:x}")
+    m = Model(image); m.next_sample(); m.cpu.reg_write(UC_ARM_REG_PRIMASK, 1); m.tick(STAGE, advance=0)
     assert m.cpu.reg_read(UC_ARM_REG_PRIMASK) == 1
-    m.call("realtime_motor_io_safe_off")
-    assert m.cpu.reg_read(UC_ARM_REG_PRIMASK) == 1
-    passed("nested critical sections preserve the caller's PRIMASK")
+    m.call("realtime_motor_io_safe_off"); assert m.cpu.reg_read(UC_ARM_REG_PRIMASK) == 1
+    passed("nested critical sections preserve PRIMASK")
+    m = Model(image, cycle_counter=0xFFFFFF00); m.tick(STAGE); m.tick(STAGE | ENABLE)
+    assert m.moe()
+    passed("slot/target age remains bounded across DWT wrap")
 
     print(f"G431 actual Platform ARM regression: {len(cases)} cases PASS")
-    print("Scope: source execution and modeled register ordering; no target build, WCET or electrical proof.")
-    for name in cases:
-        print("PASS " + name)
+    print("Scope: real ARM source and explicit RCR/UEV/gate/UP preemption model; no WCET or electrical proof.")
+    for name in cases: print("PASS " + name)
 
 
 if __name__ == "__main__":

@@ -98,7 +98,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-  /* 170 MHz / 4 WS: prefetch reduces sequential Flash fetch stalls in the ADC path. */
+  /* 170 MHz / 4 WS：预取减少 ADC 路径的顺序 Flash 取指等待。 */
   __HAL_FLASH_PREFETCH_BUFFER_ENABLE();
   /* USER CODE END SysInit */
 

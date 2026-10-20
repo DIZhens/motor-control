@@ -38,6 +38,9 @@ static bool s_timing_fixture_ready;
 static bool s_timing_in_step;
 static bool s_timing_irq_open;
 static bool s_timing_pending;
+/* 第80拍立即关断，下一真实采样空拍复核并发布，不追加第81次控制。 */
+static bool s_timing_terminal_pending;
+static G431RuntimeTimingFailure s_timing_terminal_reason;
 static bool s_timing_speed_updated;
 static bool s_timing_limited;
 static uint32_t s_timing_irq_begin;
@@ -111,6 +114,7 @@ static void timing_freeze(G431RuntimeTimingFailure reason)
     s_timing_in_step = false;
     s_timing_pending = false;
     s_timing_irq_open = false;
+    s_timing_terminal_pending = false;
     g_target_runtime_timing_active = 0U;
     timing_publish();
 }
@@ -119,24 +123,24 @@ void g431_runtime_timing_init(ElectricalAngleTrig trig, void *trig_context,
     G431RuntimeTimingStampRead stamp_read, void *stamp_context)
 {
     const ControlRuntimeConfig config = {
-        20000U, 1U, 20U, 100U, 100U, {3000.0f, 0.01f},
+        20000U, 2U, 10U, 100U, 100U, {3000.0f, 0.01f},
         {CURRENT_MEASUREMENT_PHASE_BC, 2U, 0.2f, 0.01f,
             true, {0.0f, 1.25f, -0.8f}},
         2U, 5.0f, false,
         {7U, 1, 0.125f, 0.01f, 1000.0f}, true,
         {true, true, true,
-            {20.0f, 20.0f, 1000.0f, 1000.0f, 200.0f, 4.0f, 0.6f, 0.45f, 0.0001f},
+            {20.0f, 20.0f, 1000.0f, 1000.0f, 200.0f, 4.0f, 0.6f, 0.45f, 0.0002f},
             {0.006f, 0.04f, 20.0f, 0.4f, 0.4f, 200.0f, 0.002f},
-            10U, 6.0f, 16.0f, 2.0f, 0.00005f},
+            10U, 6.0f, 16.0f, 2.0f, 0.000125f},
         trig, trig_context
     };
     const CurrentMeasurementSample zero = {
         {0.0f, 0.02f, -0.03f}, CURRENT_MEASUREMENT_PHASE_BC
     };
-    const SpeedControllerInput speed = {90.0f, 60.0f, 0.0005f, true, true};
+    const SpeedControllerInput speed = {90.0f, 60.0f, 0.001f, true, true};
 
     memset(&s_timing_result, 0, sizeof(s_timing_result));
-    s_timing_result.schema_version = 1U;
+    s_timing_result.schema_version = 2U;
     s_timing_stamp_read = stamp_read;
     s_timing_stamp_context = stamp_context;
     s_timing_failure = G431_RUNTIME_TIMING_FAILURE_NONE;
@@ -144,6 +148,8 @@ void g431_runtime_timing_init(ElectricalAngleTrig trig, void *trig_context,
     s_timing_in_step = false;
     s_timing_irq_open = false;
     s_timing_pending = false;
+    s_timing_terminal_pending = false;
+    s_timing_terminal_reason = G431_RUNTIME_TIMING_FAILURE_NONE;
     g_target_runtime_timing_active = 0U;
     g_target_runtime_timing_sequence = 0U;
     motor_init(&s_timing_motor);
@@ -183,13 +189,15 @@ bool g431_runtime_timing_prepare(uint32_t request_word, bool permitted)
         return false;
     }
     memset(&s_timing_result, 0, sizeof(s_timing_result));
-    s_timing_result.schema_version = 1U;
+    s_timing_result.schema_version = 2U;
     s_timing_result.request_word = request_word;
     s_timing_result.mode = mode;
     s_timing_result.expected_samples = G431_RUNTIME_TIMING_SAMPLES;
     s_timing_failure = G431_RUNTIME_TIMING_FAILURE_NONE;
     s_timing_irq_open = false;
     s_timing_pending = false;
+    s_timing_terminal_pending = false;
+    s_timing_terminal_reason = G431_RUNTIME_TIMING_FAILURE_NONE;
     s_timing_in_step = false;
     if (!permitted || (request_word >> 2U) == 0U
         || (mode != G431_RUNTIME_TIMING_STAGE && mode != G431_RUNTIME_TIMING_COMPUTE)
@@ -310,13 +318,19 @@ bool g431_runtime_timing_step(ControlTime now, bool permitted)
         timing_freeze(G431_RUNTIME_TIMING_FAILURE_CLOCK);
         return true;
     }
+    if (s_timing_terminal_pending) {
+        /* 第80拍Platform完整IRQ出口已执行；当拍许可先由上方检查。
+         * 保留第80拍work/IRQ/stamp，收尾只做关断复核与结果发布。 */
+        timing_freeze(s_timing_terminal_reason);
+        return true;
+    }
     s_timing_failure = G431_RUNTIME_TIMING_FAILURE_NONE;
     if (!timing_read_stamp(&s_timing_begin_stamp)) {
         timing_freeze((G431RuntimeTimingFailure)s_timing_failure);
         return true;
     }
-    if ((s_timing_begin_stamp.cycles - s_timing_irq_begin) >= 8500U
-        || (s_timing_begin_stamp.callback_start_cycles - s_timing_irq_begin) >= 8500U) {
+    if ((s_timing_begin_stamp.cycles - s_timing_irq_begin) >= REALTIME_MOTOR_IO_CONTROL_PERIOD_CYCLES
+        || (s_timing_begin_stamp.callback_start_cycles - s_timing_irq_begin) >= REALTIME_MOTOR_IO_CONTROL_PERIOD_CYCLES) {
         timing_freeze(G431_RUNTIME_TIMING_FAILURE_CLOCK);
         return true;
     }
@@ -327,7 +341,7 @@ bool g431_runtime_timing_step(ControlTime now, bool permitted)
         }
         s_timing_runtime.last_position_time = now;
         s_timing_runtime.bus.observation_time = now;
-        s_timing_runtime.last_speed_time = now - 1U;
+        s_timing_runtime.last_speed_time = now - 2U;
         s_timing_result.state = G431_RUNTIME_TIMING_ACTIVE;
     }
     s_timing_now = now;
@@ -336,10 +350,8 @@ bool g431_runtime_timing_step(ControlTime now, bool permitted)
     s_timing_speed_updated = false;
     s_timing_limited = false;
     if (s_timing_result.mode == G431_RUNTIME_TIMING_STAGE) {
-        if ((s_timing_begin_stamp.timer_cr1 & TIM_CR1_DIR) == 0U
-            || s_timing_begin_stamp.callback_entry_count <= REALTIME_MOTOR_IO_STAGE_DEADLINE_COUNTS
-            || (s_timing_begin_stamp.cycles - s_timing_begin_stamp.callback_start_cycles)
-                >= s_timing_begin_stamp.callback_entry_count - REALTIME_MOTOR_IO_STAGE_DEADLINE_COUNTS) {
+        if ((s_timing_begin_stamp.stage_deadline_cycles - s_timing_begin_stamp.cycles)
+                >= REALTIME_MOTOR_IO_CONTROL_PERIOD_CYCLES) {
             timing_freeze(G431_RUNTIME_TIMING_FAILURE_CLOCK);
             return true;
         }
@@ -385,6 +397,10 @@ bool g431_runtime_timing_step(ControlTime now, bool permitted)
     }
     s_timing_result.last_work_cycles = s_timing_work_end - s_timing_work_begin;
     s_timing_result.last_anchor_cycles = s_timing_work_end - s_timing_begin_stamp.callback_start_cycles;
+    s_timing_result.last_stage_budget_cycles = s_timing_begin_stamp.stage_deadline_cycles
+        - s_timing_begin_stamp.callback_start_cycles;
+    s_timing_result.last_irq_budget_cycles = s_timing_begin_stamp.stage_deadline_cycles
+        - s_timing_irq_begin;
     /* 读端口失败不能把上一拍寄存器伪装成本拍证据；零值表示本拍未取得读数。 */
     memset(&s_timing_end_stamp, 0, sizeof(s_timing_end_stamp));
     (void)timing_read_stamp(&s_timing_end_stamp);
@@ -394,8 +410,9 @@ bool g431_runtime_timing_step(ControlTime now, bool permitted)
     s_timing_result.last_bdtr = s_timing_end_stamp.timer_bdtr;
     if (s_timing_end_stamp.callback_start_cycles != s_timing_begin_stamp.callback_start_cycles
         || s_timing_end_stamp.callback_entry_count != s_timing_begin_stamp.callback_entry_count
+        || s_timing_end_stamp.stage_deadline_cycles != s_timing_begin_stamp.stage_deadline_cycles
         || s_timing_result.last_work_cycles == 0U
-        || s_timing_result.last_anchor_cycles >= 8500U
+        || s_timing_result.last_anchor_cycles >= REALTIME_MOTOR_IO_CONTROL_PERIOD_CYCLES
         || (s_timing_work_begin - s_timing_begin_stamp.callback_start_cycles)
             > s_timing_result.last_anchor_cycles) {
         timing_remember_failure(G431_RUNTIME_TIMING_FAILURE_CLOCK);
@@ -479,7 +496,9 @@ void g431_runtime_timing_irq_exit(uint32_t cycles, bool permitted)
     front = s_timing_work_begin - s_timing_begin_stamp.callback_start_cycles;
     tail = cycles - s_timing_work_end;
     s_timing_result.last_irq_cycles = irq;
-    if (irq >= 8500U) {
+    /* 使用Platform实际slot的绝对截止；中间谷底不重置预算，末标记后仍留异常返回预留。 */
+    if (irq >= s_timing_result.last_irq_budget_cycles
+        || s_timing_result.last_irq_budget_cycles >= REALTIME_MOTOR_IO_CONTROL_PERIOD_CYCLES) {
         timing_remember_failure(G431_RUNTIME_TIMING_FAILURE_IRQ_BUDGET);
     } else if (irq == 0U || work == 0U || anchor > irq || tail > irq
         || work > anchor || front > anchor || anchor != work + front
@@ -515,12 +534,11 @@ void g431_runtime_timing_irq_exit(uint32_t cycles, bool permitted)
             s_timing_result.limited_samples++;
         }
     }
-    if (s_timing_begin_stamp.callback_entry_count <= REALTIME_MOTOR_IO_STAGE_DEADLINE_COUNTS
-        || anchor >= s_timing_begin_stamp.callback_entry_count - REALTIME_MOTOR_IO_STAGE_DEADLINE_COUNTS) {
+    if (anchor >= s_timing_result.last_stage_budget_cycles) {
         s_timing_result.over_stage_deadline_samples++;
     }
-    /* 只统计调用返回点已超半周的拍数，不替代Platform返回consumer后的原保护。 */
-    if (anchor >= REALTIME_MOTOR_IO_PWM_PERIOD_COUNTS) {
+    /* 同一绝对截止由Platform再复核；此处统计不能代替其末端保护。 */
+    if (anchor >= s_timing_result.last_stage_budget_cycles) {
         s_timing_result.over_consumer_budget_samples++;
     }
     s_timing_pending = false;
@@ -535,12 +553,17 @@ void g431_runtime_timing_irq_exit(uint32_t cycles, bool permitted)
             complete = complete && s_timing_result.real_stage_calls == 0U
                 && s_timing_result.real_stage_accepted == 0U
                 && s_timing_result.sink_calls == G431_RUNTIME_TIMING_SAMPLES
-                && s_timing_result.speed_updates == 8U && s_timing_result.observation_refreshes == 4U
+                && s_timing_result.speed_updates == 8U && s_timing_result.observation_refreshes == 8U
                 && s_timing_result.fast_samples == 72U && s_timing_result.slow_samples == 8U
                 && s_timing_result.limited_samples > 0U
                 && s_timing_result.limited_samples < G431_RUNTIME_TIMING_SAMPLES;
         }
-        timing_freeze(complete ? G431_RUNTIME_TIMING_FAILURE_NONE
-            : G431_RUNTIME_TIMING_FAILURE_INCOMPLETE);
+        /* 不在最慢控制拍追加stamp读取和256B发布；active持续到下一采样收尾。
+         * 立即关断并锁存首因，取消/BUSY仍可按原语义终止待收尾窗口。 */
+        realtime_motor_io_safe_off();
+        s_timing_terminal_reason = complete ? G431_RUNTIME_TIMING_FAILURE_NONE
+            : G431_RUNTIME_TIMING_FAILURE_INCOMPLETE;
+        timing_remember_failure(s_timing_terminal_reason);
+        s_timing_terminal_pending = true;
     }
 }

@@ -7,9 +7,45 @@
 本页汇总 Keil 台架、默认关断观察与专用无功率计时入口；后两者的构建及执行边界见
 [runtime/README.md](runtime/README.md)。各入口的镜像与验收证据不互相替代。
 
-下一轮时序设计及其 ST 参考依据见 [PWM_TIMING.md](validation/PWM_TIMING.md#20--10--1-khz-时序设计)：
-20 kHz PWM、10 kHz 同步电流环、1 kHz 速度环，采用 RCR=3 与一次采样触发门，
-将当前样本输出绑定到随后指定谷底。该节是待实现/验收的设计，不改变下面的历史镜像结论。
+## 20 / 10 / 1 kHz：分别完成无功率提交与计算窗口
+
+已实现 20 kHz PWM、10 kHz 同步电流采样与计算、1 kHz 速度更新的装配。
+RCR=3、首峰一次采样触发门及下一有效谷底的三相提交，共同定义 sample → compute →
+actuation；完整 ADC 服务须在目标谷底前 10 µs 退出。机制及 ST 参考依据见
+[PWM_TIMING.md](validation/PWM_TIMING.md#20--10--1-khz-时序)。正式 Observe 的控制许可仍关闭。
+
+操作者本轮确认 ST-Link 逻辑供电、OUTPUT 关闭、电池/三相/外部注入断开，编码器接线
+保持。DMM 2.7 V 沿用既有参考，本轮没有新增万用表测量。没有要求重跑历史示波器流程。
+
+| 独立窗口 | 镜像与实际结果 |
+| --- | --- |
+| 真实 stage | `45f60bec…`：一次 request5，80 次调用全部接受，enable=0，前后健康通过 |
+| 同源 Runtime compute | `817b52d3…`：一次 request6，80/80 完成；72 普通拍、8 速度更新与观测刷新拍，sink=80，真实 stage/enable=0 |
+| compute 直接调用 | 普通拍 4696–4761 cycles，27.624–28.006 µs；慢拍 6219–6224 cycles，36.582–36.612 µs |
+| compute IRQ 首末 C 标记 | 7998–9506 cycles，47.047–55.918 µs；最后一拍对应的绝对预算为 10711 cycles，63.006 µs |
+| compute 后检查 | CPU running、采样持续推进，快照间隔 17000 cycles / 100 µs，faults=guard=0，电流/位置有效，MOE=0 |
+
+本轮同时修复两处外围交错：SSI 改为私有有限 4 字节事务，最多产生 32 个 SCK，不再
+在高优先级 ADC 尾部启动持续 RX-only 时钟；纯 regular ADC IRQ 不占电流 sample slot，
+可跨 UEV，同一 HAL 分发中晚到的 JEOS 则按原首峰窗口重新认领。真实 ARM 模型已复现
+并覆盖该 regular/injected 占用问题，真实旧 injected 未退出、迟到与过期请求继续拒绝。
+
+第一个完整 compute 窗口虽发布过 80 点 COMPLETE，后健康仍出现 Platform 时序故障，
+因此保留为失败。终态关断保持立即执行，将复核和 256 B 发布放到下一采样空拍，并先核
+真实许可，不再追加第 81 次控制。随后修正 regular/injected 占用，最终一次 compute 的
+前后健康均通过。没有清故障后重发同一窗口，也不把旧镜像失败记录改成通过。
+
+Platform ARM 98 组、SSI ARM 41 组、真实 Core IRQ 9 组、Runtime 计时 25 组、入口 14 组
+及主机计时工具 22 项通过；三个 Keil Target 均构建为 0 错误、0 警告。生成区与 CubeMX
+输出核对一致，用户本地 Keil 设置保持。完整身份与原始统计见
+[时序证据摘要](validation/evidence/slot-timing/summary.json)。
+
+当前板保留 `817b52d3…` 的默认关断 Timing 镜像及冻结 COMPLETE，未发送任何使能请求。
+两个窗口来自分别标识的镜像；compute 使用合成输入与数值 sink，不能据此宣称同一镜像
+的完整真实 RUN 已验收。IRQ 读数仍排除末标记后的统计和异常入出栈，不是 WCET。
+电流增益/方向、电角度标定、真实计算与提交的集成及带电 FOC 仍待针对性验收。
+
+以下各节保留历史镜像及当时结论，文中的“当前”仅指对应那次验证，不代表板上最新状态。
 
 ## 独立调用计时：部分窗口，仍不具备带电实时预算
 
@@ -18,8 +54,8 @@
 普通拍 9 个有效样本平均 27.565 µs，相比下述 Flash 基线的 28.074 µs 仅减少约 1.8%；
 第 10 次计算的 IRQ 标记区间 8929 cycles（52.524 µs）触发 IRQ_BUDGET，SSI 位置也失效。
 SRAM 代码已与 AXF 逐字节核对，但收益不足，这条试验已停止，没有继续调整放置方案。
-当前板保留该一次性对比镜像 `4fefda7b…` 及冻结失败状态，MOE=0、guard=0、采样推进；
-下述正式提交的三个 Target 配置及两个旧入口生成物均保持原值。
+该次试验结束时，板保留一次性对比镜像 `4fefda7b…` 及冻结失败状态，MOE=0、guard=0、采样推进；
+该试验没有修改当时正式提交的三个 Target 配置及两个旧入口生成物。
 
 专用 `BLDC_G431_Timing` HEX 为
 `4bb96c712cf295df24c5316d247c525226ebdf22f3ba514019438449e0feb91d`。

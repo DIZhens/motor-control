@@ -44,6 +44,7 @@ typedef struct {
     uint32_t timer_bdtr;
     uint32_t callback_start_cycles;
     uint32_t callback_entry_count;
+    uint32_t stage_deadline_cycles; /* 本slot的绝对DWT截止，含10us事务预留。 */
 } G431RuntimeTimingStamp;
 
 typedef bool (*G431RuntimeTimingStampRead)(void *context, G431RuntimeTimingStamp *stamp);
@@ -55,7 +56,7 @@ typedef struct {
     uint32_t sum_cycles;
 } G431RuntimeTimingMetric;
 
-/* 全部字段固定32位，布局248字节；发布序列为相同偶数才可读取。
+/* 全部字段固定32位，布局256字节；发布序列为相同偶数才可读取。
  * request_word=(非零nonce<<2)|mode；同一完整身份不会自动重开。
  * 合成RUN、功率输入、标定值只属于隔离试具，不是现场Motor状态或许可。 */
 typedef struct {
@@ -83,8 +84,10 @@ typedef struct {
     uint32_t last_entry_count;
     uint32_t last_cr1;
     uint32_t last_bdtr;
+    uint32_t last_stage_budget_cycles; /* 原callback锚点至绝对stage截止。 */
+    uint32_t last_irq_budget_cycles; /* 本IRQ首标记至同一绝对截止。 */
     uint32_t over_stage_deadline_samples;
-    /* work返回点距原锚点已>=4250的拍数；不是末端consumer保护触发次数。 */
+    /* work返回点越同slot绝对截止的拍数；不等于完整IRQ或硬件保护次数。 */
     uint32_t over_consumer_budget_samples;
     /* 0直接DWT包围单次HCC/Runtime调用；1原锚点至该调用返回；
      * 2 IRQ首末USER标记；3原锚点至调用入口；4调用返回至IRQ末标记；

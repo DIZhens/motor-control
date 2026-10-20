@@ -12,8 +12,9 @@
 
 #define CYCLES_PER_US (170U)
 #define GUARD_PERIOD_US (50U)
-#define CURRENT_MAX_GAP_US (75U)
-#define CURRENT_MIN_GAP_US (25U)
+#define CURRENT_MAX_GAP_US (125U)
+#define CURRENT_MIN_GAP_US (75U)
+#define CURRENT_PERIOD_US (100U)
 #define CAPTURE_MARGIN_US (5000U)
 #define BUS_MAX_AGE_TICKS (100U) /* 在 G431 的 20 kHz ControlTime 时域中为 5 ms。 */
 
@@ -322,6 +323,11 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
         return;
     }
     if (is_timing_command(request.command)) {
+        /* 旧探针只验证 RCR=0 的原半周窗口，不能用其 PASS 证明新 slot 时序。 */
+        if (s_facts.fast_tick_period_ticks != 1U) {
+            g_target_validation.result = TARGET_VALIDATION_RESULT_TIMING_REJECTED;
+            return;
+        }
         if ((request.power_key != 0U) || (request.duration_us != 0U) || (request.common_duty != 0.0f)) {
             g_target_validation.result = TARGET_VALIDATION_RESULT_BAD_REQUEST;
             return;
@@ -362,7 +368,8 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
         g_target_validation.result = TARGET_VALIDATION_RESULT_NONE;
         g_target_validation.capture_samples = 0U;
         publish_capture();
-        guard_timer_start(now_cycles, TARGET_VALIDATION_CURRENT_SAMPLE_COUNT * 50U + CAPTURE_MARGIN_US);
+        guard_timer_start(now_cycles, TARGET_VALIDATION_CURRENT_SAMPLE_COUNT * CURRENT_PERIOD_US
+            + CAPTURE_MARGIN_US);
         return;
     }
     if (!(request.common_duty >= 0.10f && request.common_duty <= 0.90f)
@@ -662,7 +669,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     if ((current->measured_phases & PHASE_MASK_C) != 0U) {
         g_platform_bringup.phase_c_a = current->phase_c_a;
     }
-    if (++s_observation_divider >= 20U) {
+    if (++s_observation_divider >= 10U) {
         PositionObservation position;
         BusObservation bus;
 
@@ -714,7 +721,7 @@ void target_validation_start(void)
     }
     if (!realtime_motor_io_get_facts(&s_facts)
         || (s_facts.control_time_ticks_per_second != 20000U)
-        || (s_facts.fast_tick_period_ticks != 1U)) {
+        || (s_facts.fast_tick_period_ticks != 2U)) {
         g_platform_bringup.status = 101U;
         return;
     }

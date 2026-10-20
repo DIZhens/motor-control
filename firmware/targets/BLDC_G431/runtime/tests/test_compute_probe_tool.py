@@ -20,6 +20,7 @@ import compute_probe as tool
 
 def fixture_layout():
     layout = {key: 0 for key in tool.layout_spec()}
+    layout["config.fast_tick_period_ticks"] = 1
     for key, address, size in [("request", 0x20000000, 4), ("sequence", 0x20000004, 4),
                                ("guard", 0x20000008, 4), ("publication_sequence", 0x2000000C, 4),
                                ("controllerseq", 0x20000010, 4), ("irqseq", 0x20000014, 4),
@@ -655,6 +656,12 @@ class Tests(unittest.TestCase):
         self.assertEqual((self.output / "001-large-comparison-result.bin").read_bytes(), expected)
         self.assertEqual(run.call_args.args[0][-4:], ["-r32", hex(address), str(size), "-score"])
         self.assertFalse(backend.write_attempted)
+
+    def test_new_100us_slot_layout_is_explicitly_rejected(self):
+        layout = dict(self.layout)
+        layout["config.fast_tick_period_ticks"] = 2
+        with self.assertRaisesRegex(RuntimeError, "100us slot"):
+            tool.validate_layout(layout)
 
 
 if __name__ == "__main__":

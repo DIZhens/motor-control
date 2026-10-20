@@ -20,7 +20,7 @@ TIM_HandleTypeDef htim6 = { TIM6 };
 uint32_t model_ms;
 uint32_t model_facts_ok = 1U;
 uint32_t model_facts_rate = 20000U;
-uint32_t model_facts_period = 1U;
+uint32_t model_facts_period = 2U;
 uint32_t model_bind_ok = 1U;
 uint32_t model_trip_bind_ok = 1U;
 uint32_t model_position_arm_ok = 1U;
@@ -49,8 +49,8 @@ uint32_t model_current_valid = 1U;
 uint32_t model_current_mask = PHASE_MASK_B | PHASE_MASK_C;
 float model_current_b;
 float model_current_c;
-uint32_t model_tick_cycles = 8500U;
-uint32_t model_current_time_step = 1U;
+uint32_t model_tick_cycles = 17000U;
+uint32_t model_current_time_step = 2U;
 uint32_t model_in_callback;
 uint32_t model_callback_count;
 uint32_t model_bind_count;
@@ -358,8 +358,8 @@ void model_start(void)
 void model_current_without_permission(void)
 {
     const ControlRuntimeConfig config = {
-        20000U, 1U, 20U, 100U, 100U, { 3000.0f, 0.01f },
-        { CURRENT_MEASUREMENT_PHASE_BC, 4096U, 0.10f, 0.05f }, 200U, 5.0f, false,
+        20000U, 2U, 10U, 100U, 100U, { 3000.0f, 0.01f },
+        { CURRENT_MEASUREMENT_PHASE_BC, 2048U, 0.10f, 0.05f }, 100U, 5.0f, false,
         { 0U, 0, 0.0f, 0.0f, 0.0f }, false, { 0 }
     };
     PhaseCurrentObservation current = { 0 };
@@ -375,9 +375,9 @@ void model_current_without_permission(void)
     model_position_available = 1U;
     model_position_use_fixed_time = 0U;
     for (tick = 1U; tick <= 500U; tick++) {
-        model_control_time = tick;
-        current.observation_time = tick;
-        (void)control_runtime_step(&model_unpermitted_runtime, tick,
+        model_control_time = tick * 2U;
+        current.observation_time = tick * 2U;
+        (void)control_runtime_step(&model_unpermitted_runtime, tick * 2U,
             &current, true, 0U, NULL, false);
     }
 }
@@ -385,8 +385,8 @@ void model_current_without_permission(void)
 void model_angle_start(void)
 {
     ControlRuntimeConfig config = {
-        20000U, 1U, 20U, 100U, 100U, { 3000.0f, 0.01f },
-        { CURRENT_MEASUREMENT_PHASE_BC, 4096U, 0.10f, 0.05f }, 200U, 5.0f, false,
+        20000U, 2U, 10U, 100U, 100U, { 3000.0f, 0.01f },
+        { CURRENT_MEASUREMENT_PHASE_BC, 2048U, 0.10f, 0.05f }, 100U, 5.0f, false,
         { 0U, 0, 0.0f, 0.0f, 0.0f }, false, { 0 }
     };
 
@@ -422,7 +422,7 @@ void model_angle_command_start(void)
     PhaseCurrentObservation current = { 0 };
     MotorSnapshot snapshot;
 
-    model_control_time++;
+    model_control_time += 2U;
     current.measured_phases = PHASE_MASK_B | PHASE_MASK_C;
     current.observation_time = model_control_time;
     current.acquisition_valid = true;

@@ -23,7 +23,7 @@ RAM_START, RAM_END = 0x20000000, 0x20008000
 DHCSR = 0xE000EDF0
 # G431 的外设基址来自本 Target 的 CMSIS 设备映射；BDTR 偏移仍从同次 AXF 类型取得。
 TIM1_BASE = 0x40012C00
-SAMPLES = 4096
+SAMPLES = 2048
 RESULT_FIELDS = {
     "request_sequence": "I", "state": "I", "failure": "I", "sample_count": "I",
     "first_sample_time": "Q", "last_sample_time": "Q", "offset_b_a": "f", "offset_c_a": "f",
@@ -479,8 +479,8 @@ def read_health(backend, layout, reference, tag, timeout_s=20.0, clock=time.mono
 def validate_complete(result):
     require(result["state"] == 2 and result["failure"] == 0, "采集没有完整成功")
     require(result["sample_count"] == SAMPLES and result["last_sample_time"] >= result["first_sample_time"]
-            and result["last_sample_time"] - result["first_sample_time"] == SAMPLES - 1,
-            "采集不是完整连续的 4096 点窗口")
+            and result["last_sample_time"] - result["first_sample_time"] == 2 * (SAMPLES - 1),
+            "采集不是完整连续的 2048 点窗口")
     for phase in "bc":
         values = {field: result[f"phase_{phase}.{field}"] for field in ["mean_a", "min_a", "max_a", "variance_a2"]}
         require(all(math.isfinite(value) for value in values.values())
@@ -591,7 +591,7 @@ def main(argv=None):
         backend = CubeBackend(prepared, args.cli.resolve())
         report = run_acquisition(backend, prepared, reference)
         save(prepared.output / "result.json", report)
-        print("4096 点已冻结并复核；原始值与扣除既有零偏后的统计已保存，未应用增益。")
+        print("2048 点已冻结并复核；原始值与扣除既有零偏后的统计已保存，未应用增益。")
         return 0
     except Exception as error:
         save(prepared.output / "failure.json", {"status": "失败，未自动补发或清理", "error": str(error),

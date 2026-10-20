@@ -154,7 +154,7 @@ for source in probe.MODES:
 def startup_session():
     state = healthy()
     state["pwm"] = {"center_aligned_mode": 1, "clock_division": 0, "prescaler": 0,
-        "period_counts": 4250, "repetition": 0, "output_config": 0x1555,
+        "period_counts": 4250, "repetition": 3, "update_irq_enabled": True, "output_config": 0x1555,
         "sample_compare": 4240, "timer_deadtime_code": 0,
         "channels": [{"mode": mode, "selection": 0, "preload": True} for mode in [6, 6, 6, 7]]}
     return FakeSession(state)

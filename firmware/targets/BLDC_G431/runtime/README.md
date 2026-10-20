@@ -35,6 +35,16 @@ ARMCC `-O3 -Otime`，其余组保留原继承配置。按速度优化使短数�
 Timing 中排除旧 Runtime、Communication 和 Validation 组。
 烧录是独立的现场步骤；编译不自动连接 ST-Link 或下载镜像。
 
+## 实时频率与作用时刻
+
+TIM1 载波保持 20 kHz；RCR=3 使三相 preload 每100 µs在指定谷底同时生效。
+每个slot仅采首个峰值，电流环10 kHz，速度环每10个样本更新一次即1 kHz。
+Platform的SSI/母线采集及Runtime观测读取也按10个样本分频，保持1 kHz。
+测量到下一有效更新约75 µs；若以随后100 µs电压保持区间的中心作为逆Park参考，
+名义施加角预测为125 µs。电流PI dt为100 µs、速度PI dt为1 ms。
+当前Observe控制配置仍关闭；这些时序参数不构成电流增益/角度标定或功率许可。
+完整slot、预热、截止和失败语义见[时序合同](../validation/PWM_TIMING.md)。
+
 ## 执行职责
 
 - 装配先 safe-off，再核对时钟、绑定 sample / trip、arm position / bus / realtime / protection，
@@ -43,7 +53,7 @@ Timing 中排除旧 Runtime、Communication 和 Validation 组。
   ADC sample callback 调用 Motor 内部 `control_runtime_step()`；该实时边界是运行期
   Motor、观测缓存和估计器的唯一写者。故障和 Stop 优先，随后更新反馈并消费其余完整命令。
   Stop 优先于普通排队请求，并丢弃更早的待处理命令。
-- TIM6 每 50 µs 检查独立 DWT 时钟和采样心跳；间隔超过 75 µs 锁存故障并 safe-off。
+- TIM6 每 50 µs 检查独立 DWT 时钟和采样心跳；间隔超过 125 µs 锁存故障并 safe-off。
   最迟在后续一次 TIM6 检查发现；它不是完整 ISR WCET 或未来带载控制截止证明。
 - 后台以不等待的寄存器轮询收发 USART1，每次至多一字节；44 字节发送缓存完成前不被
   新快照覆盖。遥测来自有界重试的一致性 publication，不把 UART 放入 ADC 回调。
@@ -53,7 +63,7 @@ Timing 中排除旧 Runtime、Communication 和 Validation 组。
 
 ## 编码器反馈
 
-当前仅支持 Platform 提供的周期单圈位置，每 20 个 fast tick 读取一次 latest observation。
+当前仅支持 Platform 提供的周期单圈位置，每 10 个 fast tick 读取一次 latest observation。
 只在采集时间戳前进时更新纯 C `PositionEstimator`，以实际采集间隔计算最近周期差，
 不把重复轮询的旧位置当作新采集。速度正负沿编码器机械坐标，尚未标定为电机正转方向。
 
@@ -82,8 +92,8 @@ ControlRuntime 已接入纯 C 电角度映射与短时预测：缓存合法原�
 当前 Observe 构建的启动校零许可仅适用于电机母线电源、电机三相及外部注入源均已断开的现场条件。
 该许可不是硬件检测结果，不能照搬为正式带电入口的通用启动策略。
 Motor 内部 ControlRuntime 在健康 IDLE、当拍 MOE 关闭、有效速度绝对值不超过 5 rpm
-持续 200 拍后，收集连续 4096 拍 B/C 名义电流；20 kHz 下窗口约 204.8 ms。
-相邻采样时间必须相差一个 fast tick，重复、跳拍或回退均撤销零偏资格。
+持续 100 拍（10 ms）后，收集连续 2048 拍 B/C 名义电流；10 kHz 下窗口约 204.8 ms。
+ControlTime 保持 20000 tick/s，相邻采样时间必须相差 2 tick，重复、跳拍或回退均撤销零偏资格。
 
 每相窗口均值绝对值上限暂为 0.10 A，峰峰值上限 0.05 A；这两个数是本次工程候选门限，
 不是传感器精度、运行电流限值或已通过实测的统计范围。合格窗口后冻结 offset，再逐拍
@@ -119,10 +129,11 @@ Stop 清目标、待启动请求和两环积分，保留正常冻结零偏；任
 速度 PI 只跟踪自身 Iq 限值，电流 PI 跟踪调制器电压限幅；实际电压饱和下的级联动态仍需整体验收。
 
 当前 G431 控制配置为零、运行许可关闭，Target 仍把意外 MOE 视为故障；模型中的合法使能
-不表示这个实机入口已开放。尤其三角函数、PI 和 SVPWM 的真实执行时间必须满足当前约
-15 µs 的理论最大 stage 前段预算，实际入口延迟还会缩短该窗口；模型与编译不证明该预算。
+不表示这个实机入口已开放。三角函数、PI、SVPWM 及提交必须满足 Platform 给出的本 slot
+绝对截止；当前首峰采样到下一有效谷底约 75 µs，另留 10 µs 事务预留，实际可用预算还须
+扣除 ADC 和入口开销，不能沿用旧半周约 15 µs 的窗口。模型与编译不证明实机执行预算。
 
-## 后台无功率计算计时
+## 历史后台无功率计算计时
 
 `compute_probe.h/.c` 调用正式电流预处理、电角度、速度 PI 与电流 PI；
 `compute_comparison.h/.c` 为软件 sin/cos 和 G431 CORDIC 各持有一份独立算法状态。
@@ -181,7 +192,7 @@ CORDIC 独占采用最多四次 exclusive 尝试；普通异常清除 reservatio
 
 当前 Observe 候选已取消 `CONTROL_CURRENT_PROFILE`，控制器内部无上述七个探针调用。
 旧后台工具需要这些统计，因此本候选在请求写入前明确撤销旧 compute 许可；历史窗口
-继续绑定其冻结镜像。当前使用下述提交预算工具，不能把两种测量布局或验收结论互换。
+继续绑定其冻结镜像。100 µs slot统一使用独立Timing入口，不能把不同测量布局或验收结论互换。
 
 [`tools/compute_probe.py`](tools/compute_probe.py) 默认只冻结并核对同次 HEX/AXF/MAP、
 真实 DWARF 字段、短枚举和对照 schema；旧单后端布局不能套用到新镜像。
@@ -193,7 +204,12 @@ CORDIC 独占采用最多四次 exclusive 尝试；普通异常清除 reservatio
 .venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tools/compute_probe.py --build-dir <同次构建目录> --expected-hex-sha256 <完整SHA256> --output <新目录>
 ```
 
-## 无功率提交预算诊断
+## 历史无功率提交预算诊断
+
+以下诊断实现和独立模型仅保留原50 µs采样候选的解释。当前100 µs入口明确撤销
+旧compute/stage/IRQ诊断许可；旧工具离线核对fast_tick_period_ticks，仅接受原值1，
+新值2会拒绝并提示使用`BLDC_G431_Timing`，不会套用旧半周期期限给出PASS。
+
 
 `stage_budget.c` 拥有独立 Motor/ControlRuntime 试具；`stage_budget_runtime.c` 仅通过符号
 重命名编译同一正式源码，不复制算法，也不在公共 Runtime 增加诊断业务模式。合成电流、
@@ -237,23 +253,26 @@ MAP 压缩 RW 时核对明确的 `COMPRESSED[...]` 物理加载长度，HEX 与 
 | 模式 | 被直接 DWT 读数包围的唯一调用 | 成功统计的含义 |
 | --- | --- | --- |
 | `stage`（1） | 真实 `realtime_motor_io_stage_phase_duty()`，交替不等三相合法 duty | 80 次真实调用、80 次接受，无 Runtime、sink 或 enable |
-| `compute`（2） | 同源 `control_runtime_step()`，合成 RUN、电流和反馈 | 80 次计算，8 次速度更新、4 次观测刷新；80 次数值 sink，真实 stage/enable 均为零 |
+| `compute`（2） | 同源 `control_runtime_step()`，合成 RUN、电流和反馈 | 80 次计算，8 次速度更新、8 次观测刷新；80 次数值 sink，真实 stage/enable 均为零 |
 
 sink 只检查归一化 duty 的有限值与正常包络，不能被解释为硬件提交接受。compute 模式
-不以原 1700 counts 截止或 25 µs 半周拒绝纯计算测量；原 Platform 策略和硬件配置保持
-原值，真实 MOE 始终须为零。合成标定、RUN 和 12 V 输入不是现场测量或控制许可。
+允许跨越中间峰/谷计算，但必须在当前slot的绝对截止以前完成IRQ末标记。
+stage/IRQ预算从Platform只读getter取得，不按CNT/DIR推算；新slot不会刷新旧请求的预算。
+真实MOE始终须为零。合成标定、RUN 和 12 V 输入不是现场测量或控制许可。
 
-结果布局为 248 B，9 行分别记录：直接调用、原 Platform 锚点至调用返回、IRQ 首末 USER
+结果 schema=2，布局为 256 B，9 行分别记录：直接调用、原 Platform 锚点至调用返回、IRQ 首末 USER
 标记、锚点至调用入口、调用返回至末标记、速度拍、观测刷新拍、普通快拍和慢拍。
 许可、模板绑定、合成输入和额外 MMIO stamp 在直接调用区间外；调用区间仍含 DWT
 及调用本身的测量开销。各行包含分类与嵌套区间，不能相加推算函数净成本。
 
 IRQ 标记区间包含 HAL、健康 publication 及 Platform SSI/母线尾部；末标记后的统计、
-终态 safe-off、248 B 结果发布和异常入出栈未计入。准备拍不属于 80 点。regular-only IRQ
-不充当控制拍，缺失或未配对 IRQ 标记不能 COMPLETE。标记区间小于 50 µs 不等于整个
-ISR 已满足该预算，也不是未插桩 WCET。完整结果与独立健康后检须分别判定。
+即时 safe-off 和异常入出栈未计入。第 80 拍立即关断并保持 active，下一采样空拍先核对
+真实许可，再复核关断并发布 256 B 结果；不执行第 81 次控制，也不覆盖第 80 拍读数。
+若第 80 拍完整 IRQ 已被 Platform 判为迟到，下一拍必须发布失败。准备和终态收尾拍不属于 80 点。regular-only IRQ
+不充当控制拍，缺失或未配对IRQ标记不能COMPLETE。结果另存同一slot的stage/IRQ预算，
+超过绝对截止即失败；成功的有限窗口也不等于未插桩完整ISR已满足该预算或WCET。完整结果与独立健康后检须分别判定。
 
-真实健康快照为 64 B，按 100 Hz 或许可/故障变化发布；不伪装成 Motor IDLE 快照。
+真实健康快照schema=2，为64 B，按 100 Hz 或许可/故障变化发布；不伪装成 Motor IDLE 快照。
 独立心跳仍逐拍更新，TIM6 故障单独锁存。前后检查 CPU、MOE、guard、推进的时基、
 低母线及有效参考位置；末标记前再读权威 Hardware Trip，不能只凭拍首许可发布完成。
 
@@ -271,14 +290,14 @@ ISR 已满足该预算，也不是未插桩 WCET。完整结果与独立健康�
 
 `current_capture.h/.c` 是此 Target 的无功率诊断统计器，不属于 Motor 命令、控制算法或
 UART 协议。仅在健康 IDLE、当拍功率关闭、零偏 READY 且位置速度有效静止时，接受一次
-固定 4096 点的原始 B/C 电流窗口。请求当拍是首点，20 kHz 下窗口约 204.8 ms。
+固定 2048 点的原始 B/C 电流窗口。请求当拍是首点，10 kHz 下窗口约 204.8 ms。
 start 时复制冻结零偏；窗口只计算原始均值、极值及无偏样本方差，不学习或应用增益。
 主机另以原始均值/极值减冻结零偏得到校正统计，方差保持不变。
 
 调试入口仅允许主机向 `g_target_runtime_current_request` 写一个非零新序号；保持同一
 请求序号不会重放。开始、完成或失败时，用奇偶版本号锁存
 `g_target_runtime_current_capture`，并同拍更新现有业务快照。
-ACTIVE 的锁存内容不逐拍变化，只有 COMPLETE 且 count=4096 才是完整结果。
+ACTIVE 的锁存内容不逐拍变化，只有 COMPLETE 且 count=2048 才是完整结果。
 Stop 优先撤销窗口；采样、时间、位置、静止条件或功率/故障状态异常会失败锁存。
 活动窗口收到另一新请求时丢弃旧统计并返回 BUSY，不开始替代窗口。
 ADC 停滞时结果可能留在 ACTIVE，主机仍须检查独立 guard 并有界超时。
@@ -347,8 +366,9 @@ ADC 丢失、旧快照失效、低优先级代码被 ADC 抢占的交错，以�
 单地址一次写、应答丢失不补发和采后复核。模型不代替 UART 链路、
 实机速度精度或 ISR WCET；软件与实机结论分别记录在 Target 验证页。
 既有 UART、手转反馈、逻辑供电零偏及后台计算计时各有有限实测；软件/CORDIC 对照的
-当前执行身份和范围见验证页。当前提交预算实测未通过，下一步先收敛整条计算/提交路径，
-电流增益/方向对照可独立准备；通过时序及实物确认后再安排受控电角度标定和 FOC。
+当前执行身份和范围见验证页。20 / 10 / 1 kHz 下已分别完成真实 stage 与同源 compute
+的有限无功率窗口，镜像和后检查各自归属；尚未完成真实 RUN 计算与提交的集成验收。
+后续继续电流增益/方向对照，再按实际时序和实物结果安排受控电角度标定及 FOC。
 各轮镜像与实测范围、既有台架证据仍从
 [VALIDATION.md](../VALIDATION.md) 进入，按具体修改影响选择复测。
 
