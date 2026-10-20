@@ -57,6 +57,7 @@ typedef enum {
     TARGET_VALIDATION_COMMAND_REARM = 9,
     TARGET_VALIDATION_COMMAND_OPEN_LOOP = 15, /* 有限低电压试转；不复用旧的 10～14 时序命令。 */
     TARGET_VALIDATION_COMMAND_ANGLE_SURVEY = 16, /* 单次有限静态电角往返，仅生成观测证据。 */
+    TARGET_VALIDATION_COMMAND_CURRENT_SURVEY = 18, /* 5秒有限电流磁场往返；不授予转子FOC。 */
     TARGET_VALIDATION_COMMAND_CURRENT_HOLD = 17, /* 3秒静止αβ电流PI；不依赖转子电角标定。 */
     TARGET_VALIDATION_COMMAND_TIMING_IMMEDIATE = TIMING_PROBE_CASE_IMMEDIATE,
     TARGET_VALIDATION_COMMAND_TIMING_BEFORE = TIMING_PROBE_CASE_BEFORE,
@@ -107,7 +108,7 @@ typedef enum {
 #define TARGET_VALIDATION_ANGLE_SURVEY_DURATION_US (5500000U)
 
 /* 先写 payload，最后写新的非零 sequence；等待消费后再提交下一条。
- * power_key 消费即清零，PWM_BURST / BREAK_* / OPEN_LOOP / ANGLE_SURVEY 必须逐次提供。不是安全认证。
+ * power_key 消费即清零，PWM_BURST / BREAK_* / OPEN_LOOP / ANGLE_SURVEY / CURRENT_* 必须逐次提供。不是安全认证。
  * BREAK_* 固定 duration_us=2000 / common_duty=0.5，不允许带电机。
  * TIMING_* 固定 power_key=0 / duration_us=0 / common_duty=0，仅低于 4 V 母线。 */
 typedef struct {
@@ -242,6 +243,22 @@ extern volatile TargetValidationOpenLoopConfig g_target_validation_open_loop_con
 extern volatile TargetValidationOpenLoopSnapshot g_target_validation_open_loop;
 extern volatile TargetValidationAngleSurveyConfig g_target_validation_angle_survey_config;
 extern volatile TargetValidationAngleSurveySnapshot g_target_validation_angle_survey;
+/* 与电压往返独立的单位及地址；只允许excursion_turns=1。 */
+typedef struct {
+    float current_reference_a;
+    float excursion_turns;
+} TargetValidationCurrentSurveyConfig;
+typedef struct {
+    uint32_t sequence;
+    uint32_t request_sequence;
+    uint32_t result;
+    uint32_t stable_window_mask;
+    float excursion_turns;
+    float current_reference_a;
+    TargetValidationAngleWindow windows[3];
+} TargetValidationCurrentSurveySnapshot;
+extern volatile TargetValidationCurrentSurveyConfig g_target_validation_current_survey_config;
+extern volatile TargetValidationCurrentSurveySnapshot g_target_validation_current_survey;
 extern volatile CurrentHoldConfig g_target_validation_current_hold_config;
 extern volatile CurrentHoldSnapshot g_target_validation_current_hold;
 /* ADC 丢失时快照可能停在旧状态；此字独立记录关断原因。 */

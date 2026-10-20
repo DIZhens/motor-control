@@ -95,7 +95,8 @@ class Session(loop.Session):
         self.parameters = (payload[0], 0.0)  # 旧 72 字节诊断中的目标电频固定为零。
 
 
-def read_survey(session, request):
+def read_survey(session, request, excitation_field="voltage_v"):
+    require(excitation_field in ["voltage_v", "current_reference_a"], "未知励磁单位")
     layout = session.survey_layout
     address = layout["angle_survey"]
     raw = [session.upload("survey-frozen-" + str(i), [("survey", address, 168)])["survey"] for i in [1, 2]]
@@ -126,7 +127,7 @@ def read_survey(session, request):
             and windows[i]["last_position_time"] < windows[i+1]["first_position_time"] for i in range(2)),
             "三个窗口的采集时间不符合 1.5 秒间隔")
     return {"sequence": seq, "request_sequence": request, "result": result, "stable_window_mask": mask,
-            "voltage_v": voltage, "excursion_turns": excursion, "windows": windows}
+            excitation_field: voltage, "excursion_turns": excursion, "windows": windows}
 
 
 def circular_delta(value):

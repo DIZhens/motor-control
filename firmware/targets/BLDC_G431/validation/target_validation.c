@@ -29,6 +29,8 @@ volatile TargetValidationOpenLoopConfig g_target_validation_open_loop_config;
 volatile TargetValidationOpenLoopSnapshot g_target_validation_open_loop;
 volatile TargetValidationAngleSurveyConfig g_target_validation_angle_survey_config;
 volatile TargetValidationAngleSurveySnapshot g_target_validation_angle_survey;
+volatile TargetValidationCurrentSurveyConfig g_target_validation_current_survey_config;
+volatile TargetValidationCurrentSurveySnapshot g_target_validation_current_survey;
 volatile CurrentHoldConfig g_target_validation_current_hold_config;
 volatile CurrentHoldSnapshot g_target_validation_current_hold;
 volatile uint32_t g_target_validation_stop_reason;
@@ -62,6 +64,7 @@ static ControlTime s_open_loop_sample_time;
 static ControlTime s_open_loop_position_time;
 static float s_open_loop_position;
 static bool s_angle_survey_active;
+static bool s_current_survey_active;
 static TargetValidationAngleSurveySnapshot s_angle_survey_report;
 static float s_angle_window_anchor[3];
 static float s_angle_window_min[3];
@@ -170,30 +173,48 @@ static void finish_operation(void)
         s_open_loop_report.module_reason = (uint32_t)s_open_loop.reason;
         s_open_loop_active = false;
         publish_open_loop();
-        if (s_angle_survey_active) {
-            uint32_t i;
-            uint32_t sequence = g_target_validation_angle_survey.sequence;
+    }
+    if (s_angle_survey_active) {
+        uint32_t i;
+        uint32_t sequence = g_target_validation_angle_survey.sequence;
 
-            s_angle_survey_report.result = g_target_validation_stop_reason;
-            s_angle_survey_report.stable_window_mask = 0U;
-            for (i = 0U; i < 3U; i++) {
-                const TargetValidationAngleWindow *w = &s_angle_survey_report.windows[i];
+        s_angle_survey_report.result = g_target_validation_stop_reason;
+        s_angle_survey_report.stable_window_mask = 0U;
+        for (i = 0U; i < 3U; i++) {
+            const TargetValidationAngleWindow *w = &s_angle_survey_report.windows[i];
 
-                /* 只在正常完成且每个窗口自身满足观察条件时标记；不授予标定或 RUN。 */
-                if (g_target_validation_stop_reason == TARGET_VALIDATION_RESULT_COMPLETE &&
-                    w->sample_count >= 200U && w->last_position_time >= w->first_position_time + 4500U &&
-                    w->span_turns <= 0.002f) {
-                    s_angle_survey_report.stable_window_mask |= 1U << i;
-                }
+            /* 只在正常完成且每个窗口自身满足观察条件时标记；不授予标定或 RUN。 */
+            if (g_target_validation_stop_reason == TARGET_VALIDATION_RESULT_COMPLETE &&
+                w->sample_count >= 200U && w->last_position_time >= w->first_position_time + 4500U &&
+                w->span_turns <= 0.002f) {
+                s_angle_survey_report.stable_window_mask |= 1U << i;
             }
+        }
+        if (s_current_survey_active) {
+            TargetValidationCurrentSurveySnapshot result = {0};
+            sequence = g_target_validation_current_survey.sequence;
+            result.request_sequence = s_angle_survey_report.request_sequence;
+            result.result = s_angle_survey_report.result;
+            result.stable_window_mask = s_angle_survey_report.stable_window_mask;
+            result.excursion_turns = 1.0f;
+            result.current_reference_a = s_current_hold_report.alpha_reference_a;
+            for (i = 0U; i < 3U; i++) { result.windows[i] = s_angle_survey_report.windows[i]; }
+            g_target_validation_current_survey.sequence = sequence + 1U;
+            __DMB();
+            result.sequence = sequence + 1U;
+            g_target_validation_current_survey = result;
+            __DMB();
+            g_target_validation_current_survey.sequence = sequence + 2U;
+            s_current_survey_active = false;
+        } else {
             g_target_validation_angle_survey.sequence = sequence + 1U;
             __DMB();
             s_angle_survey_report.sequence = sequence + 1U;
             g_target_validation_angle_survey = s_angle_survey_report;
             __DMB();
             g_target_validation_angle_survey.sequence = sequence + 2U;
-            s_angle_survey_active = false;
         }
+        s_angle_survey_active = false;
     }
     if (s_capturing) {
         s_statistics.result = g_target_validation_stop_reason;
@@ -509,7 +530,8 @@ static bool prepare_open_loop(const TargetValidationMailbox *request,
 }
 
 static void prepare_current_hold(const TargetValidationMailbox *request,
-    const CurrentHoldConfig *config, const PhaseCurrentObservation *current, uint32_t now_cycles)
+    const CurrentHoldConfig *config, const PhaseCurrentObservation *current, uint32_t now_cycles,
+    bool survey, float excursion)
 {
     CurrentHoldSnapshot empty = {0};
     PositionObservation position;
@@ -517,9 +539,11 @@ static void prepare_current_hold(const TargetValidationMailbox *request,
 
     if (request->power_key != TARGET_VALIDATION_POWER_KEY) {
         failure = TARGET_VALIDATION_RESULT_LOCKED;
-    } else if (request->duration_us != CURRENT_HOLD_DURATION_US || request->common_duty != 0.5f
+    } else if (request->duration_us != (survey ? CURRENT_SURVEY_DURATION_US : CURRENT_HOLD_DURATION_US) || request->common_duty != 0.5f
         || s_facts.control_time_ticks_per_second != 20000U || s_facts.fast_tick_period_ticks != 2U
-        || !current_hold_init(&s_current_hold, config)) {
+        || (survey && excursion != 1.0f)
+        || !(survey ? current_hold_survey_init(&s_current_hold, config->alpha_reference_a)
+            : current_hold_init(&s_current_hold, config))) {
         failure = TARGET_VALIDATION_RESULT_BAD_REQUEST;
     } else if (!open_loop_zero_valid()) {
         failure = TARGET_VALIDATION_RESULT_BAD_ZERO;
@@ -537,6 +561,26 @@ static void prepare_current_hold(const TargetValidationMailbox *request,
     s_current_hold_report.offset_b_a = s_statistics.phase_b.mean_a;
     s_current_hold_report.offset_c_a = s_statistics.phase_c.mean_a;
     s_current_hold_active = true;
+    s_current_survey_active = survey;
+    s_angle_survey_active = survey;
+    if (survey) {
+        TargetValidationAngleSurveySnapshot empty_survey = {0};
+        uint32_t i;
+        s_angle_survey_report = empty_survey;
+        s_angle_survey_report.request_sequence = request->sequence;
+        s_angle_survey_report.excursion_turns = 1.0f;
+        for (i = 0U; i < 3U; i++) {
+            s_angle_window_anchor[i] = s_angle_window_min[i] = 0.0f;
+            s_angle_window_max[i] = s_angle_window_mean[i] = 0.0f;
+        }
+        g_target_validation_current_survey.sequence++;
+        __DMB();
+        g_target_validation_current_survey.request_sequence = request->sequence;
+        g_target_validation_current_survey.result = TARGET_VALIDATION_RESULT_NONE;
+        g_target_validation_current_survey.stable_window_mask = 0U;
+        __DMB();
+        g_target_validation_current_survey.sequence++;
+    }
     if (failure != TARGET_VALIDATION_RESULT_NONE) {
         stop_operation(failure);
         finish_operation();
@@ -567,6 +611,7 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
     TargetValidationMailbox request;
     TargetValidationOpenLoopConfig open_loop_config;
     CurrentHoldConfig current_hold_config;
+    TargetValidationCurrentSurveyConfig current_survey_config;
     ProtectionProbeSource probe_source = PROTECTION_PROBE_NONE;
     uint32_t primask = __get_PRIMASK();
     uint32_t sequence;
@@ -580,6 +625,7 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
     request = g_target_validation_request;
     open_loop_config = g_target_validation_open_loop_config;
     current_hold_config = g_target_validation_current_hold_config;
+    current_survey_config = g_target_validation_current_survey_config;
     if (request.command == TARGET_VALIDATION_COMMAND_ANGLE_SURVEY) {
         open_loop_config.voltage_v = g_target_validation_angle_survey_config.voltage_v;
         open_loop_config.electrical_frequency_hz = g_target_validation_angle_survey_config.excursion_turns;
@@ -614,6 +660,7 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
         && (request.command != TARGET_VALIDATION_COMMAND_OPEN_LOOP)
         && (request.command != TARGET_VALIDATION_COMMAND_ANGLE_SURVEY)
         && (request.command != TARGET_VALIDATION_COMMAND_CURRENT_HOLD)
+        && (request.command != TARGET_VALIDATION_COMMAND_CURRENT_SURVEY)
         && !is_timing_command(request.command)) {
         g_target_validation.result = TARGET_VALIDATION_RESULT_BAD_REQUEST;
         return;
@@ -656,8 +703,13 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
         g_target_validation.result = TARGET_VALIDATION_RESULT_PROBE_REJECTED;
         return;
     }
+    if (request.command == TARGET_VALIDATION_COMMAND_CURRENT_SURVEY) {
+        CurrentHoldConfig config = {current_survey_config.current_reference_a, 0.0f};
+        prepare_current_hold(&request, &config, current, now_cycles, true, current_survey_config.excursion_turns);
+        return;
+    }
     if (request.command == TARGET_VALIDATION_COMMAND_CURRENT_HOLD) {
-        prepare_current_hold(&request, &current_hold_config, current, now_cycles);
+        prepare_current_hold(&request, &current_hold_config, current, now_cycles, false, 0.0f);
         return;
     }
     if (request.command == TARGET_VALIDATION_COMMAND_OPEN_LOOP || request.command == TARGET_VALIDATION_COMMAND_ANGLE_SURVEY) {
@@ -854,19 +906,21 @@ static void record_open_loop_duty(const PhaseDutyRequest *duty)
     }
 }
 
-static bool record_angle_survey(const PositionObservation *position, const VoltageOpenLoopInput *input)
+static bool record_angle_survey(const PositionObservation *position, float nominal_b, float nominal_c)
 {
     uint64_t elapsed;
     uint64_t ends[3];
+    ControlTime started = s_current_survey_active ? s_current_hold_started : s_open_loop.started_at;
     uint32_t i;
 
-    if (!s_angle_survey_active || position->observation_time < s_open_loop.started_at) {
+    if (!s_angle_survey_active || position->observation_time < started) {
         return true;
     }
-    elapsed = position->observation_time - s_open_loop.started_at;
+    elapsed = position->observation_time - started;
     ends[0] = (uint64_t)s_open_loop.config.voltage_ramp_ticks + s_open_loop.config.alignment_hold_ticks;
     ends[1] = ends[0] + s_open_loop.config.frequency_ramp_ticks + s_open_loop.config.alignment_hold_ticks;
     ends[2] = ends[1] + s_open_loop.config.frequency_ramp_ticks + s_open_loop.config.alignment_hold_ticks;
+    if (s_current_survey_active) { ends[0] = 30000U; ends[1] = 60000U; ends[2] = 90000U; }
     for (i = 0U; i < 3U; i++) {
         TargetValidationAngleWindow *w = &s_angle_survey_report.windows[i];
         float delta, count, mean;
@@ -911,8 +965,8 @@ static bool record_angle_survey(const PositionObservation *position, const Volta
         w->span_turns = s_angle_window_max[i] - s_angle_window_min[i];
         w->last_position_time = position->observation_time;
         w->last_position_turns = position->mechanical_position_turns;
-        w->mean_nominal_b_a += (input->phase_current_a[1] - w->mean_nominal_b_a) / count;
-        w->mean_nominal_c_a += (input->phase_current_a[2] - w->mean_nominal_c_a) / count;
+        w->mean_nominal_b_a += (nominal_b - w->mean_nominal_b_a) / count;
+        w->mean_nominal_c_a += (nominal_c - w->mean_nominal_c_a) / count;
     }
     return true;
 }
@@ -995,7 +1049,7 @@ static void run_open_loop(const PhaseCurrentObservation *current, uint32_t inter
             stop_operation(open_loop_module_result());
             return;
         }
-        if (!record_angle_survey(&position, &input)) {
+        if (!record_angle_survey(&position, input.phase_current_a[1], input.phase_current_a[2])) {
             stop_operation(TARGET_VALIDATION_RESULT_BAD_POSITION);
             return;
         }
@@ -1030,7 +1084,8 @@ static void run_current_hold(const PhaseCurrentObservation *current, uint32_t in
     float alpha = a;
     float beta = (b - c) * 0.5773502691896258f;
     float peak = fmaxf(fabsf(a), fmaxf(fabsf(b), fabsf(c)));
-    float voltage;
+    float voltage, valpha, vbeta;
+    bool window;
 
     if (interval_cycles < CURRENT_MIN_GAP_US * CYCLES_PER_US
         || interval_cycles > CURRENT_MAX_GAP_US * CYCLES_PER_US
@@ -1085,6 +1140,13 @@ static void run_current_hold(const PhaseCurrentObservation *current, uint32_t in
             : TARGET_VALIDATION_RESULT_OPEN_LOOP_REJECTED);
         return;
     }
+    if (s_current_survey_active && !record_angle_survey(&position,
+        current->phase_b_a - report->offset_b_a, current->phase_c_a - report->offset_c_a)) {
+        stop_operation(TARGET_VALIDATION_RESULT_BAD_POSITION);
+        return;
+    }
+    valpha = output.applied_vd_v * s_current_hold.stator_cosine - output.applied_vq_v * s_current_hold.stator_sine;
+    vbeta = output.applied_vd_v * s_current_hold.stator_sine + output.applied_vq_v * s_current_hold.stator_cosine;
     voltage = sqrtf(output.applied_vd_v * output.applied_vd_v
         + output.applied_vq_v * output.applied_vq_v);
     if (!output.valid || !isfinite(voltage) || voltage > 0.40001f) {
@@ -1104,15 +1166,18 @@ static void run_current_hold(const PhaseCurrentObservation *current, uint32_t in
     report->max_duty = fmaxf(report->max_duty, fmaxf(output.duty_a, fmaxf(output.duty_b, output.duty_c)));
     report->max_voltage_v = fmaxf(report->max_voltage_v, voltage);
     report->voltage_limited_samples += output.voltage_limited ? 1U : 0U;
-    if (elapsed >= 40000U && elapsed < 50000U) {
+    window = s_current_survey_active ? ((elapsed >= 25000U && elapsed < 30000U)
+        || (elapsed >= 55000U && elapsed < 60000U) || (elapsed >= 85000U && elapsed < 90000U))
+        : (elapsed >= 40000U && elapsed < 50000U);
+    if (window) {
         float count = (float)++report->window_samples;
         float ea = alpha - report->alpha_reference_a;
         float eb = beta - report->beta_reference_a;
 
         report->mean_alpha_a += (alpha - report->mean_alpha_a) / count;
         report->mean_beta_a += (beta - report->mean_beta_a) / count;
-        report->mean_voltage_alpha_v += (output.applied_vd_v - report->mean_voltage_alpha_v) / count;
-        report->mean_voltage_beta_v += (output.applied_vq_v - report->mean_voltage_beta_v) / count;
+        report->mean_voltage_alpha_v += (valpha - report->mean_voltage_alpha_v) / count;
+        report->mean_voltage_beta_v += (vbeta - report->mean_voltage_beta_v) / count;
         report->peak_tracking_error_a = fmaxf(report->peak_tracking_error_a, sqrtf(ea * ea + eb * eb));
     }
 }

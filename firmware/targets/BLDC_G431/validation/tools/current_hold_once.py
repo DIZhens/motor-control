@@ -101,16 +101,16 @@ def read_result(session, tag):
     return result
 
 
-def validate_result(observed, session, stats):
+def validate_result(observed, session, stats, *, counts=(30002, 30001, 5000), references=None):
     require(not observed["moe"] and not observed["halted"] and observed["stop_reason"] == observed["result"] == 1,
         "电流环未正常完成并实际关断")
     require(all(math.isfinite(observed[n]) for n, fmt in FIELDS.items() if fmt == "f"), "电流环结果包含坏数值")
-    require(tuple(observed[n] for n in ["alpha_reference_a", "beta_reference_a"]) == session.payload_parameters
+    require(tuple(observed[n] for n in ["alpha_reference_a", "beta_reference_a"]) == (session.payload_parameters if references is None else references)
         and observed["offset_b_a"] == stats["phase_b.mean_a"] and observed["offset_c_a"] == stats["phase_c.mean_a"],
         "目标或冻结零点不匹配")
-    require(observed["sample_count"] == 30002 and observed["enabled_samples"] == 30001
-        and observed["window_samples"] == 5000
-        and 0 <= observed["voltage_limited_samples"] < 30000
+    require(observed["sample_count"] == counts[0] and observed["enabled_samples"] == counts[1]
+        and observed["window_samples"] == counts[2]
+        and 0 <= observed["voltage_limited_samples"] < counts[1] - 1
         and 0 <= observed["max_voltage_v"] <= 0.40001
         and 0 <= observed["peak_abs_current_a"] < 0.25
         and 0 <= observed["peak_tracking_error_a"] <= 0.6

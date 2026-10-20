@@ -210,6 +210,10 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
                                struct.pack("<ff", voltage, excursion))
             self.submit(16, key=key, duration=duration, duty=duty)
 
+        def current_survey_submit(self, current=0.06, excursion=1.0, key=KEY, duration=5500000, duty=0.5):
+            self.cpu.mem_write(symbols["g_target_validation_current_survey_config"], struct.pack("<2f",current,excursion))
+            self.submit(18, key=key, duration=duration, duty=duty)
+
         def hold_submit(self, alpha=0.06, beta=0.0, key=KEY, duration=3500000, duty=0.5):
             self.cpu.mem_write(symbols["g_target_validation_current_hold_config"], struct.pack("<2f", alpha, beta))
             self.submit(17, key=key, duration=duration, duty=duty)
@@ -220,8 +224,8 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
                 "peak_current", "max_voltage", "min_duty", "max_duty", "mean_valpha", "mean_vbeta", "peak_error"]
             return dict(zip(keys, struct.unpack("<8I13f", self.cpu.mem_read(symbols["g_target_validation_current_hold"], 84))))
 
-        def survey(self):
-            raw = self.cpu.mem_read(symbols["g_target_validation_angle_survey"], 168)
+        def survey(self, current=False):
+            raw = self.cpu.mem_read(symbols["g_target_validation_current_survey" if current else "g_target_validation_angle_survey"], 168)
             header = dict(zip(["sequence", "request", "result", "stable_mask", "excursion", "voltage"],
                               struct.unpack_from("<4I2f", raw)))
             keys = ["count", "first_time", "last_time", "mean", "span", "first", "last", "mean_b", "mean_c"]
@@ -892,6 +896,74 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     assert not m.moe() and m.word("g_target_validation_stop_reason") == 18
     m.tick(); assert m.hold()["result"] == 18
     passed("independent current-hold total deadline cannot masquerade as completion")
+
+    def current_survey_powered(**payload):
+        m = zero_ready(); m.write("model_position_period_ticks",20)
+        m.current_survey_submit(**payload); m.tick(3)
+        assert m.moe() and m.word("model_enable_calls")==1
+        assert m.survey(current=True)["request"]==m.sequence
+        return m
+
+    for payload,reason in [({"current":0.0},4),({"current":-0.06},4),({"current":0.081},4),
+        ({"current":math.nan},4),({"excursion":0.25},4),({"excursion":math.nan},4),
+        ({"key":0},3),({"duration":3500000},4),({"duty":0.4},4)]:
+        m=zero_ready();m.current_survey_submit(**payload);m.tick(3)
+        assert m.status("result")==reason and not m.moe()
+        assert m.word("model_enable_calls")==m.word("model_stage_calls")==0
+        assert m.survey(current=True)["stable_mask"]==0
+        passed("current survey rejects payload before enabling: "+str(payload))
+    m=Model();m.current_survey_submit();m.tick(3)
+    assert m.status("result")==19 and not m.moe()
+    passed("current survey needs actual same-boot zero")
+
+    m=current_survey_powered();ia=ibeta=0.0
+    decay=math.exp(-3.1*0.0001/0.002);pending=[(0.5,0.5,0.5)]*2
+    capture=m.capture();moving_error=0.0
+    for i in range(1,50001):
+        applied=pending.pop(0);va,vb,vc=[12.0*(v-sum(applied)/3) for v in applied]
+        ia=decay*ia+(1-decay)*((2*va-vb-vc)/3)/3.1
+        ibeta=decay*ibeta+(1-decay)*(vb-vc)/math.sqrt(3)/3.1
+        b=(-ia+math.sqrt(3)*ibeta)/2;c=(-ia-math.sqrt(3)*ibeta)/2
+        elapsed=2*i
+        phase=(elapsed-30000)/10000 if 30000<=elapsed<40000 else (70000-elapsed)/10000 if 60000<=elapsed<70000 else 1.0 if 40000<=elapsed<60000 else 0.0
+        scale=elapsed/10000 if elapsed<10000 else (100000-elapsed)/10000 if elapsed>=90000 else 1.0
+        m.write("model_current_b_a",-0.012-b,"f");m.write("model_current_c_a",-0.001-c,"f")
+        m.write("model_position_turns",(0.98+phase/7)%1,"f");m.tick()
+        pending.append(struct.unpack("<3f",m.cpu.mem_read(symbols["model_last_duty"],12)))
+        if 30000<=elapsed<40000 or 60000<=elapsed<70000:
+            moving_error=max(moving_error,math.hypot(ia-0.06*math.cos(math.tau*phase),ibeta-0.06*math.sin(math.tau*phase)))
+    r=m.hold();sr=m.survey(current=True)
+    assert r["result"]==1 and r["samples"]==50002 and r["enabled_samples"]==50001 and r["window_samples"]==7500,r
+    assert abs(r["mean_alpha"]-0.06)<0.001 and abs(r["mean_beta"])<0.001 and r["peak_error"]<0.005,r
+    assert moving_error<0.005 and r["max_voltage"]<=0.40001,(moving_error,r)
+    assert sr["result"]==1 and sr["stable_mask"]==7 and [w["count"] for w in sr["windows"]]==[250]*3,sr
+    assert abs(((sr["windows"][1]["mean"]-sr["windows"][0]["mean"]+0.5)%1)-0.5-1/7)<1e-5,sr
+    assert m.word("model_stage_calls")==50001 and m.word("model_enable_calls")==1 and not m.moe()
+    assert m.capture()==capture
+    m.tick(20);assert m.survey(current=True)==sr and m.hold()==r
+    passed("current survey drives independent delayed RL plant through full stator-frame rotation and three unique SSI windows")
+
+    for field,value,fmt,reason in [("model_position_valid",0,"I",20),("model_current_b_a",0.3,"f",22),
+        ("model_bus_voltage",9.0,"f",7),("model_step_ticks",3,"I",6),("model_stage_ok",0,"I",8)]:
+        m=current_survey_powered();m.write(field,value,fmt);m.tick()
+        assert not m.moe() and m.survey(current=True)["result"]==reason and m.survey(current=True)["stable_mask"]==0
+        m.tick(5);assert m.word("model_enable_calls")==1
+        passed("current survey withdraws on invalid prerequisite: "+field)
+    m=current_survey_powered();m.submit(1);m.tick()
+    assert not m.moe() and m.survey(current=True)["result"]==2 and m.survey(current=True)["stable_mask"]==0
+    passed("current survey Stop clears qualification")
+    m=current_survey_powered();m.call("model_trip_event");m.tick()
+    assert not m.moe() and m.survey(current=True)["result"]==11 and m.survey(current=True)["stable_mask"]==0
+    passed("current survey Trip clears qualification")
+    m=current_survey_powered();m.advance_guard(150)
+    assert not m.moe() and m.word("g_target_validation_stop_reason")==6
+    m.tick();assert m.survey(current=True)["stable_mask"]==0
+    passed("current survey independent heartbeat withdraws power")
+    m=current_survey_powered();deadline=m.word("s_deadline_cycles")
+    m.memory_write(DWT_CYCCNT,deadline);m.write("s_last_sample_cycles",deadline);m.call("model_guard")
+    assert not m.moe() and m.word("g_target_validation_stop_reason")==18
+    m.tick();assert m.survey(current=True)["stable_mask"]==0
+    passed("current survey independent total deadline is failure")
 
 print(f"PASS: {len(cases)} ARM-executed G431 validation cases.")
 print("Fake HCC/time only; does not prove electrical behavior, interrupt latency or hardware L1/L2.")

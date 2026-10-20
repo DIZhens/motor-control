@@ -7,6 +7,7 @@
 #include "realtime_motor_io.h"
 
 #define CURRENT_HOLD_DURATION_US 3500000U
+#define CURRENT_SURVEY_DURATION_US 5500000U
 
 /* 仅验证入口的完整αβ目标；不安装电机标定，也不授予正式Motor RUN。 */
 typedef struct {
@@ -22,7 +23,7 @@ typedef struct {
     uint32_t result; /* 沿用TargetValidationResult；完成不表示精度或转子FOC已验收。 */
     uint32_t sample_count;
     uint32_t enabled_samples;
-    uint32_t window_samples; /* 2.0～2.5 s保持窗口的连续10 kHz样本。 */
+    uint32_t window_samples; /* 命令17最后0.5秒保持共5000点；命令18三份0.25秒保持共7500点。 */
     uint32_t voltage_limited_samples;
     float alpha_reference_a;
     float beta_reference_a;
@@ -46,13 +47,20 @@ typedef struct {
     ControlTime last_elapsed; /* 拒绝重复、回退或漏拍，PI不以假定dt掩盖时序失效。 */
     bool configured;
     bool complete;
+    bool survey; /* 完整一电角圈往返；不使用转子角标定。 */
+    float stator_sine;
+    float stator_cosine;
 } CurrentHold;
 
 bool current_hold_init(CurrentHold *hold, const CurrentHoldConfig *config);
 
+/* 只供命令18：0.01～0.08名义A，完整一电角圈，五秒有限轨迹。 */
+bool current_hold_survey_init(CurrentHold *hold, float current_reference_a);
+
 /* elapsed为实际enable之后的ControlTime，固定20 kHz单位、相邻调用2 tick。
  * 上层先验证原始采样/母线/时序和零点；本函数再次限数值范围并执行有界PI。
- * 正常轨迹0.5 s升流、2 s保持、0.5 s降流；complete或错误均无可用duty。 */
+ * 命令17为0.5 s升流、2 s保持、0.5 s降流；命令18为五秒往返；
+ * complete或错误均无可用duty。 */
 bool current_hold_step(CurrentHold *hold, ControlTime elapsed,
     float alpha_a, float beta_a, float bus_v, CurrentControllerOutput *output);
 

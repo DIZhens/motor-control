@@ -1,4 +1,5 @@
 #include "current_hold.h"
+#include "electrical_angle.h"
 
 #if defined(__CC_ARM)
 #pragma Otime
@@ -36,11 +37,24 @@ bool current_hold_init(CurrentHold *hold, const CurrentHoldConfig *config)
     return true;
 }
 
+bool current_hold_survey_init(CurrentHold *hold, float current_reference_a)
+{
+    CurrentHoldConfig config = {current_reference_a, 0.0f};
+    if (!current_hold_init(hold, &config) || current_reference_a <= 0.0f) {
+        if (hold != NULL) { hold->configured = false; }
+        return false;
+    }
+    hold->survey = true;
+    return true;
+}
+
 bool current_hold_step(CurrentHold *hold, ControlTime elapsed,
     float alpha_a, float beta_a, float bus_v, CurrentControllerOutput *output)
 {
     CurrentControllerInput input = {0};
     float scale = 1.0f;
+    float phase = 0.0f;
+    ControlTime end;
 
     if (output == NULL) {
         return false;
@@ -55,7 +69,8 @@ bool current_hold_step(CurrentHold *hold, ControlTime elapsed,
         return false;
     }
     hold->last_elapsed = elapsed;
-    if (elapsed >= 60000U) {
+    end = hold->survey ? 100000U : 60000U;
+    if (elapsed >= end) {
         hold->complete = true;
         current_controller_reset(&hold->controller);
         return false;
@@ -67,13 +82,31 @@ bool current_hold_step(CurrentHold *hold, ControlTime elapsed,
     }
     if (elapsed < 10000U) {
         scale = (float)elapsed / 10000.0f;
-    } else if (elapsed >= 50000U) {
-        scale = (float)(60000U - elapsed) / 10000.0f;
+    } else if (elapsed >= end - 10000U) {
+        scale = (float)(end - elapsed) / 10000.0f;
     }
     input.current_alpha_a = alpha_a;
     input.current_beta_a = beta_a;
-    /* 显式恒等坐标系：d=α、q=β；没有冒充已标定的转子电角度。 */
-    input.cos_electrical_angle = 1.0f;
+    hold->stator_sine = 0.0f;
+    hold->stator_cosine = 1.0f;
+    if (hold->survey) {
+        if (elapsed >= 30000U && elapsed < 40000U) {
+            phase = (float)(elapsed - 30000U) / 10000.0f;
+        } else if (elapsed >= 60000U && elapsed < 70000U) {
+            phase = (float)(70000U - elapsed) / 10000.0f;
+        }
+        /* 其余保持角为0或1整圈，统一为周期零点。选定的是施加磁场坐标，
+         * 不是转子DQ；目标d为励磁电流，q=0，无需先安装转子电角标定。 */
+        if (phase >= 1.0f) { phase -= 1.0f; }
+        if (phase != 0.0f && !electrical_angle_sincos_software(NULL, phase, &hold->stator_sine,
+            &hold->stator_cosine)) {
+            hold->configured = false;
+            current_controller_reset(&hold->controller);
+            return false;
+        }
+    }
+    input.sin_electrical_angle = hold->stator_sine;
+    input.cos_electrical_angle = hold->stator_cosine;
     input.bus_voltage_v = bus_v;
     input.id_reference_a = scale * hold->config.alpha_reference_a;
     input.iq_reference_a = scale * hold->config.beta_reference_a;
