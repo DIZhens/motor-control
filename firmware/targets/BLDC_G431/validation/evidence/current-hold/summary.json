@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "result": "STATIONARY_CURRENT_LOOP_TRACKING_PASS_OUTPUT_OFF",
+  "parent_commit": "ddc9a80",
+  "target": "BLDC_control V1",
+  "hex_sha256": "d3b968ea78804e71ecc7e0dd52f450497fff0b1a1c96b1836b65322626ba7efb",
+  "artifact_sha256": {
+    "BLDC_control V1.hex": "d3b968ea78804e71ecc7e0dd52f450497fff0b1a1c96b1836b65322626ba7efb",
+    "BLDC_control V1.axf": "6b81c96c41357cc88f2fb92f5e3d79cd38a62b6d8222e4ed5d872e7d325457e2",
+    "BLDC_control V1.map": "ddf80cbc9348447665551dcd65ec6d6f5470d6d243c5783a34b7f3778a2e50cf"
+  },
+  "loaded_flash_bytes": 47688,
+  "frame": "stationary_alpha_beta_identity_transform",
+  "current_sign": {
+    "positive": "bridge_to_motor",
+    "measured_phases": [
+      "B",
+      "C"
+    ],
+    "signed_gain": [
+      1,
+      -1,
+      -1
+    ],
+    "polarity_confirmed": true,
+    "absolute_gain_accuracy_confirmed": false,
+    "evidence": "../pwm-phase-mapping/summary.json"
+  },
+  "verification": {
+    "actual_bench_arm_cases": 223,
+    "actual_observe_arm_groups": 46,
+    "current_hold_host_tests": 7,
+    "three_targets_full_rebuild_errors": 0,
+    "three_targets_full_rebuild_warnings": 0,
+    "legacy_control_optimize_for_time": true
+  },
+  "installation": {
+    "native_download_verified": true,
+    "independent_flash_match": true,
+    "default_moe": false,
+    "default_stage_enable_counts": 0,
+    "logic_bus_software_v": 2.650425434112549
+  },
+  "bench_setup": {
+    "operator_answer": "全部正常",
+    "restored_setup": "12.0V/0.10A，ST-Link3V3断开，原三相/SSI，固定空载，无注入",
+    "new_numeric_current_reported": false,
+    "new_numeric_vbus_dmm_reported": false,
+    "vbus_dmm_reference_v": 12.12,
+    "reference_origin": "沿用先前操作者12.12V读数，本次只确认全部正常；不冒充本轮新实测",
+    "preparation_wait_s": 5,
+    "one_current_trial": {
+      "alpha_reference_nominal_a": 0.06,
+      "beta_reference_nominal_a": 0.0,
+      "duration_s": 3,
+      "max_requested_voltage_v": 0.4
+    }
+  },
+  "zero": {
+    "request_sequence": 1,
+    "statistics": {
+      "publication_sequence": 4,
+      "request_sequence": 1,
+      "result": 1,
+      "sample_count": 4096,
+      "interval_min_cycles": 16998,
+      "interval_max_cycles": 17001,
+      "first_sample_time": 948074,
+      "last_sample_time": 956264,
+      "phase_b.mean_a": -0.012738969177007675,
+      "phase_b.min_a": -0.02514573559165001,
+      "phase_b.max_a": -0.00571101950481534,
+      "phase_b.variance_a2": 1.3361624041863251e-05,
+      "phase_c.mean_a": -0.00110012071672827,
+      "phase_c.min_a": -0.01485693734139204,
+      "phase_c.max_a": 0.004578116815537214,
+      "phase_c.variance_a2": 1.3298825251695234e-05,
+      "phase_b.stddev_a": 0.003655355528791044,
+      "phase_b.peak_to_peak_a": 0.01943471608683467,
+      "phase_c.stddev_a": 0.0036467554417173678,
+      "phase_c.peak_to_peak_a": 0.019435054156929255
+    }
+  },
+  "trial": {
+    "request_sequence": 2,
+    "snapshot": {
+      "coherent": true,
+      "stop_reason": 1,
+      "moe": false,
+      "halted": false,
+      "sequence": 4,
+      "request_sequence": 2,
+      "active": 0,
+      "result": 1,
+      "sample_count": 30002,
+      "enabled_samples": 30001,
+      "window_samples": 5000,
+      "voltage_limited_samples": 0,
+      "alpha_reference_a": 0.05999999865889549,
+      "beta_reference_a": 0.0,
+      "offset_b_a": -0.012738969177007675,
+      "offset_c_a": -0.00110012071672827,
+      "mean_alpha_a": 0.05956026539206505,
+      "mean_beta_a": 1.577219518367201e-05,
+      "peak_abs_current_a": 0.06986762583255768,
+      "max_voltage_v": 0.18953146040439606,
+      "min_duty": 0.48801562190055847,
+      "max_duty": 0.5119843482971191,
+      "mean_voltage_alpha_v": 0.17618738114833832,
+      "mean_voltage_beta_v": -0.002619960578158498,
+      "peak_tracking_error_a": 0.02679823338985443
+    },
+    "tracking": {
+      "mean_vector_error_nominal_a": 0.0004400160316378104,
+      "tracking_screen_passed": true,
+      "current_gain_accuracy_confirmed": false,
+      "rotor_foc_qualified": false
+    },
+    "stage_attempts_delta": 30001,
+    "stage_successes_delta": 30001,
+    "enable_attempts_delta": 1,
+    "enable_successes_delta": 1,
+    "consumer_max_observed_cycles": 5850,
+    "consumer_max_observed_us": 34.411764705882355,
+    "consumer_is_full_adc_irq": false,
+    "consumer_is_wcet_qualified": false,
+    "final_bus_software_v": 11.933971405029297,
+    "final_moe": false,
+    "final_high_inputs": 0,
+    "final_low_inputs": 0,
+    "final_guard_running": false,
+    "final_trip_causes": 0,
+    "invalid_current_count": 0
+  },
+  "connection_issue": {
+    "stage": "identity_flash_read_before_request",
+    "usb_timeout": true,
+    "windows_st_link_present_after_failure": false,
+    "target_write_attempted": false,
+    "operator_usb_replug_confirmed": true,
+    "reflashed_after_issue": false,
+    "same_startup_zero_preserved": true,
+    "subsequent_explicit_attempt_succeeded": true
+  },
+  "operator_after_trial": {
+    "operator_answer": "无异常，但是电机转了吗我刚才愣神了没注意",
+    "no_abnormal_heat_sound_shake_or_CC_reported": true,
+    "motion_observation": "操作者未留意，未作运动方向或圈数结论",
+    "position_before_turns": 0.4346923828125,
+    "position_after_turns": 0.43450927734375,
+    "wrapped_endpoint_difference_degrees": -0.06591796875,
+    "endpoint_readings_are_full_motion_record": false
+  },
+  "formal_control_enabled": false,
+  "electrical_calibration_confirmed": false,
+  "foc_qualified": false,
+  "calibration_applied": false,
+  "local_evidence": "validation/local-evidence/20261021-current-hold-01",
+  "source_sha256": {
+    "control/current_controller.h": "04239ccea88204bf09a601cd42b833dfb538e46ec0ff4cac71d7da15ff6111b8",
+    "firmware/targets/BLDC_G431/runtime/target_runtime.c": "1aca5a17466a503c555e4a03742919c756b2466d3b6996576dca2979cf69c8e0",
+    "firmware/targets/BLDC_G431/validation/target_validation.c": "3109ad856a90e18e1ad53665aa54e75604a1592c1d9063b0003a93dcbda2a71d",
+    "firmware/targets/BLDC_G431/validation/target_validation.h": "a6af36c68a2a857c012fa03103670d680c1c12e06906fe8e571144aec9bb6c9d",
+    "firmware/targets/BLDC_G431/validation/current_hold.c": "e67fd72daf99979c0471bfbca9882ae036ea21d897a34fc8ad7fc7247c669d28",
+    "firmware/targets/BLDC_G431/validation/current_hold.h": "88f8f5a739a7de65a3b188f99b509b2473b7bcf8b480596c36691b9fe470c713",
+    "firmware/targets/BLDC_G431/validation/tools/current_hold_once.py": "e65810c47373eb60d00a1c94b450783258d962a142e65eb5e38861d922e362ec",
+    "firmware/targets/BLDC_G431/validation/tests/verify_current_hold_tool.py": "a00c6a9273a07b46308ba40d5f9d1ac102c7161d04aa7cd63ddfaf6ea6d6354d",
+    "firmware/targets/BLDC_G431/validation/tests/verify_model.py": "c0c56a394a57a090f8f0d95255b72097f8656df314bc14e4cc926d944e93f983",
+    "firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py": "8c7a26ebdb9700181bb8c58e8434d0ee7e6a087b2541c2f904c8886900818de5"
+  },
+  "raw_sha256": {
+    "candidate-final/prepared.json": "76e294dac7b523a76dd372dcb125382092e2bb53a83ca181b3bedec2955074b8",
+    "logic-installed/summary.json": "ee4e9c2442549143921c8aab8aaf35ff49ae4a70747183b75e3bd76a6af0dfaf",
+    "zero-01/summary.json": "de27b12c262de026de1fced9e6f1dd6254a7533607a14830895b1db60a8183a2",
+    "hold-01/summary.json": "14c5cfbf6bd9fe4ddd2884782b701ca2026cf84ca260cf1c709a08f65af2fe46",
+    "hold-02/summary.json": "4b94f64cc02adc62111d915c8c74009b01d8b83f701acb163bcab77645822f60",
+    "operator-after-hold.json": "e79f0dc899e77ac36132a7f7153dcdd04634e71a82aef40eb4026ce0f317587a"
+  },
+  "limits": [
+    "电流均值、峰值和误差使用已修正方向的名义增益，闭环自洽不能代替独立幅值标定。",
+    "实测只覆盖α正向60mA、β零目标、3秒；β非零及反向尚未上板，不能宣称完整二维电流环或旋转FOC验收。",
+    "静止坐标系与已标定转子DQ不同；7极对、编码器方向和offset仍沿用候选身份，正式运行许可未开放。",
+    "本次不注入真实保护故障，也不把consumer最大观测当作完整IRQ/WCET。",
+    "操作者确认无异常，未观察运动；前后位置只说明端点净差，不能还原中间运动。"
+  ]
+}

@@ -9,6 +9,7 @@
 #include "position_observation.h"
 #include "bus_observation.h"
 #include "timing_probe.h"
+#include "current_hold.h"
 
 /* 首板无功率诊断快照：仅供 Keil Watch 观察，不作为正式 Firmware API。 */
 typedef struct
@@ -56,6 +57,7 @@ typedef enum {
     TARGET_VALIDATION_COMMAND_REARM = 9,
     TARGET_VALIDATION_COMMAND_OPEN_LOOP = 15, /* 有限低电压试转；不复用旧的 10～14 时序命令。 */
     TARGET_VALIDATION_COMMAND_ANGLE_SURVEY = 16, /* 单次有限静态电角往返，仅生成观测证据。 */
+    TARGET_VALIDATION_COMMAND_CURRENT_HOLD = 17, /* 3秒静止αβ电流PI；不依赖转子电角标定。 */
     TARGET_VALIDATION_COMMAND_TIMING_IMMEDIATE = TIMING_PROBE_CASE_IMMEDIATE,
     TARGET_VALIDATION_COMMAND_TIMING_BEFORE = TIMING_PROBE_CASE_BEFORE,
     TARGET_VALIDATION_COMMAND_TIMING_AFTER = TIMING_PROBE_CASE_AFTER,
@@ -240,6 +242,8 @@ extern volatile TargetValidationOpenLoopConfig g_target_validation_open_loop_con
 extern volatile TargetValidationOpenLoopSnapshot g_target_validation_open_loop;
 extern volatile TargetValidationAngleSurveyConfig g_target_validation_angle_survey_config;
 extern volatile TargetValidationAngleSurveySnapshot g_target_validation_angle_survey;
+extern volatile CurrentHoldConfig g_target_validation_current_hold_config;
+extern volatile CurrentHoldSnapshot g_target_validation_current_hold;
 /* ADC 丢失时快照可能停在旧状态；此字独立记录关断原因。 */
 extern volatile uint32_t g_target_validation_stop_reason;
 /* 时序用例后的连续正常采样数，饱和至 2；不改变旧诊断结构的 ABI。 */

@@ -54,11 +54,14 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     objects = []
     for source in [root / "validation/tests/model.c", root / "validation/target_validation.c",
                    root / "validation/protection_probe.c", root / "validation/timing_probe.c",
+                   root / "validation/current_hold.c",
                    root.parents[1] / "app/motor/voltage_open_loop.c",
+                   root.parents[2] / "control/current_controller.c",
                    root.parents[2] / "control/electrical_angle.c",
                    root.parents[2] / "control/foc_math.c"]:
         obj = temp / (source.stem + ".o")
-        result = subprocess.run(command + ["-c", str(source), "-o", str(obj)],
+        options = ["-Otime"] if source.parent.name == "control" else []
+        result = subprocess.run(command + options + ["-c", str(source), "-o", str(obj)],
                                 capture_output=True, text=True)
         assert result.returncode == 0 and "warning" not in result.stderr.lower(), result.stderr
         objects.append(str(obj))
@@ -206,6 +209,16 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
             self.cpu.mem_write(symbols["g_target_validation_angle_survey_config"],
                                struct.pack("<ff", voltage, excursion))
             self.submit(16, key=key, duration=duration, duty=duty)
+
+        def hold_submit(self, alpha=0.06, beta=0.0, key=KEY, duration=3500000, duty=0.5):
+            self.cpu.mem_write(symbols["g_target_validation_current_hold_config"], struct.pack("<2f", alpha, beta))
+            self.submit(17, key=key, duration=duration, duty=duty)
+
+        def hold(self):
+            keys = ["sequence", "request", "active", "result", "samples", "enabled_samples", "window_samples",
+                "limited_samples", "alpha_ref", "beta_ref", "offset_b", "offset_c", "mean_alpha", "mean_beta",
+                "peak_current", "max_voltage", "min_duty", "max_duty", "mean_valpha", "mean_vbeta", "peak_error"]
+            return dict(zip(keys, struct.unpack("<8I13f", self.cpu.mem_read(symbols["g_target_validation_current_hold"], 84))))
 
         def survey(self):
             raw = self.cpu.mem_read(symbols["g_target_validation_angle_survey"], 168)
@@ -799,6 +812,76 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     assert not m.moe() and m.word("g_target_validation_stop_reason") == 18
     m.tick(); assert m.survey()["result"] == 18 and m.survey()["stable_mask"] == 0
     passed("static survey independent deadline is failure rather than false completion")
+
+    # 使用独立R/L电气替身闭合真实ARM PI和stage；电流符号按桥→电机定义，
+    # 再经低边Shunt物理方向生成采样值，不能直接把目标填回输入。
+    def hold_powered(**payload):
+        m = zero_ready()
+        m.hold_submit(**payload); m.tick()
+        assert not m.moe() and m.word("model_stage_calls") == 0
+        m.tick(); assert not m.moe() and m.word("model_stage_calls") == 1
+        m.tick(); assert m.moe() and m.word("model_enable_calls") == 1
+        return m
+
+    for alpha, beta in [(0.06, 0.0), (0.0, -0.06)]:
+        m = hold_powered(alpha=alpha, beta=beta)
+        ia, ibeta = 0.0, 0.0
+        decay = math.exp(-3.1 * 0.0001 / 0.002)
+        pending = [(0.5, 0.5, 0.5)] * 2
+        capture = m.capture()
+        for _ in range(30000):
+            applied = pending.pop(0)
+            va, vb, vc = [12.0*(v-sum(applied)/3) for v in applied]
+            ia = decay*ia + (1-decay)*((2*va-vb-vc)/3)/3.1
+            ibeta = decay*ibeta + (1-decay)*(vb-vc)/math.sqrt(3)/3.1
+            b = (-ia+math.sqrt(3)*ibeta)/2
+            c = (-ia-math.sqrt(3)*ibeta)/2
+            m.write("model_current_b_a", -0.012-b, "f")
+            m.write("model_current_c_a", -0.001-c, "f")
+            m.tick()
+            pending.append(struct.unpack("<3f", m.cpu.mem_read(symbols["model_last_duty"], 12)))
+        r = m.hold()
+        assert r["sequence"] % 2 == 0 and r["result"] == 1 and r["active"] == 0, r
+        assert not m.moe() and m.word("model_enable_calls") == 1 and m.word("model_stage_calls") == 30001
+        assert r["samples"] == 30002 and r["enabled_samples"] == 30001 and r["window_samples"] == 5000, r
+        assert abs(r["mean_alpha"]-alpha) < 0.001 and abs(r["mean_beta"]-beta) < 0.001, r
+        assert r["max_voltage"] <= 0.40001 and r["peak_error"] < 0.002, r
+        assert m.capture() == capture
+        m.tick(20); assert m.hold() == r and m.word("model_enable_calls") == 1
+        passed("finite stationary PI tracks independent delayed RL plant with physical Shunt polarity: "+str((alpha,beta)))
+
+    for payload, reason in [({"alpha":0},4), ({"alpha":0.081},4), ({"alpha":math.nan},4),
+        ({"alpha":0.07,"beta":0.07},4), ({"key":0},3), ({"duration":3500001},4), ({"duty":0.6},4)]:
+        m = zero_ready(); m.hold_submit(**payload); m.tick(3)
+        assert m.status("result") == reason and not m.moe()
+        assert m.hold()["result"] == reason and m.hold()["active"] == 0
+        assert m.word("model_stage_calls") == m.word("model_enable_calls") == 0
+        passed("current hold rejects bad payload before power: "+str(payload))
+    m = Model(); m.hold_submit(); m.tick(3)
+    assert m.status("result") == 19 and not m.moe()
+    passed("current hold cannot invent a zero calibration")
+    for field,value,fmt,reason in [("model_current_valid",0,"I",6), ("model_position_valid",0,"I",20),
+        ("model_bus_voltage",9.,"f",7), ("model_current_b_a",0.3,"f",22),
+        ("model_stage_ok",0,"I",8), ("model_step_ticks",3,"I",6)]:
+        m = hold_powered(); m.write(field,value,fmt); m.tick()
+        assert not m.moe() and m.hold()["result"] == reason
+        m.tick(5); assert m.word("model_enable_calls") == 1
+        passed("current hold loses prerequisite and never re-enables: "+field)
+    m = hold_powered(); m.submit(1); m.tick()
+    assert not m.moe() and m.hold()["result"] == 2
+    passed("Stop terminates current hold")
+    m = hold_powered(); m.call("model_trip_event"); m.tick()
+    assert not m.moe() and m.hold()["result"] == 11
+    passed("asynchronous Trip terminates current hold")
+    m = hold_powered(); m.advance_guard(150)
+    assert not m.moe() and m.word("g_target_validation_stop_reason") == 6
+    m.tick(); assert m.hold()["result"] == 6
+    passed("independent guard removes current-hold power when ADC stops")
+    m = hold_powered(); deadline = m.word("s_deadline_cycles")
+    m.memory_write(DWT_CYCCNT,deadline); m.write("s_last_sample_cycles",deadline); m.call("model_guard")
+    assert not m.moe() and m.word("g_target_validation_stop_reason") == 18
+    m.tick(); assert m.hold()["result"] == 18
+    passed("independent current-hold total deadline cannot masquerade as completion")
 
 print(f"PASS: {len(cases)} ARM-executed G431 validation cases.")
 print("Fake HCC/time only; does not prove electrical behavior, interrupt latency or hardware L1/L2.")

@@ -1023,9 +1023,9 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     assert current["state"] == CURRENT_READY and current["valid"], current
     assert current["count"] == 2048 and current["offset"] == frozen
     assert all(math.isclose(value, expected, abs_tol=1e-6)
-               for value, expected in zip(current["phase"], (-0.2, 0.3, -0.1))), current
-    assert math.isclose(current["alpha"], -0.2, abs_tol=1e-6)
-    assert math.isclose(current["beta"], 0.4 / math.sqrt(3.0), abs_tol=1e-6)
+               for value, expected in zip(current["phase"], (0.2, -0.3, 0.1))), current
+    assert math.isclose(current["alpha"], 0.2, abs_tol=1e-6)
+    assert math.isclose(current["beta"], -0.4 / math.sqrt(3.0), abs_tol=1e-6)
     model.write("model_position_turns", 0.01, "f")
     model.sample(20)
     assert model.current()["state"] == CURRENT_READY and model.current()["offset"] == frozen

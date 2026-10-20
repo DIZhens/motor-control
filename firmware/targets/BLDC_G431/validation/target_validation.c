@@ -6,6 +6,7 @@
 
 #include <float.h>
 #include <stddef.h>
+#include <math.h>
 #include "main.h"
 #include "tim.h"
 #include "protection_probe.h"
@@ -28,6 +29,8 @@ volatile TargetValidationOpenLoopConfig g_target_validation_open_loop_config;
 volatile TargetValidationOpenLoopSnapshot g_target_validation_open_loop;
 volatile TargetValidationAngleSurveyConfig g_target_validation_angle_survey_config;
 volatile TargetValidationAngleSurveySnapshot g_target_validation_angle_survey;
+volatile CurrentHoldConfig g_target_validation_current_hold_config;
+volatile CurrentHoldSnapshot g_target_validation_current_hold;
 volatile uint32_t g_target_validation_stop_reason;
 volatile uint32_t g_target_validation_timing_recovery_ticks;
 
@@ -64,6 +67,11 @@ static float s_angle_window_anchor[3];
 static float s_angle_window_min[3];
 static float s_angle_window_max[3];
 static float s_angle_window_mean[3];
+static volatile bool s_current_hold_active; /* TIM6读取它选择失败超时，ADC拥有其余状态。 */
+static CurrentHold s_current_hold;
+static CurrentHoldSnapshot s_current_hold_report;
+static ControlTime s_current_hold_started;
+static ControlTime s_current_hold_last_sample;
 
 /* 事务状态仅由 ADC 更新；其他中断只能关断并发布原因。 */
 static volatile bool s_operation_active;
@@ -137,6 +145,20 @@ static void publish_open_loop(void)
 
 static void finish_operation(void)
 {
+    if (s_current_hold_active) {
+        uint32_t sequence = g_target_validation_current_hold.sequence;
+
+        current_controller_reset(&s_current_hold.controller);
+        s_current_hold_report.active = 0U;
+        s_current_hold_report.result = g_target_validation_stop_reason;
+        g_target_validation_current_hold.sequence = sequence + 1U;
+        __DMB();
+        s_current_hold_report.sequence = sequence + 1U;
+        g_target_validation_current_hold = s_current_hold_report;
+        __DMB();
+        g_target_validation_current_hold.sequence = sequence + 2U;
+        s_current_hold_active = false;
+    }
     if (s_open_loop_active) {
         if (s_open_loop.state != VOLTAGE_OPEN_LOOP_COMPLETE
             && s_open_loop.state != VOLTAGE_OPEN_LOOP_FAILED) {
@@ -223,7 +245,7 @@ static void check_deadline(uint32_t now_cycles)
         stop_operation(TARGET_VALIDATION_RESULT_BAD_CURRENT);
     } else if ((int32_t)(now_cycles - s_deadline_cycles) >= 0) {
         stop_operation(s_capturing ? TARGET_VALIDATION_RESULT_BAD_CURRENT
-            : (s_open_loop_active ? TARGET_VALIDATION_RESULT_OPEN_LOOP_TIMEOUT
+            : ((s_open_loop_active || s_current_hold_active) ? TARGET_VALIDATION_RESULT_OPEN_LOOP_TIMEOUT
                 : TARGET_VALIDATION_RESULT_COMPLETE));
     }
 }
@@ -486,10 +508,65 @@ static bool prepare_open_loop(const TargetValidationMailbox *request,
     return true;
 }
 
+static void prepare_current_hold(const TargetValidationMailbox *request,
+    const CurrentHoldConfig *config, const PhaseCurrentObservation *current, uint32_t now_cycles)
+{
+    CurrentHoldSnapshot empty = {0};
+    PositionObservation position;
+    TargetValidationResult failure = TARGET_VALIDATION_RESULT_NONE;
+
+    if (request->power_key != TARGET_VALIDATION_POWER_KEY) {
+        failure = TARGET_VALIDATION_RESULT_LOCKED;
+    } else if (request->duration_us != CURRENT_HOLD_DURATION_US || request->common_duty != 0.5f
+        || s_facts.control_time_ticks_per_second != 20000U || s_facts.fast_tick_period_ticks != 2U
+        || !current_hold_init(&s_current_hold, config)) {
+        failure = TARGET_VALIDATION_RESULT_BAD_REQUEST;
+    } else if (!open_loop_zero_valid()) {
+        failure = TARGET_VALIDATION_RESULT_BAD_ZERO;
+    } else if (!burst_bus_valid(current->observation_time)) {
+        failure = TARGET_VALIDATION_RESULT_BAD_BUS;
+    } else if (!open_loop_position_valid(current->observation_time, &position)) {
+        failure = TARGET_VALIDATION_RESULT_BAD_POSITION;
+    }
+    s_current_hold_report = empty;
+    s_current_hold_report.request_sequence = request->sequence;
+    s_current_hold_report.alpha_reference_a = config->alpha_reference_a;
+    s_current_hold_report.beta_reference_a = config->beta_reference_a;
+    s_current_hold_report.min_duty = 0.5f;
+    s_current_hold_report.max_duty = 0.5f;
+    s_current_hold_report.offset_b_a = s_statistics.phase_b.mean_a;
+    s_current_hold_report.offset_c_a = s_statistics.phase_c.mean_a;
+    s_current_hold_active = true;
+    if (failure != TARGET_VALIDATION_RESULT_NONE) {
+        stop_operation(failure);
+        finish_operation();
+        return;
+    }
+    s_operation_active = true;
+    s_current_hold_report.active = 1U;
+    g_target_validation_current_hold.sequence++;
+    __DMB();
+    s_current_hold_report.sequence = g_target_validation_current_hold.sequence;
+    g_target_validation_current_hold = s_current_hold_report;
+    __DMB();
+    g_target_validation_current_hold.sequence++;
+    s_current_hold_last_sample = current->observation_time;
+    s_power_requested = true;
+    s_powered = false;
+    s_capturing = false;
+    s_probe_source = PROTECTION_PROBE_NONE;
+    s_staging_ticks = 0U;
+    g_target_validation.active_request_sequence = request->sequence;
+    g_target_validation.state = TARGET_VALIDATION_STATE_STAGING;
+    g_target_validation.result = TARGET_VALIDATION_RESULT_NONE;
+    guard_timer_start(now_cycles, request->duration_us);
+}
+
 static void consume_command(const PhaseCurrentObservation *current, uint32_t now_cycles)
 {
     TargetValidationMailbox request;
     TargetValidationOpenLoopConfig open_loop_config;
+    CurrentHoldConfig current_hold_config;
     ProtectionProbeSource probe_source = PROTECTION_PROBE_NONE;
     uint32_t primask = __get_PRIMASK();
     uint32_t sequence;
@@ -502,6 +579,7 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
     }
     request = g_target_validation_request;
     open_loop_config = g_target_validation_open_loop_config;
+    current_hold_config = g_target_validation_current_hold_config;
     if (request.command == TARGET_VALIDATION_COMMAND_ANGLE_SURVEY) {
         open_loop_config.voltage_v = g_target_validation_angle_survey_config.voltage_v;
         open_loop_config.electrical_frequency_hz = g_target_validation_angle_survey_config.excursion_turns;
@@ -535,6 +613,7 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
         && (request.command != TARGET_VALIDATION_COMMAND_REARM)
         && (request.command != TARGET_VALIDATION_COMMAND_OPEN_LOOP)
         && (request.command != TARGET_VALIDATION_COMMAND_ANGLE_SURVEY)
+        && (request.command != TARGET_VALIDATION_COMMAND_CURRENT_HOLD)
         && !is_timing_command(request.command)) {
         g_target_validation.result = TARGET_VALIDATION_RESULT_BAD_REQUEST;
         return;
@@ -575,6 +654,10 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
     }
     if (protection_probe_is_held()) {
         g_target_validation.result = TARGET_VALIDATION_RESULT_PROBE_REJECTED;
+        return;
+    }
+    if (request.command == TARGET_VALIDATION_COMMAND_CURRENT_HOLD) {
+        prepare_current_hold(&request, &current_hold_config, current, now_cycles);
         return;
     }
     if (request.command == TARGET_VALIDATION_COMMAND_OPEN_LOOP || request.command == TARGET_VALIDATION_COMMAND_ANGLE_SURVEY) {
@@ -932,6 +1015,108 @@ static void run_open_loop(const PhaseCurrentObservation *current, uint32_t inter
     publish_open_loop();
 }
 
+static void run_current_hold(const PhaseCurrentObservation *current, uint32_t interval_cycles)
+{
+    CurrentHoldSnapshot *report = &s_current_hold_report;
+    PositionObservation position;
+    BusObservation bus;
+    CurrentControllerOutput output;
+    PhaseDutyRequest duty = {0.5f, 0.5f, 0.5f};
+    ControlTime elapsed;
+    /* 与Observe一致：先扣校正前零偏，再将Shunt方向转换为桥→电机正方向。 */
+    float b = -(current->phase_b_a - report->offset_b_a);
+    float c = -(current->phase_c_a - report->offset_c_a);
+    float a = -(b + c);
+    float alpha = a;
+    float beta = (b - c) * 0.5773502691896258f;
+    float peak = fmaxf(fabsf(a), fmaxf(fabsf(b), fabsf(c)));
+    float voltage;
+
+    if (interval_cycles < CURRENT_MIN_GAP_US * CYCLES_PER_US
+        || interval_cycles > CURRENT_MAX_GAP_US * CYCLES_PER_US
+        || current->observation_time <= s_current_hold_last_sample
+        || current->observation_time - s_current_hold_last_sample != 2U) {
+        stop_operation(TARGET_VALIDATION_RESULT_BAD_CURRENT);
+        return;
+    }
+    s_current_hold_last_sample = current->observation_time;
+    if (!isfinite(peak) || peak >= OPEN_LOOP_NOMINAL_CURRENT_TRIP_A) {
+        stop_operation(TARGET_VALIDATION_RESULT_NOMINAL_CURRENT);
+        return;
+    }
+    if (!open_loop_position_valid(current->observation_time, &position)) {
+        stop_operation(TARGET_VALIDATION_RESULT_BAD_POSITION);
+        return;
+    }
+    if (!bus_observation_get_latest(&bus) || !bus.acquisition_valid || !isfinite(bus.voltage_v)
+        || bus.voltage_v < 10.0f || bus.voltage_v > 14.0f
+        || bus.observation_time > current->observation_time
+        || current->observation_time - bus.observation_time > BUS_MAX_AGE_TICKS) {
+        stop_operation(TARGET_VALIDATION_RESULT_BAD_BUS);
+        return;
+    }
+    report->sample_count++;
+    report->peak_abs_current_a = fmaxf(peak, report->peak_abs_current_a);
+    if (!s_powered) {
+        g_target_validation.stage_attempts++;
+        if (!realtime_motor_io_stage_phase_duty(&duty)) {
+            stop_operation(TARGET_VALIDATION_RESULT_STAGE_REJECTED);
+            return;
+        }
+        g_target_validation.stage_successes++;
+        if (++s_staging_ticks >= 2U) {
+            s_current_hold_started = current->observation_time;
+            g_target_validation.enable_attempts++;
+            if (!realtime_motor_io_power_enable()) {
+                stop_operation(TARGET_VALIDATION_RESULT_ENABLE_REJECTED);
+                return;
+            }
+            s_powered = true;
+            report->enabled_samples++;
+            g_target_validation.enable_successes++;
+            g_target_validation.state = TARGET_VALIDATION_STATE_POWERED;
+        }
+        return;
+    }
+    report->enabled_samples++;
+    elapsed = current->observation_time - s_current_hold_started;
+    if (!current_hold_step(&s_current_hold, elapsed, alpha, beta, bus.voltage_v, &output)) {
+        stop_operation(s_current_hold.complete ? TARGET_VALIDATION_RESULT_COMPLETE
+            : TARGET_VALIDATION_RESULT_OPEN_LOOP_REJECTED);
+        return;
+    }
+    voltage = sqrtf(output.applied_vd_v * output.applied_vd_v
+        + output.applied_vq_v * output.applied_vq_v);
+    if (!output.valid || !isfinite(voltage) || voltage > 0.40001f) {
+        stop_operation(TARGET_VALIDATION_RESULT_OPEN_LOOP_REJECTED);
+        return;
+    }
+    duty.phase_a_duty = output.duty_a;
+    duty.phase_b_duty = output.duty_b;
+    duty.phase_c_duty = output.duty_c;
+    g_target_validation.stage_attempts++;
+    if (!realtime_motor_io_stage_phase_duty(&duty)) {
+        stop_operation(TARGET_VALIDATION_RESULT_STAGE_REJECTED);
+        return;
+    }
+    g_target_validation.stage_successes++;
+    report->min_duty = fminf(report->min_duty, fminf(output.duty_a, fminf(output.duty_b, output.duty_c)));
+    report->max_duty = fmaxf(report->max_duty, fmaxf(output.duty_a, fmaxf(output.duty_b, output.duty_c)));
+    report->max_voltage_v = fmaxf(report->max_voltage_v, voltage);
+    report->voltage_limited_samples += output.voltage_limited ? 1U : 0U;
+    if (elapsed >= 40000U && elapsed < 50000U) {
+        float count = (float)++report->window_samples;
+        float ea = alpha - report->alpha_reference_a;
+        float eb = beta - report->beta_reference_a;
+
+        report->mean_alpha_a += (alpha - report->mean_alpha_a) / count;
+        report->mean_beta_a += (beta - report->mean_beta_a) / count;
+        report->mean_voltage_alpha_v += (output.applied_vd_v - report->mean_voltage_alpha_v) / count;
+        report->mean_voltage_beta_v += (output.applied_vq_v - report->mean_voltage_beta_v) / count;
+        report->peak_tracking_error_a = fmaxf(report->peak_tracking_error_a, sqrtf(ea * ea + eb * eb));
+    }
+}
+
 static void run_operation(const PhaseCurrentObservation *current,
     uint32_t now_cycles, uint32_t interval_cycles)
 {
@@ -969,6 +1154,8 @@ static void run_operation(const PhaseCurrentObservation *current,
         stop_operation(TARGET_VALIDATION_RESULT_BAD_BUS);
     } else if (s_powered && ((TIM1->BDTR & TIM_BDTR_MOE) == 0U)) {
         stop_operation(TARGET_VALIDATION_RESULT_PLATFORM_OFF);
+    } else if (s_current_hold_active) {
+        run_current_hold(current, interval_cycles);
     } else if (s_open_loop_active) {
         run_open_loop(current, interval_cycles);
     } else if (s_powered && (s_probe_source != PROTECTION_PROBE_NONE)

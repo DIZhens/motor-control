@@ -19,14 +19,14 @@ typedef struct {
 typedef struct {
     float current_alpha_a; /* 同一拍静止 α 轴电流 [A]。 */
     float current_beta_a; /* 同一拍静止 β 轴电流 [A]。 */
-    float sin_electrical_angle; /* 已标定且对齐本拍电流采集时刻的电角度正弦。 */
+    float sin_electrical_angle; /* 所选控制坐标系的正弦；转子DQ控制须已标定并对齐采样时刻。 */
     float cos_electrical_angle; /* 与正弦属于同一份电角度。 */
     float bus_voltage_v; /* 有效物理母线电压 [V]。 */
     float id_reference_a; /* 完整目标矢量的 d 轴电流 [A]。 */
     float iq_reference_a; /* 完整目标矢量的 q 轴电流 [A]。 */
     float interval_s; /* 本拍实际时间间隔；采样/角度是否新鲜由上层负责判定。 */
     bool current_valid; /* 电流已校正且采样新鲜、完整。 */
-    bool angle_valid; /* 测量角及启用时的独立施加角，其标定与新鲜度均由调用方确认。 */
+    bool angle_valid; /* 调用方确认坐标系有效；转子DQ须确认标定/新鲜度，静止αβ试验可显式用恒等变换。 */
     bool bus_voltage_valid; /* 母线采集与新鲜度由调用方确认。 */
     bool reference_valid; /* 两轴目标必须作为同一拍的完整矢量提交。 */
     bool separate_actuation_angle; /* false 复用测量角并忽略下列值；true 使用独立施加电压角。 */

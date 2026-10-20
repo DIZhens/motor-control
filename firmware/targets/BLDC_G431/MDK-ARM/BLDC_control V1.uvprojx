@@ -676,6 +676,11 @@
               <FilePath>../validation/target_validation.c</FilePath>
             </File>
             <File>
+              <FileName>current_hold.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../validation/current_hold.c</FilePath>
+            </File>
+            <File>
               <FileName>protection_probe.c</FileName>
               <FileType>1</FileType>
               <FilePath>../validation/protection_probe.c</FilePath>
@@ -921,7 +926,7 @@
               <Cads>
                 <interw>2</interw>
                 <Optim>0</Optim>
-                <oTime>2</oTime>
+                <oTime>1</oTime>
                 <SplitLS>2</SplitLS>
                 <OneElfS>2</OneElfS>
                 <Strict>2</Strict>
@@ -1918,6 +1923,11 @@
               <FileName>target_validation.c</FileName>
               <FileType>1</FileType>
               <FilePath>../validation/target_validation.c</FilePath>
+            </File>
+            <File>
+              <FileName>current_hold.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../validation/current_hold.c</FilePath>
             </File>
             <File>
               <FileName>protection_probe.c</FileName>
@@ -3157,6 +3167,11 @@
               <FileName>target_validation.c</FileName>
               <FileType>1</FileType>
               <FilePath>../validation/target_validation.c</FilePath>
+            </File>
+            <File>
+              <FileName>current_hold.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../validation/current_hold.c</FilePath>
             </File>
             <File>
               <FileName>protection_probe.c</FileName>
