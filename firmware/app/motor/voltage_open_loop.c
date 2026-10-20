@@ -27,6 +27,10 @@ static bool terminate(VoltageOpenLoop *loop, VoltageOpenLoopState state,
 
 static uint64_t duration(const VoltageOpenLoopConfig *config)
 {
+    if (config->profile == VOLTAGE_OPEN_LOOP_STATIC_SURVEY) {
+        return (uint64_t)config->voltage_ramp_ticks + 3ULL * config->alignment_hold_ticks +
+            2ULL * config->frequency_ramp_ticks + config->voltage_ramp_down_ticks;
+    }
     return (uint64_t)config->voltage_ramp_ticks + config->alignment_hold_ticks +
         config->frequency_ramp_ticks + config->rotation_ticks + config->voltage_ramp_down_ticks;
 }
@@ -36,7 +40,7 @@ static bool config_valid(const VoltageOpenLoopConfig *config)
     float step_turns;
     if (config->ticks_per_second == 0U || !isfinite(config->voltage_v) ||
         config->voltage_v <= 0.0f || !isfinite(config->target_electrical_hz) ||
-        config->target_electrical_hz == 0.0f || !isfinite(config->max_voltage_ratio) ||
+        !isfinite(config->max_voltage_ratio) ||
         config->max_voltage_ratio <= 0.0f || config->max_voltage_ratio > OPEN_LOOP_INV_SQRT_THREE ||
         !isfinite(config->min_bus_voltage_v) || config->min_bus_voltage_v <= 0.0f ||
         !isfinite(config->max_bus_voltage_v) || config->max_bus_voltage_v < config->min_bus_voltage_v ||
@@ -49,6 +53,14 @@ static bool config_valid(const VoltageOpenLoopConfig *config)
         config->max_step_ticks > config->frequency_ramp_ticks ||
         config->max_step_ticks > config->voltage_ramp_down_ticks ||
         duration(config) >= (uint64_t)config->timeout_ticks) {
+        return false;
+    }
+    if (config->profile == VOLTAGE_OPEN_LOOP_STATIC_SURVEY) {
+        return config->target_electrical_hz == 0.0f && isfinite(config->excursion_turns) &&
+            config->excursion_turns > 0.0f && config->excursion_turns <= 0.25f;
+    }
+    if (config->profile != VOLTAGE_OPEN_LOOP_ROTATING || config->excursion_turns != 0.0f ||
+        config->target_electrical_hz == 0.0f) {
         return false;
     }
     /* 单步相位增量有界，避免跳过多圈或对任意大浮点做整数取模。 */
@@ -182,6 +194,46 @@ bool voltage_open_loop_update(VoltageOpenLoop *loop, const VoltageOpenLoopInput 
     return voltage_open_loop_update_with_trig(loop, input, electrical_angle_sincos_software, NULL);
 }
 
+/* 有限静态往返采用绝对时间解析角度，避免保持段漂移或返回时累计误差。 */
+static void static_survey_trajectory(VoltageOpenLoop *loop, uint64_t elapsed,
+    float *voltage, float *frequency, float *phase)
+{
+    const VoltageOpenLoopConfig *c = &loop->config;
+    uint64_t ramp = c->voltage_ramp_ticks;
+    uint64_t hold0 = ramp + c->alignment_hold_ticks;
+    uint64_t move_out = hold0 + c->frequency_ramp_ticks;
+    uint64_t hold_out = move_out + c->alignment_hold_ticks;
+    uint64_t move_back = hold_out + c->frequency_ramp_ticks;
+    uint64_t hold_return = move_back + c->alignment_hold_ticks;
+    float speed = c->excursion_turns * (float)c->ticks_per_second / (float)c->frequency_ramp_ticks;
+
+    *voltage = c->voltage_v;
+    *frequency = 0.0f;
+    *phase = 0.0f;
+    if (elapsed < ramp) {
+        loop->state = VOLTAGE_OPEN_LOOP_RAMP;
+        *voltage *= (float)elapsed / (float)c->voltage_ramp_ticks;
+    } else if (elapsed < hold0) {
+        loop->state = VOLTAGE_OPEN_LOOP_HOLD;
+    } else if (elapsed < move_out) {
+        loop->state = VOLTAGE_OPEN_LOOP_MOVE_OUT;
+        *phase = c->excursion_turns * (float)(elapsed - hold0) / (float)c->frequency_ramp_ticks;
+        *frequency = speed;
+    } else if (elapsed < hold_out) {
+        loop->state = VOLTAGE_OPEN_LOOP_HOLD_OUT;
+        *phase = c->excursion_turns;
+    } else if (elapsed < move_back) {
+        loop->state = VOLTAGE_OPEN_LOOP_MOVE_BACK;
+        *phase = c->excursion_turns * (1.0f - (float)(elapsed - hold_out) / (float)c->frequency_ramp_ticks);
+        *frequency = -speed;
+    } else if (elapsed < hold_return) {
+        loop->state = VOLTAGE_OPEN_LOOP_HOLD_RETURN;
+    } else {
+        loop->state = VOLTAGE_OPEN_LOOP_RAMP_DOWN;
+        *voltage *= 1.0f - (float)(elapsed - hold_return) / (float)c->voltage_ramp_down_ticks;
+    }
+}
+
 bool voltage_open_loop_update_with_trig(VoltageOpenLoop *loop,
                                        const VoltageOpenLoopInput *input,
                                        ElectricalAngleTrig trig, void *context)
@@ -195,8 +247,9 @@ bool voltage_open_loop_update_with_trig(VoltageOpenLoop *loop,
         return false;
     }
     clear_output(loop);
-    if (!loop->configured || loop->state < VOLTAGE_OPEN_LOOP_RAMP ||
-        loop->state > VOLTAGE_OPEN_LOOP_RAMP_DOWN) {
+    if (!loop->configured || !((loop->state >= VOLTAGE_OPEN_LOOP_RAMP &&
+        loop->state <= VOLTAGE_OPEN_LOOP_RAMP_DOWN) || (loop->state >= VOLTAGE_OPEN_LOOP_MOVE_OUT &&
+        loop->state <= VOLTAGE_OPEN_LOOP_HOLD_RETURN))) {
         return false;
     }
     if (input == NULL) {
@@ -223,47 +276,52 @@ bool voltage_open_loop_update_with_trig(VoltageOpenLoop *loop,
     if (elapsed >= duration(&loop->config)) {
         return terminate(loop, VOLTAGE_OPEN_LOOP_COMPLETE, VOLTAGE_OPEN_LOOP_REASON_NONE);
     }
-    previous = loop->last_update_time - loop->started_at;
-    increment = phase_increment(&loop->config, previous, elapsed) - loop->phase_rounding_error;
-    phase = loop->electrical_turns + increment;
-    rounding_error = (phase - loop->electrical_turns) - increment;
-    if (!isfinite(phase) || phase < -0.25f || phase > 1.25f) {
-        return terminate(loop, VOLTAGE_OPEN_LOOP_FAILED, VOLTAGE_OPEN_LOOP_REASON_NUMERIC);
-    }
-    if (phase < 0.0f) {
-        float wrapped = phase + 1.0f;
-        rounding_error += (wrapped - 1.0f) - phase;
-        phase = wrapped;
-    } else if (phase >= 1.0f) {
-        phase -= 1.0f;
-    }
-    /* 极小负数加一可能舍入为 1，归一化周期零点。 */
-    if (phase >= 1.0f) {
-        phase = 0.0f;
-    }
-    ramp_end = loop->config.voltage_ramp_ticks;
-    hold_end = ramp_end + loop->config.alignment_hold_ticks;
-    frequency_end = hold_end + loop->config.frequency_ramp_ticks;
-    rotation_end = frequency_end + loop->config.rotation_ticks;
-    voltage = loop->config.voltage_v;
-    frequency = 0.0f;
-    if (elapsed < ramp_end) {
-        loop->state = VOLTAGE_OPEN_LOOP_RAMP;
-        voltage *= (float)elapsed / (float)loop->config.voltage_ramp_ticks;
-    } else if (elapsed < hold_end) {
-        loop->state = VOLTAGE_OPEN_LOOP_HOLD;
-    } else if (elapsed < frequency_end) {
-        loop->state = VOLTAGE_OPEN_LOOP_ACCELERATE;
-        frequency = loop->config.target_electrical_hz *
-            ((float)(elapsed - hold_end) / (float)loop->config.frequency_ramp_ticks);
-    } else if (elapsed < rotation_end) {
-        loop->state = VOLTAGE_OPEN_LOOP_ROTATE;
-        frequency = loop->config.target_electrical_hz;
+    if (loop->config.profile == VOLTAGE_OPEN_LOOP_STATIC_SURVEY) {
+        static_survey_trajectory(loop, elapsed, &voltage, &frequency, &phase);
+        rounding_error = 0.0f;
     } else {
-        loop->state = VOLTAGE_OPEN_LOOP_RAMP_DOWN;
-        frequency = loop->config.target_electrical_hz;
-        voltage *= 1.0f - (float)(elapsed - rotation_end) /
-            (float)loop->config.voltage_ramp_down_ticks;
+        previous = loop->last_update_time - loop->started_at;
+        increment = phase_increment(&loop->config, previous, elapsed) - loop->phase_rounding_error;
+        phase = loop->electrical_turns + increment;
+        rounding_error = (phase - loop->electrical_turns) - increment;
+        if (!isfinite(phase) || phase < -0.25f || phase > 1.25f) {
+            return terminate(loop, VOLTAGE_OPEN_LOOP_FAILED, VOLTAGE_OPEN_LOOP_REASON_NUMERIC);
+        }
+        if (phase < 0.0f) {
+            float wrapped = phase + 1.0f;
+            rounding_error += (wrapped - 1.0f) - phase;
+            phase = wrapped;
+        } else if (phase >= 1.0f) {
+            phase -= 1.0f;
+        }
+        /* 极小负数加一可能舍入为 1，归一化周期零点。 */
+        if (phase >= 1.0f) {
+            phase = 0.0f;
+        }
+        ramp_end = loop->config.voltage_ramp_ticks;
+        hold_end = ramp_end + loop->config.alignment_hold_ticks;
+        frequency_end = hold_end + loop->config.frequency_ramp_ticks;
+        rotation_end = frequency_end + loop->config.rotation_ticks;
+        voltage = loop->config.voltage_v;
+        frequency = 0.0f;
+        if (elapsed < ramp_end) {
+            loop->state = VOLTAGE_OPEN_LOOP_RAMP;
+            voltage *= (float)elapsed / (float)loop->config.voltage_ramp_ticks;
+        } else if (elapsed < hold_end) {
+            loop->state = VOLTAGE_OPEN_LOOP_HOLD;
+        } else if (elapsed < frequency_end) {
+            loop->state = VOLTAGE_OPEN_LOOP_ACCELERATE;
+            frequency = loop->config.target_electrical_hz *
+                ((float)(elapsed - hold_end) / (float)loop->config.frequency_ramp_ticks);
+        } else if (elapsed < rotation_end) {
+            loop->state = VOLTAGE_OPEN_LOOP_ROTATE;
+            frequency = loop->config.target_electrical_hz;
+        } else {
+            loop->state = VOLTAGE_OPEN_LOOP_RAMP_DOWN;
+            frequency = loop->config.target_electrical_hz;
+            voltage *= 1.0f - (float)(elapsed - rotation_end) /
+                (float)loop->config.voltage_ramp_down_ticks;
+        }
     }
     if (!isfinite(voltage) || !isfinite(frequency) || trig == NULL ||
         !trig(context, phase, &sine, &cosine) ||

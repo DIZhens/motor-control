@@ -104,14 +104,15 @@ class FakeSession:
                 if command_id == 4:
                     self.raw_capture = capture(sequence)
                     self.state.update(active_request_sequence=sequence, guard_irq_count=self.state["guard_irq_count"] + 4096)
-                elif command_id == 15:
+                elif command_id in [15, 16]:
+                    samples = 30000 if command_id == 15 else 50000
                     self.state.update(active_request_sequence=sequence)
                     for key, delta in [("enable_attempts", 1), ("enable_successes", 1),
-                                       ("stage_attempts", 30000), ("stage_successes", 30000)]:
+                                       ("stage_attempts", samples), ("stage_successes", samples)]:
                         self.state[key] += delta
                     stats = loop.current.decode_capture(self.raw_capture, CURRENT_LAYOUT, loop.common.word(self.raw_capture, 8))
                     values = [6, sequence, int(self.timeout), 0 if self.timeout else 1, 4 if self.timeout else 6,
-                        0, 30001, 30000, *self.parameters, stats["phase_b.mean_a"], stats["phase_c.mean_a"],
+                        0, samples+1, samples, *self.parameters, stats["phase_b.mean_a"], stats["phase_c.mean_a"],
                         0.12, 0.25, 0.5, 0.25, 0.47, 0.53]
                     self.result = struct.pack("<8I10f", *values)
                 elif command_id == 1:

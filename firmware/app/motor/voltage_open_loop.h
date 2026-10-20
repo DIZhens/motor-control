@@ -17,8 +17,17 @@ typedef enum {
     VOLTAGE_OPEN_LOOP_RAMP_DOWN,
     VOLTAGE_OPEN_LOOP_COMPLETE,
     VOLTAGE_OPEN_LOOP_FAILED,
-    VOLTAGE_OPEN_LOOP_STOPPED
+    VOLTAGE_OPEN_LOOP_STOPPED,
+    VOLTAGE_OPEN_LOOP_MOVE_OUT,
+    VOLTAGE_OPEN_LOOP_HOLD_OUT,
+    VOLTAGE_OPEN_LOOP_MOVE_BACK,
+    VOLTAGE_OPEN_LOOP_HOLD_RETURN
 } VoltageOpenLoopState;
+
+typedef enum {
+    VOLTAGE_OPEN_LOOP_ROTATING = 0,
+    VOLTAGE_OPEN_LOOP_STATIC_SURVEY = 1
+} VoltageOpenLoopProfile;
 
 typedef enum {
     VOLTAGE_OPEN_LOOP_REASON_NONE = 0,
@@ -36,7 +45,11 @@ typedef enum {
 /*
  * 无实物默认参数，调用方显式给出全部限制。先沿 +alpha 缓升定向，再保持、
  * 线性升至有符号电频、恒频旋转，最后维持电频而将电压线性降零并撤销意图。
- * 每段时长均须大于零，总时长须小于 timeout_ticks；终态不能自行重试。
+ * ROTATING 的每段时长均须大于零；终态不能自行重试。
+ * STATIC_SURVEY 仅观察固定角度往返，不依赖已确认的电流增益，也不输出可信标定：
+ * 缓升电压、保持零角、匀速移至 excursion、保持、匀速返回、保持、缓降电压。
+ * 三个保持段均用 alignment_hold_ticks，两次移动均用 frequency_ramp_ticks；
+ * rotation_ticks 在该轨迹中不用。两种轨迹的总时长均须小于 timeout_ticks。
  * 名义电流仅监视冻结零偏后的采样量，不声称其增益/极性可信或独立保护可靠。
  */
 typedef struct {
@@ -56,6 +69,8 @@ typedef struct {
     uint32_t max_step_ticks; /* 严格递增；超过此间隔失败，不追补漏拍输出。 */
     uint32_t max_current_age_ticks;
     uint32_t max_bus_age_ticks;
+    VoltageOpenLoopProfile profile; /* 零初始化保留原旋转轨迹语义。 */
+    float excursion_turns; /* STATIC_SURVEY 的电角往返幅度，(0,0.25]；旋转轨迹必须为零。 */
 } VoltageOpenLoopConfig;
 
 typedef struct {

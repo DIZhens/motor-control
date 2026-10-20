@@ -23,11 +23,11 @@ FIELDS = [
     "min_bus_voltage_v", "max_bus_voltage_v", "nominal_current_trip_a",
     "voltage_ramp_ticks", "alignment_hold_ticks", "frequency_ramp_ticks", "rotation_ticks",
     "voltage_ramp_down_ticks", "timeout_ticks", "max_step_ticks", "max_current_age_ticks",
-    "max_bus_age_ticks",
+    "max_bus_age_ticks", "profile", "excursion_turns",
 ]
 DEFAULT = dict(zip(FIELDS, [
     20_000, 0.5, 5.0, 0.45, 10.0, 14.0, 0.25, 400, 400, 2000, 4000, 400,
-    8000, 20, 20, 200,
+    8000, 20, 20, 200, 0, 0.0,
 ]))
 CASES = []
 
@@ -99,7 +99,7 @@ with tempfile.TemporaryDirectory(prefix="voltage-open-loop-") as directory:
             self.cpu.mem_write(0xE000ED88, struct.pack("<I", 0x00F00000))
             self.config = DEFAULT | (overrides or {})
             self.cpu.mem_write(symbols["model_config"], struct.pack(
-                "<I6f9I", *(self.config[field] for field in FIELDS)))
+                "<I6f10If", *(self.config[field] for field in FIELDS)))
             self.now = base_time
             self.base_time = base_time
             self.current_time = base_time
@@ -370,6 +370,52 @@ with tempfile.TemporaryDirectory(prefix="voltage-open-loop-") as directory:
     assert not model.call("model_null_init")
     assert model.diag == (IDLE, NONE, 0, 0)
     CASES.append("空参数、实例内配置别名重新初始化行为确定；再次试验须显式初始化")
+
+    survey = {"profile": 1, "target_electrical_hz": 0.0, "excursion_turns": 0.25,
+              "voltage_ramp_ticks": 100, "alignment_hold_ticks": 200,
+              "frequency_ramp_ticks": 100, "voltage_ramp_down_ticks": 100,
+              "timeout_ticks": 1100, "max_step_ticks": 2}
+    model = Model(survey)
+    model.start()
+    states = set()
+    while model.step(2):
+        t = model.now - model.base_time
+        states.add(model.diag[0])
+        if t < 100:
+            phase, voltage, hz = 0.0, 0.5 * t / 100, 0.0
+        elif t < 300:
+            phase, voltage, hz = 0.0, 0.5, 0.0
+        elif t < 400:
+            phase, voltage, hz = 0.25 * (t - 300) / 100, 0.5, 50.0
+        elif t < 600:
+            phase, voltage, hz = 0.25, 0.5, 0.0
+        elif t < 700:
+            phase, voltage, hz = 0.25 * (700 - t) / 100, 0.5, -50.0
+        elif t < 900:
+            phase, voltage, hz = 0.0, 0.5, 0.0
+        else:
+            phase, voltage, hz = 0.0, 0.5 * (1000 - t) / 100, 0.0
+        assert math.isclose(model.values[5], phase, abs_tol=1e-7), (t, model.values)
+        assert math.isclose(model.values[6], hz, abs_tol=1e-5)
+        assert math.isclose(model.values[3], voltage * math.cos(math.tau * phase), abs_tol=1e-6)
+        assert math.isclose(model.values[4], voltage * math.sin(math.tau * phase), abs_tol=1e-6)
+    assert states == {1, 2, 9, 10, 11, 12, 5}
+    model.expect_off(COMPLETE, NONE)
+    CASES.append("静态轨迹七段与独立解析值一致，三个保持角无漂移，返回零角后缓降并撤销")
+    for override in [{"profile": 2}, {"target_electrical_hz": 1.0}, {"excursion_turns": 0},
+                     {"excursion_turns": 0.251}, {"excursion_turns": math.nan},
+                     {"timeout_ticks": 1000}, {"alignment_hold_ticks": 0xFFFFFFFF}]:
+        Model(survey | override, valid=False)
+    Model({"excursion_turns": 0.25}, valid=False)
+    CASES.append("静态模式需显式选择、零目标电频和有界角幅；不放宽原旋转模式的零频拒绝")
+    for flags, reason in [(6, PREREQUISITE), (5, FEEDBACK), (15, FAULT), (31, STOP)]:
+        model = Model(survey); model.start(); model.step(2); model.flags = flags; model.step(2)
+        model.expect_off(STOPPED if flags == 31 else FAILED, reason)
+    model = Model(survey); model.start(); model.step(2); model.inputs[0] = 0.25; model.step(2)
+    model.expect_off(FAILED, NOMINAL_CURRENT)
+    model = Model(survey); model.start(); model.step(2); model.step(3)
+    model.expect_off(FAILED, TIME)
+    CASES.append("静态模式继续兑现 Stop、故障、名义电流与漏拍立即撤销，终态不重启")
 
 print(f"PASS: {len(CASES)} VoltageOpenLoop ARM C groups")
 for case in CASES:

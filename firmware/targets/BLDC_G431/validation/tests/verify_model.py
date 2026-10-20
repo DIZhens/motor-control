@@ -202,6 +202,19 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
                                struct.pack("<ff", voltage, frequency))
             self.submit(15, key=key, duration=duration, duty=duty)
 
+        def survey_submit(self, voltage=0.3, excursion=0.25, key=KEY, duration=5500000, duty=0.5):
+            self.cpu.mem_write(symbols["g_target_validation_angle_survey_config"],
+                               struct.pack("<ff", voltage, excursion))
+            self.submit(16, key=key, duration=duration, duty=duty)
+
+        def survey(self):
+            raw = self.cpu.mem_read(symbols["g_target_validation_angle_survey"], 168)
+            header = dict(zip(["sequence", "request", "result", "stable_mask", "excursion", "voltage"],
+                              struct.unpack_from("<4I2f", raw)))
+            keys = ["count", "first_time", "last_time", "mean", "span", "first", "last", "mean_b", "mean_c"]
+            header["windows"] = [dict(zip(keys, struct.unpack_from("<I4xQQ6f", raw, 24 + 48*i))) for i in range(3)]
+            return header
+
     def powered(duration=2000, duty=0.5):
         m = Model()
         m.tick(200)
@@ -717,6 +730,75 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     assert m.word("g_target_validation_stop_reason") == 18 and not m.moe()
     m.tick(); assert m.open_loop()["result"] == 18
     passed("open-loop independent total deadline remains terminal across DWT wrap")
+
+    m = Model(pending=16); m.tick(10)
+    assert not m.moe() and m.open_loop()["request"] == 0
+    m.survey_submit(); m.tick()
+    assert m.status("result") == 19 and m.word("model_enable_calls") == 0
+    passed("static survey discards reset-time request and requires this-boot full zero capture")
+    for payload, reason in [({"voltage": 0.501}, 4), ({"excursion": 0.0}, 4),
+                            ({"excursion": 0.251}, 4), ({"excursion": float("nan")}, 4),
+                            ({"key": 0}, 3), ({"duration": 3500000}, 4), ({"duty": 0.3}, 4)]:
+        m = zero_ready(); m.survey_submit(**payload); m.tick(3)
+        assert m.status("result") == reason and not m.moe()
+        assert m.word("model_stage_calls") == m.word("model_enable_calls") == 0
+        passed("static survey rejects invalid payload before staging: " + str(payload))
+
+    def survey_powered():
+        m = zero_ready(); m.write("model_position_period_ticks", 20)
+        m.survey_submit(); m.tick(3)
+        assert m.moe() and m.word("model_enable_calls") == 1
+        assert m.survey()["request"] == m.sequence and m.survey()["result"] == 0
+        return m
+
+    m = survey_powered()
+    capture_before = m.capture()
+    m.write("model_position_turns", 0.99, "f"); m.tick(15000)
+    m.write("model_position_turns", 0.954285714, "f"); m.tick(15000)
+    m.write("model_position_turns", 0.99, "f"); m.tick(20000)
+    r = m.survey()
+    assert r["sequence"] % 2 == 0 and r["result"] == 1 and r["stable_mask"] == 7, r
+    assert not m.moe() and m.word("model_enable_calls") == 1 and m.word("model_stage_calls") == 50001
+    assert m.open_loop()["samples"] == 50002 and m.open_loop()["frequency"] == 0
+    assert [w["count"] for w in r["windows"]] == [250, 250, 250], r
+    for w, position in zip(r["windows"], [0.99, 0.954285714, 0.99]):
+        assert math.isclose(w["mean"], position, abs_tol=1e-6) and w["span"] == 0
+        assert w["last_time"]-w["first_time"] == 4980
+        assert abs(w["mean_b"]) < 1e-7 and abs(w["mean_c"]) < 1e-7
+    assert m.capture() == capture_before
+    m.tick(20); assert m.survey() == r and m.word("model_enable_calls") == 1
+    passed("one five-second survey records only 250 unique SSI observations per hold and powers off without retry")
+
+    m = survey_powered(); m.tick(12500)
+    # 窗口内跨机械零点，圆差统计应保持小跨度；不能按普通均值得到约半圈。
+    for i in range(2500):
+        m.write("model_position_turns", 0.9998 if (i//10)%2 else 0.0002, "f"); m.tick()
+    m.write("model_position_turns", 0.3, "f"); m.tick(12500)
+    for i in range(2500):
+        m.write("model_position_turns", 0.30 if (i//10)%2 else 0.31, "f"); m.tick()
+    m.write("model_position_turns", 0.0001, "f"); m.tick(20000)
+    r = m.survey()
+    assert r["result"] == 1 and r["stable_mask"] == 5, r
+    assert min(r["windows"][0]["mean"], 1-r["windows"][0]["mean"]) < 0.0001
+    assert math.isclose(r["windows"][0]["span"], 0.0004, abs_tol=1e-6)
+    assert r["windows"][1]["span"] > 0.009
+    assert not m.moe()
+    passed("survey uses circular mean across zero; unstable hold remains unqualified even after normal power completion")
+
+    for field, value, fmt, expected in [("model_position_valid", 0, "I", 20),
+                                       ("model_current_b_a", 0.3, "f", 22),
+                                       ("model_stage_ok", 0, "I", 8)]:
+        m = survey_powered(); m.write(field, value, fmt); m.tick()
+        assert not m.moe() and m.survey()["result"] == expected and m.survey()["stable_mask"] == 0
+        passed("static survey revokes output on fault and invalidates candidate: " + field)
+    m = survey_powered(); m.submit(1); m.tick()
+    assert m.survey()["result"] == 2 and m.survey()["stable_mask"] == 0 and not m.moe()
+    passed("static survey Stop freezes a failed observation without installing calibration")
+    m = survey_powered(); deadline = m.word("s_deadline_cycles")
+    m.memory_write(DWT_CYCCNT, deadline); m.write("s_last_sample_cycles", deadline); m.call("model_guard")
+    assert not m.moe() and m.word("g_target_validation_stop_reason") == 18
+    m.tick(); assert m.survey()["result"] == 18 and m.survey()["stable_mask"] == 0
+    passed("static survey independent deadline is failure rather than false completion")
 
 print(f"PASS: {len(cases)} ARM-executed G431 validation cases.")
 print("Fake HCC/time only; does not prove electrical behavior, interrupt latency or hardware L1/L2.")

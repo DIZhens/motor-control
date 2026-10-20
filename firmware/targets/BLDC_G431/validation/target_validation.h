@@ -55,6 +55,7 @@ typedef enum {
     TARGET_VALIDATION_COMMAND_CLEAR_INJECTION = 8,
     TARGET_VALIDATION_COMMAND_REARM = 9,
     TARGET_VALIDATION_COMMAND_OPEN_LOOP = 15, /* 有限低电压试转；不复用旧的 10～14 时序命令。 */
+    TARGET_VALIDATION_COMMAND_ANGLE_SURVEY = 16, /* 单次有限静态电角往返，仅生成观测证据。 */
     TARGET_VALIDATION_COMMAND_TIMING_IMMEDIATE = TIMING_PROBE_CASE_IMMEDIATE,
     TARGET_VALIDATION_COMMAND_TIMING_BEFORE = TIMING_PROBE_CASE_BEFORE,
     TARGET_VALIDATION_COMMAND_TIMING_AFTER = TIMING_PROBE_CASE_AFTER,
@@ -101,17 +102,18 @@ typedef enum {
 #define TARGET_VALIDATION_CURRENT_SAMPLE_COUNT (4096U)
 #define TARGET_VALIDATION_PROBE_DURATION_US (2000U)
 #define TARGET_VALIDATION_OPEN_LOOP_DURATION_US (3500000U)
+#define TARGET_VALIDATION_ANGLE_SURVEY_DURATION_US (5500000U)
 
 /* 先写 payload，最后写新的非零 sequence；等待消费后再提交下一条。
- * power_key 消费即清零，PWM_BURST / BREAK_* / OPEN_LOOP 必须逐次提供。不是安全认证。
+ * power_key 消费即清零，PWM_BURST / BREAK_* / OPEN_LOOP / ANGLE_SURVEY 必须逐次提供。不是安全认证。
  * BREAK_* 固定 duration_us=2000 / common_duty=0.5，不允许带电机。
  * TIMING_* 固定 power_key=0 / duration_us=0 / common_duty=0，仅低于 4 V 母线。 */
 typedef struct {
     uint32_t sequence;
     uint32_t command;
     uint32_t power_key;
-    uint32_t duration_us; /* 旧 stage/burst 为 1000～10000 us；OPEN_LOOP 固定 3500000 us。 */
-    float common_duty;   /* 旧 stage/burst 三相相同且电机断开；OPEN_LOOP 固定 0.5，仅用于中性预热。 */
+    uint32_t duration_us; /* 旧 stage/burst 为 1000～10000 us；命令 15/16 分别固定 3500000/5500000 us。 */
+    float common_duty;   /* 旧 stage/burst 三相相同且电机断开；命令 15/16 固定 0.5，仅用于中性预热。 */
 } TargetValidationMailbox;
 
 /* 独立扩展 payload；先写本结构与旧 mailbox payload，最后写旧 sequence。
@@ -121,6 +123,36 @@ typedef struct {
     float voltage_v; /* (0, 0.5] V，电压矢量模长。 */
     float electrical_frequency_hz; /* 非零，绝对值不超过 5 Hz。 */
 } TargetValidationOpenLoopConfig;
+
+/* 命令 16 独立 payload，不改命令 15 的 8 字节语义；duration_us 固定 5500000。 */
+typedef struct {
+    float voltage_v; /* (0,0.5] V，沿用低电压和名义电流辅助限制。 */
+    float excursion_turns; /* (0,0.25] 电角圈；轨迹为 0 → excursion → 0。 */
+} TargetValidationAngleSurveyConfig;
+
+/* 每个保持段仅统计末尾 250 ms 中时间戳不同的新 SSI 观测。
+ * 不能把保持段开始前采到的旧位置计入，也不把圆均值当作可信标定。 */
+typedef struct {
+    uint32_t sample_count;
+    ControlTime first_position_time;
+    ControlTime last_position_time;
+    float mean_position_turns; /* 相对窗口锚展开后求均值，再归一化至 [0,1)。 */
+    float span_turns; /* 相对同一锚的最大值减最小值，机械圈。 */
+    float first_position_turns;
+    float last_position_turns;
+    float mean_nominal_b_a; /* 消费这些新位置的回调中，同步相电流名义值的均值；不是标定。 */
+    float mean_nominal_c_a;
+} TargetValidationAngleWindow;
+
+typedef struct {
+    uint32_t sequence;
+    uint32_t request_sequence;
+    uint32_t result;
+    uint32_t stable_window_mask; /* 位 0/1/2 对应 0、excursion、返回 0；仅有限稳定观察。 */
+    float excursion_turns;
+    float voltage_v;
+    TargetValidationAngleWindow windows[3];
+} TargetValidationAngleSurveySnapshot;
 
 /* ADC 单写者的独立结果，保持旧 Watch / Mailbox ABI 不变。
  * 前后 sequence 相同且为偶数才一致；ADC 停止时另读 stop_reason / 实际 MOE。
@@ -206,6 +238,8 @@ extern volatile TargetValidationSnapshot g_target_validation;
 extern volatile TargetValidationCurrentCapture g_target_validation_capture;
 extern volatile TargetValidationOpenLoopConfig g_target_validation_open_loop_config;
 extern volatile TargetValidationOpenLoopSnapshot g_target_validation_open_loop;
+extern volatile TargetValidationAngleSurveyConfig g_target_validation_angle_survey_config;
+extern volatile TargetValidationAngleSurveySnapshot g_target_validation_angle_survey;
 /* ADC 丢失时快照可能停在旧状态；此字独立记录关断原因。 */
 extern volatile uint32_t g_target_validation_stop_reason;
 /* 时序用例后的连续正常采样数，饱和至 2；不改变旧诊断结构的 ABI。 */

@@ -26,6 +26,8 @@ volatile TargetValidationSnapshot g_target_validation;
 volatile TargetValidationCurrentCapture g_target_validation_capture;
 volatile TargetValidationOpenLoopConfig g_target_validation_open_loop_config;
 volatile TargetValidationOpenLoopSnapshot g_target_validation_open_loop;
+volatile TargetValidationAngleSurveyConfig g_target_validation_angle_survey_config;
+volatile TargetValidationAngleSurveySnapshot g_target_validation_angle_survey;
 volatile uint32_t g_target_validation_stop_reason;
 volatile uint32_t g_target_validation_timing_recovery_ticks;
 
@@ -56,6 +58,12 @@ static TargetValidationOpenLoopSnapshot s_open_loop_report;
 static ControlTime s_open_loop_sample_time;
 static ControlTime s_open_loop_position_time;
 static float s_open_loop_position;
+static bool s_angle_survey_active;
+static TargetValidationAngleSurveySnapshot s_angle_survey_report;
+static float s_angle_window_anchor[3];
+static float s_angle_window_min[3];
+static float s_angle_window_max[3];
+static float s_angle_window_mean[3];
 
 /* 事务状态仅由 ADC 更新；其他中断只能关断并发布原因。 */
 static volatile bool s_operation_active;
@@ -140,6 +148,30 @@ static void finish_operation(void)
         s_open_loop_report.module_reason = (uint32_t)s_open_loop.reason;
         s_open_loop_active = false;
         publish_open_loop();
+        if (s_angle_survey_active) {
+            uint32_t i;
+            uint32_t sequence = g_target_validation_angle_survey.sequence;
+
+            s_angle_survey_report.result = g_target_validation_stop_reason;
+            s_angle_survey_report.stable_window_mask = 0U;
+            for (i = 0U; i < 3U; i++) {
+                const TargetValidationAngleWindow *w = &s_angle_survey_report.windows[i];
+
+                /* 只在正常完成且每个窗口自身满足观察条件时标记；不授予标定或 RUN。 */
+                if (g_target_validation_stop_reason == TARGET_VALIDATION_RESULT_COMPLETE &&
+                    w->sample_count >= 200U && w->last_position_time >= w->first_position_time + 4500U &&
+                    w->span_turns <= 0.002f) {
+                    s_angle_survey_report.stable_window_mask |= 1U << i;
+                }
+            }
+            g_target_validation_angle_survey.sequence = sequence + 1U;
+            __DMB();
+            s_angle_survey_report.sequence = sequence + 1U;
+            g_target_validation_angle_survey = s_angle_survey_report;
+            __DMB();
+            g_target_validation_angle_survey.sequence = sequence + 2U;
+            s_angle_survey_active = false;
+        }
     }
     if (s_capturing) {
         s_statistics.result = g_target_validation_stop_reason;
@@ -353,7 +385,7 @@ static TargetValidationResult open_loop_module_result(void)
 
 static bool prepare_open_loop(const TargetValidationMailbox *request,
     const TargetValidationOpenLoopConfig *requested, const PhaseCurrentObservation *current,
-    uint32_t now_cycles)
+    uint32_t now_cycles, bool survey)
 {
     TargetValidationOpenLoopSnapshot empty = {0};
     VoltageOpenLoopConfig config = {0};
@@ -363,17 +395,19 @@ static bool prepare_open_loop(const TargetValidationMailbox *request,
     s_open_loop_report = empty;
     s_open_loop_report.request_sequence = request->sequence;
     s_open_loop_report.voltage_v = requested->voltage_v;
-    s_open_loop_report.electrical_frequency_hz = requested->electrical_frequency_hz;
+    s_open_loop_report.electrical_frequency_hz = survey ? 0.0f : requested->electrical_frequency_hz;
     s_open_loop_report.min_duty = 0.5f;
     s_open_loop_report.max_duty = 0.5f;
     if (request->power_key != TARGET_VALIDATION_POWER_KEY) {
         failure = TARGET_VALIDATION_RESULT_LOCKED;
-    } else if (request->duration_us != TARGET_VALIDATION_OPEN_LOOP_DURATION_US
+    } else if (request->duration_us != (survey ? TARGET_VALIDATION_ANGLE_SURVEY_DURATION_US
+            : TARGET_VALIDATION_OPEN_LOOP_DURATION_US)
         || request->common_duty != 0.5f || !finite_float(requested->voltage_v)
         || requested->voltage_v <= 0.0f || requested->voltage_v > 0.5f
         || !finite_float(requested->electrical_frequency_hz)
-        || requested->electrical_frequency_hz == 0.0f
-        || requested->electrical_frequency_hz < -5.0f || requested->electrical_frequency_hz > 5.0f) {
+        || (survey ? (requested->electrical_frequency_hz <= 0.0f || requested->electrical_frequency_hz > 0.25f)
+            : (requested->electrical_frequency_hz == 0.0f || requested->electrical_frequency_hz < -5.0f
+                || requested->electrical_frequency_hz > 5.0f))) {
         failure = TARGET_VALIDATION_RESULT_BAD_REQUEST;
     } else if (!open_loop_zero_valid()) {
         failure = TARGET_VALIDATION_RESULT_BAD_ZERO;
@@ -390,20 +424,22 @@ static bool prepare_open_loop(const TargetValidationMailbox *request,
     }
     config.ticks_per_second = s_facts.control_time_ticks_per_second;
     config.voltage_v = requested->voltage_v;
-    config.target_electrical_hz = requested->electrical_frequency_hz;
+    config.target_electrical_hz = survey ? 0.0f : requested->electrical_frequency_hz;
     config.max_voltage_ratio = s_facts.normal_voltage_utilization;
     config.min_bus_voltage_v = 10.0f;
     config.max_bus_voltage_v = 14.0f;
     config.nominal_current_trip_a = OPEN_LOOP_NOMINAL_CURRENT_TRIP_A;
     config.voltage_ramp_ticks = 10000U;
-    config.alignment_hold_ticks = 10000U;
+    config.alignment_hold_ticks = survey ? 20000U : 10000U;
     config.frequency_ramp_ticks = 10000U;
     config.rotation_ticks = 20000U;
     config.voltage_ramp_down_ticks = 10000U;
-    config.timeout_ticks = 70000U;
+    config.timeout_ticks = survey ? 110000U : 70000U;
     config.max_step_ticks = s_facts.fast_tick_period_ticks;
     config.max_current_age_ticks = 0U;
     config.max_bus_age_ticks = BUS_MAX_AGE_TICKS;
+    config.profile = survey ? VOLTAGE_OPEN_LOOP_STATIC_SURVEY : VOLTAGE_OPEN_LOOP_ROTATING;
+    config.excursion_turns = survey ? requested->electrical_frequency_hz : 0.0f;
     if (!voltage_open_loop_init(&s_open_loop, &config)) {
         s_open_loop_report.result = TARGET_VALIDATION_RESULT_OPEN_LOOP_REJECTED;
         g_target_validation.result = TARGET_VALIDATION_RESULT_OPEN_LOOP_REJECTED;
@@ -418,6 +454,23 @@ static bool prepare_open_loop(const TargetValidationMailbox *request,
     s_open_loop_position_time = position.observation_time;
     s_open_loop_sample_time = current->observation_time;
     s_open_loop_report.active = 1U;
+    s_angle_survey_active = survey;
+    if (survey) {
+        TargetValidationAngleSurveySnapshot empty_survey = {0};
+
+        s_angle_survey_report = empty_survey;
+        s_angle_survey_report.request_sequence = request->sequence;
+        s_angle_survey_report.excursion_turns = config.excursion_turns;
+        s_angle_survey_report.voltage_v = config.voltage_v;
+        /* 不清版本字；新请求开始即撤销上一份窗口，结束时才发布本次窗口。 */
+        g_target_validation_angle_survey.sequence++;
+        __DMB();
+        g_target_validation_angle_survey.request_sequence = request->sequence;
+        g_target_validation_angle_survey.result = TARGET_VALIDATION_RESULT_NONE;
+        g_target_validation_angle_survey.stable_window_mask = 0U;
+        __DMB();
+        g_target_validation_angle_survey.sequence++;
+    }
     s_open_loop_active = true;
     s_power_requested = true;
     s_powered = false;
@@ -449,6 +502,10 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
     }
     request = g_target_validation_request;
     open_loop_config = g_target_validation_open_loop_config;
+    if (request.command == TARGET_VALIDATION_COMMAND_ANGLE_SURVEY) {
+        open_loop_config.voltage_v = g_target_validation_angle_survey_config.voltage_v;
+        open_loop_config.electrical_frequency_hz = g_target_validation_angle_survey_config.excursion_turns;
+    }
     __DMB();
     if (request.sequence != g_target_validation_request.sequence) {
         restore_interrupts(primask);
@@ -477,6 +534,7 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
         && (request.command != TARGET_VALIDATION_COMMAND_CLEAR_INJECTION)
         && (request.command != TARGET_VALIDATION_COMMAND_REARM)
         && (request.command != TARGET_VALIDATION_COMMAND_OPEN_LOOP)
+        && (request.command != TARGET_VALIDATION_COMMAND_ANGLE_SURVEY)
         && !is_timing_command(request.command)) {
         g_target_validation.result = TARGET_VALIDATION_RESULT_BAD_REQUEST;
         return;
@@ -519,8 +577,9 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
         g_target_validation.result = TARGET_VALIDATION_RESULT_PROBE_REJECTED;
         return;
     }
-    if (request.command == TARGET_VALIDATION_COMMAND_OPEN_LOOP) {
-        (void)prepare_open_loop(&request, &open_loop_config, current, now_cycles);
+    if (request.command == TARGET_VALIDATION_COMMAND_OPEN_LOOP || request.command == TARGET_VALIDATION_COMMAND_ANGLE_SURVEY) {
+        (void)prepare_open_loop(&request, &open_loop_config, current, now_cycles,
+            request.command == TARGET_VALIDATION_COMMAND_ANGLE_SURVEY);
         return;
     }
     if (is_timing_command(request.command)) {
@@ -712,6 +771,69 @@ static void record_open_loop_duty(const PhaseDutyRequest *duty)
     }
 }
 
+static bool record_angle_survey(const PositionObservation *position, const VoltageOpenLoopInput *input)
+{
+    uint64_t elapsed;
+    uint64_t ends[3];
+    uint32_t i;
+
+    if (!s_angle_survey_active || position->observation_time < s_open_loop.started_at) {
+        return true;
+    }
+    elapsed = position->observation_time - s_open_loop.started_at;
+    ends[0] = (uint64_t)s_open_loop.config.voltage_ramp_ticks + s_open_loop.config.alignment_hold_ticks;
+    ends[1] = ends[0] + s_open_loop.config.frequency_ramp_ticks + s_open_loop.config.alignment_hold_ticks;
+    ends[2] = ends[1] + s_open_loop.config.frequency_ramp_ticks + s_open_loop.config.alignment_hold_ticks;
+    for (i = 0U; i < 3U; i++) {
+        TargetValidationAngleWindow *w = &s_angle_survey_report.windows[i];
+        float delta, count, mean;
+
+        if (elapsed < ends[i] - 5000U || elapsed >= ends[i] ||
+            (w->sample_count != 0U && position->observation_time == w->last_position_time)) {
+            continue;
+        }
+        if (w->sample_count == 0U) {
+            s_angle_window_anchor[i] = position->mechanical_position_turns;
+            s_angle_window_min[i] = 0.0f;
+            s_angle_window_max[i] = 0.0f;
+            s_angle_window_mean[i] = 0.0f;
+            w->first_position_time = position->observation_time;
+            w->first_position_turns = position->mechanical_position_turns;
+        }
+        delta = position->mechanical_position_turns - s_angle_window_anchor[i];
+        if (delta > 0.5f) {
+            delta -= 1.0f;
+        } else if (delta < -0.5f) {
+            delta += 1.0f;
+        }
+        /* 固定保持段不能跨半圈；异常观测立即撤销，不进行模糊展开。 */
+        if (delta <= -0.25f || delta >= 0.25f) {
+            return false;
+        }
+        if (delta < s_angle_window_min[i]) {
+            s_angle_window_min[i] = delta;
+        }
+        if (delta > s_angle_window_max[i]) {
+            s_angle_window_max[i] = delta;
+        }
+        count = (float)(++w->sample_count);
+        s_angle_window_mean[i] += (delta - s_angle_window_mean[i]) / count;
+        mean = s_angle_window_anchor[i] + s_angle_window_mean[i];
+        if (mean < 0.0f) {
+            mean += 1.0f;
+        } else if (mean >= 1.0f) {
+            mean -= 1.0f;
+        }
+        w->mean_position_turns = mean;
+        w->span_turns = s_angle_window_max[i] - s_angle_window_min[i];
+        w->last_position_time = position->observation_time;
+        w->last_position_turns = position->mechanical_position_turns;
+        w->mean_nominal_b_a += (input->phase_current_a[1] - w->mean_nominal_b_a) / count;
+        w->mean_nominal_c_a += (input->phase_current_a[2] - w->mean_nominal_c_a) / count;
+    }
+    return true;
+}
+
 static void run_open_loop(const PhaseCurrentObservation *current, uint32_t interval_cycles)
 {
     VoltageOpenLoopInput input;
@@ -788,6 +910,10 @@ static void run_open_loop(const PhaseCurrentObservation *current, uint32_t inter
         s_open_loop_report.enabled_samples++;
         if (!voltage_open_loop_update(&s_open_loop, &input)) {
             stop_operation(open_loop_module_result());
+            return;
+        }
+        if (!record_angle_survey(&position, &input)) {
+            stop_operation(TARGET_VALIDATION_RESULT_BAD_POSITION);
             return;
         }
         duty.phase_a_duty = s_open_loop.output.duty_a;

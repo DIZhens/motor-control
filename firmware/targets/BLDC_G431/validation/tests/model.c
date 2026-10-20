@@ -21,6 +21,7 @@ uint32_t model_position_valid = 1U;
 uint32_t model_position_referenced = 1U;
 uint32_t model_position_age_ticks;
 uint32_t model_position_future_ticks;
+uint32_t model_position_period_ticks = 2U;
 float model_position_turns = 0.25f;
 uint32_t model_bus_age_ticks;
 uint32_t model_bus_future_ticks;
@@ -213,7 +214,8 @@ bool position_observation_arm(void) { return true; }
 bool bus_observation_arm(void) { return true; }
 bool position_observation_get_latest(PositionObservation *out)
 {
-    out->observation_time = model_time - model_position_age_ticks + model_position_future_ticks;
+    out->observation_time = (model_time / model_position_period_ticks) * model_position_period_ticks
+        - model_position_age_ticks + model_position_future_ticks;
     out->mechanical_position_turns = model_position_turns;
     out->referenced = model_position_referenced != 0U;
     out->acquisition_valid = model_position_valid != 0U;

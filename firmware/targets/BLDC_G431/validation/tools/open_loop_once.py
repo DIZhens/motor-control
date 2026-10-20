@@ -155,19 +155,22 @@ class Session(pwm.Session):
             "prepared_sha256": candidate.digest(prepared), "prepared": str(prepared.resolve())})
 
     def execute(self, tag, arguments):
+        power_command = getattr(self, "power_command", COMMAND)
+        power_duration = getattr(self, "power_duration_us", DURATION_US)
+        payload_parameters = getattr(self, "payload_parameters", self.parameters)
         if "-w32" in arguments:
             if len(arguments) == 10:
-                expected = ["-w32", hex(self.layout["config"]), hex(float_bits(self.parameters[0])),
-                    hex(float_bits(self.parameters[1])), "-w32", hex(self.layout["request"] + 4),
-                    hex(COMMAND), hex(KEY), hex(DURATION_US), hex(float_bits(0.5))]
+                expected = ["-w32", hex(self.layout["config"]), hex(float_bits(payload_parameters[0])),
+                    hex(float_bits(payload_parameters[1])), "-w32", hex(self.layout["request"] + 4),
+                    hex(power_command), hex(KEY), hex(power_duration), hex(float_bits(0.5))]
                 require(self.action == "execute" and not self.power_payload_attempted and arguments == expected,
                         "开环 payload 非法或重复")
                 self.power_payload_attempted = True
             elif len(arguments) == 3:
                 require(self.action == "execute" and self.power_payload_attempted and self.power_commit_ready
                         and arguments == ["-w32", hex(self.layout["request"]), hex(self.last_sequence)]
-                        and COMMAND not in self.writes, "开环 sequence 未通过读回或重复")
-                self.writes.append(COMMAND)
+                        and power_command not in self.writes, "开环 sequence 未通过读回或重复")
+                self.writes.append(power_command)
             else:
                 require(len(arguments) == 9 and arguments[0] == arguments[6] == "-w32"
                         and int(arguments[1], 0) == self.layout["request"] + 4
@@ -205,13 +208,14 @@ class Session(pwm.Session):
 
 
 def submit(session, command, tag):
-    require(command in [1, 4, COMMAND] and session.last_sequence is not None, "先读 mailbox 再提交")
+    power_command = getattr(session, "power_command", COMMAND)
+    require(command in [1, 4, power_command] and session.last_sequence is not None, "先读 mailbox 再提交")
     previous_sequence = session.last_sequence
     sequence = ((previous_sequence + 1) & 0xFFFFFFFF) or 1
-    duration = DURATION_US if command == COMMAND else 2000 if command == 4 else 0
+    duration = getattr(session, "power_duration_us", DURATION_US) if command == power_command else 2000 if command == 4 else 0
     session.last_sequence = sequence
-    if command == COMMAND:
-        voltage, frequency = parameters(*session.parameters)
+    if command == power_command:
+        voltage, frequency = parameters(*getattr(session, "payload_parameters", session.parameters))
         session.execute(tag + "-payload", ["-w32", hex(session.layout["config"]), hex(float_bits(voltage)),
             hex(float_bits(frequency)), "-w32", hex(session.layout["request"] + 4), hex(command), hex(KEY),
             hex(duration), hex(float_bits(0.5))])
@@ -439,8 +443,9 @@ def read_result(session, tag):
 def execute_once(session, anchor, vbus_dmm, clock=time.monotonic):
     first, before, probe = preflight(session, "open-loop-before", vbus_dmm)
     stats = check_zero_anchor(session, anchor, first, before, probe)
-    request = submit(session, COMMAND, "submit-open-loop-once")
-    deadline, index = clock() + 6.0, 0
+    request = submit(session, getattr(session, "power_command", COMMAND), "submit-open-loop-once")
+    wait_s = getattr(session, "power_wait_s", 6.0)
+    deadline, index = clock() + wait_s, 0
     session.deadline = deadline
     while clock() < deadline:
         # 每次外部调用也受剩余总期限限制；所有读取串行，绝不补发请求。
@@ -452,7 +457,7 @@ def execute_once(session, anchor, vbus_dmm, clock=time.monotonic):
         if observed["stop_reason"] not in [0, 1] and not observed["moe"]:
             raise RuntimeError("开环已被独立关断；新结果可能因 ADC 停止而未更新，禁止重试")
     else:
-        raise RuntimeError("主机 6 秒期限到；保留结果，只允许关断，禁止重试")
+        raise RuntimeError(f"主机 {wait_s:g} 秒期限到；保留结果，只允许关断，禁止重试")
     session.call_timeout_s, session.deadline = 15.0, None
     require(not observed["moe"] and not observed["halted"] and observed["stop_reason"] == 1
             and observed["result"] == 1 and observed["module_state"] == 6 and observed["module_reason"] == 0,
@@ -461,7 +466,7 @@ def execute_once(session, anchor, vbus_dmm, clock=time.monotonic):
     require(observed["voltage_v"] == session.parameters[0] and observed["electrical_frequency_hz"] == session.parameters[1]
             and observed["offset_b_a"] == stats["phase_b.mean_a"] and observed["offset_c_a"] == stats["phase_c.mean_a"],
             "请求参数或冻结零点不一致")
-    require(0 < observed["enabled_samples"] <= observed["sample_count"] <= 40000
+    require(0 < observed["enabled_samples"] <= observed["sample_count"] <= getattr(session, "sample_count_max", 40000)
             and 0 <= observed["peak_abs_current_a"] < 0.25
             and 0.1 <= observed["min_duty"] <= observed["max_duty"] <= 0.9, "开环样本/电流/占空比结果异常")
     _, final, updated = preflight(session, "open-loop-final", vbus_dmm, stationary=False)
