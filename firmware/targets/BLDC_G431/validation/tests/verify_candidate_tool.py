@@ -42,6 +42,16 @@ def elf_fixture(layout, payload=b"\x01\x02\x03\x04"):
     return header + program + payload + strings + symbols + names + sections
 
 
+def hex_fixture(payload):
+    """生成校验和正确的连续 Flash 镜像，供真实压缩尺寸夹具使用。"""
+    rows = [":020000040800F2"]
+    for offset in range(0, len(payload), 16):
+        block = payload[offset:offset + 16]
+        record = bytes([len(block), offset >> 8, offset & 255, 0]) + block
+        rows.append(":" + (record + bytes([-sum(record) & 255])).hex().upper())
+    return "\n".join([*rows, ":00000001FF", ""])
+
+
 class Tests(unittest.TestCase):
     def setUp(self):
         self.temp = TemporaryDirectory(prefix="g431-candidate-test-")
@@ -213,6 +223,67 @@ class Tests(unittest.TestCase):
             with self.subTest(change=old), patch.object(common.Session, "upload") as upload, self.assertRaises(RuntimeError):
                 self.configure()
             upload.assert_not_called()
+
+    def test_armcc_real_compressed_size_metadata_passes(self):
+        # 与本次 ARMCC 真实输出同尺寸：压缩前 0xa1f4，实际加载 0xa0a0。
+        payload = bytes(range(256)) * (0xA0A0 // 256) + bytes(range(0xA0A0 % 256))
+        self.assertEqual(len(payload), 41120)
+        (self.build / candidate.ARTIFACTS[0]).write_text(hex_fixture(payload), encoding="ascii")
+        (self.build / candidate.ARTIFACTS[1]).write_bytes(elf_fixture(self.layout, payload))
+        mapping = self.build / candidate.ARTIFACTS[2]
+        original = mapping.read_text(encoding="utf-8")
+        mapping.write_text(original.replace("Size: 0x00000004, Max: 0x20000",
+            "Size: 0x0000a1f4, Max: 0x00020000, ABSOLUTE, COMPRESSED[0x0000a0a0]"), encoding="utf-8")
+        self.manifest["files"] = {name: candidate.digest(self.build / name) for name in candidate.ARTIFACTS}
+        self.write()
+        with patch.object(common.Session, "upload") as upload:
+            self.configure()
+        upload.assert_not_called()
+
+    def test_compressed_map_tampering_rejected_before_swd(self):
+        mapping = self.build / candidate.ARTIFACTS[2]
+        original = mapping.read_text(encoding="utf-8")
+        valid = "Load Region LR_IROM1 (Base: 0x08000000, Size: 0x00000008, Max: 0x20000, ABSOLUTE, COMPRESSED[0x00000004])"
+        prefix = "Load Region LR_IROM1 (Base: 0x08000000, Size: 0x00000004, Max: 0x20000)"
+        valid_mapping = original.replace(prefix, valid)
+        mapping.write_text(valid_mapping, encoding="utf-8")
+        candidate.verify_artifacts(self.build, self.layout)
+        mutations = [
+            valid.replace("COMPRESSED[0x00000004]", "COMPRESSED[0x00000003]"),
+            valid.replace("COMPRESSED[0x00000004]", "COMPRESSED[0x00000005]"),
+            valid.replace("COMPRESSED[0x00000004]", "COMPRESSED[0x00000000]"),
+            valid.replace("Base: 0x08000000", "Base: 0x08000004"),
+            valid.replace("Base: 0x08000000", "Base: 0x07000000"),
+            valid.replace("Size: 0x00000008", "Size: 0x00000003"),
+            valid.replace("Size: 0x00000008", "Size: 0x00020001"),
+            valid.replace("Max: 0x20000", "Max: 0x00000007"),
+            valid.replace("Max: 0x20000", "Max: 0x20001"),
+            valid.replace("Max: 0x20000", "Max: 0x0"),
+            valid.replace(", Max: 0x20000", ""),
+            valid.replace("COMPRESSED[0x00000004]", "COMPRESSED[0x00000004], COMPRESSED[0x00000004]"),
+            valid.replace("COMPRESSED[0x00000004]", "COMPRESSED[0x00000004], COMPRESSED[0x00000003]"),
+            valid.replace("COMPRESSED[0x00000004]", "COMPRESSED[garbage]"),
+            valid.replace("ABSOLUTE", "ABSOLUTE, ABSOLUTE"),
+            valid + "\n" + valid,
+            valid + "\nLoad Region LR_OTHER (malformed)",
+        ]
+        for header in mutations:
+            mapping.write_text(original.replace(prefix, header), encoding="utf-8")
+            self.manifest["files"][candidate.ARTIFACTS[2]] = candidate.digest(mapping)
+            self.write()
+            with self.subTest(header=header), patch.object(common.Session, "upload") as upload:
+                with self.assertRaises(RuntimeError):
+                    self.configure()
+                upload.assert_not_called()
+
+    def test_compressed_flag_never_bypasses_axf_hex_byte_comparison(self):
+        mapping = self.build / candidate.ARTIFACTS[2]
+        mapping.write_text(mapping.read_text(encoding="utf-8").replace(
+            "Size: 0x00000004, Max: 0x20000", "Size: 0x00000008, Max: 0x20000, ABSOLUTE, COMPRESSED[0x00000004]"),
+            encoding="utf-8")
+        (self.build / candidate.ARTIFACTS[1]).write_bytes(elf_fixture(self.layout, b"\x01\x02\x03\x05"))
+        with self.assertRaisesRegex(RuntimeError, "mixed build"):
+            candidate.verify_artifacts(self.build, self.layout)
 
     def test_ram_execution_uses_physical_rom_load_address(self):
         axf = self.build / candidate.ARTIFACTS[1]

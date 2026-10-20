@@ -54,6 +54,7 @@ typedef enum {
     TARGET_VALIDATION_COMMAND_BREAK_OCP_AB = 7,
     TARGET_VALIDATION_COMMAND_CLEAR_INJECTION = 8,
     TARGET_VALIDATION_COMMAND_REARM = 9,
+    TARGET_VALIDATION_COMMAND_OPEN_LOOP = 15, /* 有限低电压试转；不复用旧的 10～14 时序命令。 */
     TARGET_VALIDATION_COMMAND_TIMING_IMMEDIATE = TIMING_PROBE_CASE_IMMEDIATE,
     TARGET_VALIDATION_COMMAND_TIMING_BEFORE = TIMING_PROBE_CASE_BEFORE,
     TARGET_VALIDATION_COMMAND_TIMING_AFTER = TIMING_PROBE_CASE_AFTER,
@@ -87,25 +88,63 @@ typedef enum {
     TARGET_VALIDATION_RESULT_BREAK_NOT_OBSERVED = 14,
     TARGET_VALIDATION_RESULT_REARM_REJECTED = 15,
     TARGET_VALIDATION_RESULT_TIMING_REJECTED = 16,
-    TARGET_VALIDATION_RESULT_TIMING_TIMEOUT = 17
+    TARGET_VALIDATION_RESULT_TIMING_TIMEOUT = 17,
+    TARGET_VALIDATION_RESULT_OPEN_LOOP_TIMEOUT = 18,
+    TARGET_VALIDATION_RESULT_BAD_ZERO = 19,
+    TARGET_VALIDATION_RESULT_BAD_POSITION = 20,
+    TARGET_VALIDATION_RESULT_OPEN_LOOP_REJECTED = 21,
+    TARGET_VALIDATION_RESULT_NOMINAL_CURRENT = 22
 } TargetValidationResult;
 
 #define TARGET_VALIDATION_POWER_KEY (0x4310A11EU)
 #define TARGET_VALIDATION_MAX_BURST_US (10000U)
 #define TARGET_VALIDATION_CURRENT_SAMPLE_COUNT (4096U)
 #define TARGET_VALIDATION_PROBE_DURATION_US (2000U)
+#define TARGET_VALIDATION_OPEN_LOOP_DURATION_US (3500000U)
 
 /* 先写 payload，最后写新的非零 sequence；等待消费后再提交下一条。
- * power_key 消费即清零，PWM_BURST / BREAK_* 必须逐次提供。不是安全认证。
+ * power_key 消费即清零，PWM_BURST / BREAK_* / OPEN_LOOP 必须逐次提供。不是安全认证。
  * BREAK_* 固定 duration_us=2000 / common_duty=0.5，不允许带电机。
  * TIMING_* 固定 power_key=0 / duration_us=0 / common_duty=0，仅低于 4 V 母线。 */
 typedef struct {
     uint32_t sequence;
     uint32_t command;
     uint32_t power_key;
-    uint32_t duration_us; /* stage/burst 总时间 1000～10000 us，包含 staging。 */
-    float common_duty;   /* 三相相同，0.10～0.90；电机三相必须断开。 */
+    uint32_t duration_us; /* 旧 stage/burst 为 1000～10000 us；OPEN_LOOP 固定 3500000 us。 */
+    float common_duty;   /* 旧 stage/burst 三相相同且电机断开；OPEN_LOOP 固定 0.5，仅用于中性预热。 */
 } TargetValidationMailbox;
+
+/* 独立扩展 payload；先写本结构与旧 mailbox payload，最后写旧 sequence。
+ * OPEN_LOOP 固定 common_duty=0.5、duration_us=3500000，并须逐次提供 power_key。
+ * 配置只在接收时复制；活动事务不读取主机随后修改的 payload。 */
+typedef struct {
+    float voltage_v; /* (0, 0.5] V，电压矢量模长。 */
+    float electrical_frequency_hz; /* 非零，绝对值不超过 5 Hz。 */
+} TargetValidationOpenLoopConfig;
+
+/* ADC 单写者的独立结果，保持旧 Watch / Mailbox ABI 不变。
+ * 前后 sequence 相同且为偶数才一致；ADC 停止时另读 stop_reason / 实际 MOE。
+ * 名义电流及圈数仅为本次试转诊断，不安装电流增益、电角度或方向标定。 */
+typedef struct {
+    uint32_t sequence;
+    uint32_t request_sequence;
+    uint32_t active;
+    uint32_t result;
+    uint32_t module_state;
+    uint32_t module_reason;
+    uint32_t sample_count;
+    uint32_t enabled_samples;
+    float voltage_v;
+    float electrical_frequency_hz;
+    float offset_b_a;
+    float offset_c_a;
+    float peak_abs_current_a;
+    float start_position_turns;
+    float end_position_turns;
+    float displacement_turns;
+    float min_duty;
+    float max_duty;
+} TargetValidationOpenLoopSnapshot;
 
 typedef struct {
     float mean_a;
@@ -165,6 +204,8 @@ typedef struct {
 extern volatile TargetValidationMailbox g_target_validation_request;
 extern volatile TargetValidationSnapshot g_target_validation;
 extern volatile TargetValidationCurrentCapture g_target_validation_capture;
+extern volatile TargetValidationOpenLoopConfig g_target_validation_open_loop_config;
+extern volatile TargetValidationOpenLoopSnapshot g_target_validation_open_loop;
 /* ADC 丢失时快照可能停在旧状态；此字独立记录关断原因。 */
 extern volatile uint32_t g_target_validation_stop_reason;
 /* 时序用例后的连续正常采样数，饱和至 2；不改变旧诊断结构的 ABI。 */

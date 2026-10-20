@@ -9,6 +9,7 @@
 #include "main.h"
 #include "tim.h"
 #include "protection_probe.h"
+#include "voltage_open_loop.h"
 
 #define CYCLES_PER_US (170U)
 #define GUARD_PERIOD_US (50U)
@@ -17,11 +18,14 @@
 #define CURRENT_PERIOD_US (100U)
 #define CAPTURE_MARGIN_US (5000U)
 #define BUS_MAX_AGE_TICKS (100U) /* 在 G431 的 20 kHz ControlTime 时域中为 5 ms。 */
+#define OPEN_LOOP_NOMINAL_CURRENT_TRIP_A (0.25f)
 
 volatile PlatformBringupDebug g_platform_bringup;
 volatile TargetValidationMailbox g_target_validation_request;
 volatile TargetValidationSnapshot g_target_validation;
 volatile TargetValidationCurrentCapture g_target_validation_capture;
+volatile TargetValidationOpenLoopConfig g_target_validation_open_loop_config;
+volatile TargetValidationOpenLoopSnapshot g_target_validation_open_loop;
 volatile uint32_t g_target_validation_stop_reason;
 volatile uint32_t g_target_validation_timing_recovery_ticks;
 
@@ -46,6 +50,12 @@ static PhaseDutyRequest s_duty;
 static TargetValidationCurrentStatistics s_statistics;
 static float s_m2_b;
 static float s_m2_c;
+static volatile bool s_open_loop_active; /* ADC 管理事务，TIM6 仅据此选择独立超时原因。 */
+static VoltageOpenLoop s_open_loop;
+static TargetValidationOpenLoopSnapshot s_open_loop_report;
+static ControlTime s_open_loop_sample_time;
+static ControlTime s_open_loop_position_time;
+static float s_open_loop_position;
 
 /* 事务状态仅由 ADC 更新；其他中断只能关断并发布原因。 */
 static volatile bool s_operation_active;
@@ -105,8 +115,32 @@ static void publish_capture(void)
     g_target_validation_capture.sequence++;
 }
 
+static void publish_open_loop(void)
+{
+    uint32_t sequence = g_target_validation_open_loop.sequence;
+
+    g_target_validation_open_loop.sequence = sequence + 1U;
+    __DMB();
+    s_open_loop_report.sequence = sequence + 1U;
+    g_target_validation_open_loop = s_open_loop_report;
+    __DMB();
+    g_target_validation_open_loop.sequence = sequence + 2U;
+}
+
 static void finish_operation(void)
 {
+    if (s_open_loop_active) {
+        if (s_open_loop.state != VOLTAGE_OPEN_LOOP_COMPLETE
+            && s_open_loop.state != VOLTAGE_OPEN_LOOP_FAILED) {
+            voltage_open_loop_stop(&s_open_loop);
+        }
+        s_open_loop_report.active = 0U;
+        s_open_loop_report.result = g_target_validation_stop_reason;
+        s_open_loop_report.module_state = (uint32_t)s_open_loop.state;
+        s_open_loop_report.module_reason = (uint32_t)s_open_loop.reason;
+        s_open_loop_active = false;
+        publish_open_loop();
+    }
     if (s_capturing) {
         s_statistics.result = g_target_validation_stop_reason;
         if (s_statistics.sample_count > 1U) {
@@ -157,7 +191,8 @@ static void check_deadline(uint32_t now_cycles)
         stop_operation(TARGET_VALIDATION_RESULT_BAD_CURRENT);
     } else if ((int32_t)(now_cycles - s_deadline_cycles) >= 0) {
         stop_operation(s_capturing ? TARGET_VALIDATION_RESULT_BAD_CURRENT
-            : TARGET_VALIDATION_RESULT_COMPLETE);
+            : (s_open_loop_active ? TARGET_VALIDATION_RESULT_OPEN_LOOP_TIMEOUT
+                : TARGET_VALIDATION_RESULT_COMPLETE));
     }
 }
 
@@ -239,9 +274,169 @@ static bool is_timing_command(uint32_t command)
         && (command <= TARGET_VALIDATION_COMMAND_TIMING_CANCEL);
 }
 
+static bool open_loop_zero_valid(void)
+{
+    const TargetValidationPhaseStatistics *b = &s_statistics.phase_b;
+    const TargetValidationPhaseStatistics *c = &s_statistics.phase_c;
+
+    return s_statistics.result == TARGET_VALIDATION_RESULT_COMPLETE
+        && s_statistics.sample_count == TARGET_VALIDATION_CURRENT_SAMPLE_COUNT
+        && s_statistics.request_sequence != 0U
+        && finite_float(b->mean_a) && finite_float(c->mean_a)
+        && finite_float(b->min_a) && finite_float(b->max_a)
+        && finite_float(c->min_a) && finite_float(c->max_a)
+        && b->mean_a >= -0.10f && b->mean_a <= 0.10f
+        && c->mean_a >= -0.10f && c->mean_a <= 0.10f
+        && b->max_a >= b->min_a && b->max_a - b->min_a <= 0.05f
+        && c->max_a >= c->min_a && c->max_a - c->min_a <= 0.05f;
+}
+
+static bool open_loop_position_valid(ControlTime now, PositionObservation *position)
+{
+    return position_observation_get_latest(position) && position->acquisition_valid
+        && position->referenced && finite_float(position->mechanical_position_turns)
+        && position->mechanical_position_turns >= 0.0f
+        && position->mechanical_position_turns < 1.0f
+        && position->observation_time <= now
+        && now - position->observation_time <= BUS_MAX_AGE_TICKS;
+}
+
+static bool open_loop_input(const PhaseCurrentObservation *current, VoltageOpenLoopInput *input)
+{
+    BusObservation bus;
+    float b = current->phase_b_a - s_open_loop_report.offset_b_a;
+    float c = current->phase_c_a - s_open_loop_report.offset_c_a;
+    uint32_t index;
+
+    input->now = current->observation_time;
+    input->current_time = current->observation_time;
+    input->phase_current_a[0] = -(b + c);
+    input->phase_current_a[1] = b;
+    input->phase_current_a[2] = c;
+    input->permitted = true; /* 已接受的一次性台架请求，任何关断原因会先终止事务。 */
+    input->current_valid = current_valid(current);
+    input->fault_active = false;
+    input->stop_requested = false;
+    if (!bus_observation_get_latest(&bus)) {
+        return false;
+    }
+    input->bus_time = bus.observation_time;
+    input->bus_voltage_v = bus.voltage_v;
+    input->bus_valid = bus.acquisition_valid;
+    for (index = 0U; index < 3U; index++) {
+        float value = input->phase_current_a[index];
+        float absolute = value < 0.0f ? -value : value;
+
+        if (!finite_float(value)) {
+            return false;
+        }
+        if (absolute > s_open_loop_report.peak_abs_current_a) {
+            s_open_loop_report.peak_abs_current_a = absolute;
+        }
+    }
+    return true;
+}
+
+static TargetValidationResult open_loop_module_result(void)
+{
+    if (s_open_loop.state == VOLTAGE_OPEN_LOOP_COMPLETE) {
+        return TARGET_VALIDATION_RESULT_COMPLETE;
+    }
+    if (s_open_loop.reason == VOLTAGE_OPEN_LOOP_REASON_NOMINAL_CURRENT) {
+        return TARGET_VALIDATION_RESULT_NOMINAL_CURRENT;
+    }
+    if (s_open_loop.reason == VOLTAGE_OPEN_LOOP_REASON_TIMEOUT) {
+        return TARGET_VALIDATION_RESULT_OPEN_LOOP_TIMEOUT;
+    }
+    return TARGET_VALIDATION_RESULT_OPEN_LOOP_REJECTED;
+}
+
+static bool prepare_open_loop(const TargetValidationMailbox *request,
+    const TargetValidationOpenLoopConfig *requested, const PhaseCurrentObservation *current,
+    uint32_t now_cycles)
+{
+    TargetValidationOpenLoopSnapshot empty = {0};
+    VoltageOpenLoopConfig config = {0};
+    PositionObservation position;
+    TargetValidationResult failure = TARGET_VALIDATION_RESULT_NONE;
+
+    s_open_loop_report = empty;
+    s_open_loop_report.request_sequence = request->sequence;
+    s_open_loop_report.voltage_v = requested->voltage_v;
+    s_open_loop_report.electrical_frequency_hz = requested->electrical_frequency_hz;
+    s_open_loop_report.min_duty = 0.5f;
+    s_open_loop_report.max_duty = 0.5f;
+    if (request->power_key != TARGET_VALIDATION_POWER_KEY) {
+        failure = TARGET_VALIDATION_RESULT_LOCKED;
+    } else if (request->duration_us != TARGET_VALIDATION_OPEN_LOOP_DURATION_US
+        || request->common_duty != 0.5f || !finite_float(requested->voltage_v)
+        || requested->voltage_v <= 0.0f || requested->voltage_v > 0.5f
+        || !finite_float(requested->electrical_frequency_hz)
+        || requested->electrical_frequency_hz == 0.0f
+        || requested->electrical_frequency_hz < -5.0f || requested->electrical_frequency_hz > 5.0f) {
+        failure = TARGET_VALIDATION_RESULT_BAD_REQUEST;
+    } else if (!open_loop_zero_valid()) {
+        failure = TARGET_VALIDATION_RESULT_BAD_ZERO;
+    } else if (!burst_bus_valid(current->observation_time)) {
+        failure = TARGET_VALIDATION_RESULT_BAD_BUS;
+    } else if (!open_loop_position_valid(current->observation_time, &position)) {
+        failure = TARGET_VALIDATION_RESULT_BAD_POSITION;
+    }
+    if (failure != TARGET_VALIDATION_RESULT_NONE) {
+        s_open_loop_report.result = (uint32_t)failure;
+        g_target_validation.result = (uint32_t)failure;
+        publish_open_loop();
+        return false;
+    }
+    config.ticks_per_second = s_facts.control_time_ticks_per_second;
+    config.voltage_v = requested->voltage_v;
+    config.target_electrical_hz = requested->electrical_frequency_hz;
+    config.max_voltage_ratio = s_facts.normal_voltage_utilization;
+    config.min_bus_voltage_v = 10.0f;
+    config.max_bus_voltage_v = 14.0f;
+    config.nominal_current_trip_a = OPEN_LOOP_NOMINAL_CURRENT_TRIP_A;
+    config.voltage_ramp_ticks = 10000U;
+    config.alignment_hold_ticks = 10000U;
+    config.frequency_ramp_ticks = 10000U;
+    config.rotation_ticks = 20000U;
+    config.voltage_ramp_down_ticks = 10000U;
+    config.timeout_ticks = 70000U;
+    config.max_step_ticks = s_facts.fast_tick_period_ticks;
+    config.max_current_age_ticks = 0U;
+    config.max_bus_age_ticks = BUS_MAX_AGE_TICKS;
+    if (!voltage_open_loop_init(&s_open_loop, &config)) {
+        s_open_loop_report.result = TARGET_VALIDATION_RESULT_OPEN_LOOP_REJECTED;
+        g_target_validation.result = TARGET_VALIDATION_RESULT_OPEN_LOOP_REJECTED;
+        publish_open_loop();
+        return false;
+    }
+    s_open_loop_report.offset_b_a = s_statistics.phase_b.mean_a;
+    s_open_loop_report.offset_c_a = s_statistics.phase_c.mean_a;
+    s_open_loop_report.start_position_turns = position.mechanical_position_turns;
+    s_open_loop_report.end_position_turns = position.mechanical_position_turns;
+    s_open_loop_position = position.mechanical_position_turns;
+    s_open_loop_position_time = position.observation_time;
+    s_open_loop_sample_time = current->observation_time;
+    s_open_loop_report.active = 1U;
+    s_open_loop_active = true;
+    s_power_requested = true;
+    s_powered = false;
+    s_capturing = false;
+    s_probe_source = PROTECTION_PROBE_NONE;
+    s_staging_ticks = 0U;
+    s_operation_active = true;
+    g_target_validation.active_request_sequence = request->sequence;
+    g_target_validation.state = TARGET_VALIDATION_STATE_STAGING;
+    g_target_validation.result = TARGET_VALIDATION_RESULT_NONE;
+    guard_timer_start(now_cycles, request->duration_us);
+    publish_open_loop();
+    return true;
+}
+
 static void consume_command(const PhaseCurrentObservation *current, uint32_t now_cycles)
 {
     TargetValidationMailbox request;
+    TargetValidationOpenLoopConfig open_loop_config;
     ProtectionProbeSource probe_source = PROTECTION_PROBE_NONE;
     uint32_t primask = __get_PRIMASK();
     uint32_t sequence;
@@ -253,6 +448,7 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
         return;
     }
     request = g_target_validation_request;
+    open_loop_config = g_target_validation_open_loop_config;
     __DMB();
     if (request.sequence != g_target_validation_request.sequence) {
         restore_interrupts(primask);
@@ -280,6 +476,7 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
         && (request.command != TARGET_VALIDATION_COMMAND_BREAK_OCP_AB)
         && (request.command != TARGET_VALIDATION_COMMAND_CLEAR_INJECTION)
         && (request.command != TARGET_VALIDATION_COMMAND_REARM)
+        && (request.command != TARGET_VALIDATION_COMMAND_OPEN_LOOP)
         && !is_timing_command(request.command)) {
         g_target_validation.result = TARGET_VALIDATION_RESULT_BAD_REQUEST;
         return;
@@ -320,6 +517,10 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
     }
     if (protection_probe_is_held()) {
         g_target_validation.result = TARGET_VALIDATION_RESULT_PROBE_REJECTED;
+        return;
+    }
+    if (request.command == TARGET_VALIDATION_COMMAND_OPEN_LOOP) {
+        (void)prepare_open_loop(&request, &open_loop_config, current, now_cycles);
         return;
     }
     if (is_timing_command(request.command)) {
@@ -496,6 +697,115 @@ static void run_timing_operation(const PhaseCurrentObservation *current, uint32_
     return;
 }
 
+static void record_open_loop_duty(const PhaseDutyRequest *duty)
+{
+    const float values[3] = {duty->phase_a_duty, duty->phase_b_duty, duty->phase_c_duty};
+    uint32_t index;
+
+    for (index = 0U; index < 3U; index++) {
+        if (values[index] < s_open_loop_report.min_duty) {
+            s_open_loop_report.min_duty = values[index];
+        }
+        if (values[index] > s_open_loop_report.max_duty) {
+            s_open_loop_report.max_duty = values[index];
+        }
+    }
+}
+
+static void run_open_loop(const PhaseCurrentObservation *current, uint32_t interval_cycles)
+{
+    VoltageOpenLoopInput input;
+    PositionObservation position;
+    PhaseDutyRequest duty = {0.5f, 0.5f, 0.5f};
+
+    /* 事务独占本 Target 的 sample consumer，不与旧 common_duty 路径并写。 */
+    if (interval_cycles < CURRENT_MIN_GAP_US * CYCLES_PER_US
+        || interval_cycles > CURRENT_MAX_GAP_US * CYCLES_PER_US
+        || current->observation_time <= s_open_loop_sample_time
+        || current->observation_time - s_open_loop_sample_time != s_facts.fast_tick_period_ticks) {
+        stop_operation(TARGET_VALIDATION_RESULT_BAD_CURRENT);
+        return;
+    }
+    s_open_loop_sample_time = current->observation_time;
+    if (!open_loop_position_valid(current->observation_time, &position)
+        || position.observation_time < s_open_loop_position_time
+        || (position.observation_time == s_open_loop_position_time
+            && position.mechanical_position_turns != s_open_loop_position)) {
+        stop_operation(TARGET_VALIDATION_RESULT_BAD_POSITION);
+        return;
+    }
+    if (position.observation_time != s_open_loop_position_time) {
+        float delta = position.mechanical_position_turns - s_open_loop_position;
+
+        if (delta > 0.5f) {
+            delta -= 1.0f;
+        } else if (delta < -0.5f) {
+            delta += 1.0f;
+        } else if (delta == 0.5f || delta == -0.5f) {
+            stop_operation(TARGET_VALIDATION_RESULT_BAD_POSITION);
+            return;
+        }
+        s_open_loop_report.displacement_turns += delta;
+        s_open_loop_report.end_position_turns = position.mechanical_position_turns;
+        s_open_loop_position = position.mechanical_position_turns;
+        s_open_loop_position_time = position.observation_time;
+    }
+    if (!open_loop_input(current, &input)) {
+        stop_operation(TARGET_VALIDATION_RESULT_BAD_CURRENT);
+        return;
+    }
+    s_open_loop_report.sample_count++;
+    if (s_open_loop_report.peak_abs_current_a >= OPEN_LOOP_NOMINAL_CURRENT_TRIP_A) {
+        stop_operation(TARGET_VALIDATION_RESULT_NOMINAL_CURRENT);
+        return;
+    }
+    if (!s_powered) {
+        /* 首拍中性 preload，在下一目标 UEV 装载；第二拍再 stage 中性并 enable。
+         * 电压模块从实际 enable 成功后的时刻起计时，不把预热算成定向输出。 */
+        g_target_validation.stage_attempts++;
+        if (!realtime_motor_io_stage_phase_duty(&duty)) {
+            stop_operation(TARGET_VALIDATION_RESULT_STAGE_REJECTED);
+            return;
+        }
+        g_target_validation.stage_successes++;
+        s_staging_ticks++;
+        if (s_staging_ticks >= 2U) {
+            if (!voltage_open_loop_start(&s_open_loop, &input)) {
+                stop_operation(open_loop_module_result());
+                return;
+            }
+            g_target_validation.enable_attempts++;
+            if (!realtime_motor_io_power_enable()) {
+                stop_operation(TARGET_VALIDATION_RESULT_ENABLE_REJECTED);
+                return;
+            }
+            s_powered = true;
+            s_open_loop_report.enabled_samples++;
+            g_target_validation.enable_successes++;
+            g_target_validation.state = TARGET_VALIDATION_STATE_POWERED;
+        }
+    } else {
+        s_open_loop_report.enabled_samples++;
+        if (!voltage_open_loop_update(&s_open_loop, &input)) {
+            stop_operation(open_loop_module_result());
+            return;
+        }
+        duty.phase_a_duty = s_open_loop.output.duty_a;
+        duty.phase_b_duty = s_open_loop.output.duty_b;
+        duty.phase_c_duty = s_open_loop.output.duty_c;
+        g_target_validation.stage_attempts++;
+        if (!s_open_loop.output.output_requested || !realtime_motor_io_stage_phase_duty(&duty)) {
+            stop_operation(TARGET_VALIDATION_RESULT_STAGE_REJECTED);
+            return;
+        }
+        g_target_validation.stage_successes++;
+        record_open_loop_duty(&duty);
+    }
+    s_open_loop_report.module_state = (uint32_t)s_open_loop.state;
+    s_open_loop_report.module_reason = (uint32_t)s_open_loop.reason;
+    publish_open_loop();
+}
+
 static void run_operation(const PhaseCurrentObservation *current,
     uint32_t now_cycles, uint32_t interval_cycles)
 {
@@ -533,6 +843,8 @@ static void run_operation(const PhaseCurrentObservation *current,
         stop_operation(TARGET_VALIDATION_RESULT_BAD_BUS);
     } else if (s_powered && ((TIM1->BDTR & TIM_BDTR_MOE) == 0U)) {
         stop_operation(TARGET_VALIDATION_RESULT_PLATFORM_OFF);
+    } else if (s_open_loop_active) {
+        run_open_loop(current, interval_cycles);
     } else if (s_powered && (s_probe_source != PROTECTION_PROBE_NONE)
         && (++s_probe_powered_ticks >= 4U)) {
         ProtectionProbeOutcome outcome;

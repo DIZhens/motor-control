@@ -93,9 +93,30 @@ def verify_artifacts(build, layout):
                 require(address + offset not in loaded, "Overlapping AXF load regions")
                 loaded[address + offset] = value
         require(loaded == image, "AXF load bytes differ from HEX; mixed build artifacts")
-        regions = re.findall(r"Load Region \S+ \(Base: (0x[0-9a-fA-F]+), Size: (0x[0-9a-fA-F]+)", mapping)
-        require(len(regions) == 1 and tuple(int(value, 0) for value in regions[0])
-                == (min(image), len(image)) and max(image) - min(image) + 1 == len(image),
+        # ARMCC 的 Size 是压缩前尺寸；COMPRESSED[] 才是 Flash 实际加载尺寸。
+        # 仍逐字节核对 AXF/HEX，压缩标志不允许绕过尺寸、地址或单区域检查。
+        regions = re.findall(r"^\s*Load Region\b[^\r\n]*", mapping, re.M)
+        require(len(regions) == 1, "MAP must contain exactly one load region")
+        region = re.fullmatch(r"\s*Load Region \S+ \(Base: (0x[0-9a-fA-F]+), "
+                              r"Size: (0x[0-9a-fA-F]+), Max: (0x[0-9a-fA-F]+)([^()]*)\)\s*", regions[0])
+        require(region is not None, "Malformed MAP load region")
+        base, uncompressed, maximum = [int(value, 0) for value in region.groups()[:3]]
+        attributes = region.group(4)
+        require(not attributes or attributes.startswith(", "), "Malformed MAP load region attributes")
+        attributes = attributes[2:].split(", ") if attributes else []
+        compressed = None
+        require(len(attributes) == len(set(attributes)), "Repeated MAP load region attribute")
+        for attribute in attributes:
+            if attribute == "ABSOLUTE":
+                continue
+            match = re.fullmatch(r"COMPRESSED\[(0x[0-9a-fA-F]+)\]", attribute)
+            require(match is not None and compressed is None, "Unsupported/repeated MAP compression attribute")
+            compressed = int(match.group(1), 0)
+        actual = uncompressed if compressed is None else compressed
+        require(0x08000000 <= base < base + maximum <= 0x08020000
+                and 0 < actual <= uncompressed <= maximum
+                and (base, actual) == (min(image), len(image))
+                and max(image) - min(image) + 1 == len(image),
                 "MAP load region differs from AXF/HEX")
         entries = re.findall(r"Image Entry point\s*:\s*(0x[0-9a-fA-F]+)", mapping)
         require(len(entries) == 1 and int(entries[0], 0) == elf["e_entry"]

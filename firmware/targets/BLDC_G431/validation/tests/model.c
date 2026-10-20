@@ -17,6 +17,11 @@ uint32_t model_current_mask = PHASE_MASK_B | PHASE_MASK_C;
 float model_current_b_a;
 float model_current_c_a;
 uint32_t model_bus_valid = 1U;
+uint32_t model_position_valid = 1U;
+uint32_t model_position_referenced = 1U;
+uint32_t model_position_age_ticks;
+uint32_t model_position_future_ticks;
+float model_position_turns = 0.25f;
 uint32_t model_bus_age_ticks;
 uint32_t model_bus_future_ticks;
 float model_bus_voltage = 12.0f;
@@ -80,6 +85,10 @@ const uint32_t model_offsets[] = {
 };
 
 const uint32_t model_probe_size = sizeof(ProtectionProbeCapture);
+const uint32_t model_open_loop_sizes[] = {
+    sizeof(TargetValidationOpenLoopConfig), sizeof(TargetValidationOpenLoopSnapshot),
+    sizeof(TargetValidationSnapshot)
+};
 
 bool realtime_motor_io_get_facts(RealtimeMotorIoFacts *facts)
 {
@@ -204,10 +213,10 @@ bool position_observation_arm(void) { return true; }
 bool bus_observation_arm(void) { return true; }
 bool position_observation_get_latest(PositionObservation *out)
 {
-    out->observation_time = model_time;
-    out->mechanical_position_turns = 0.25f;
-    out->referenced = true;
-    out->acquisition_valid = true;
+    out->observation_time = model_time - model_position_age_ticks + model_position_future_ticks;
+    out->mechanical_position_turns = model_position_turns;
+    out->referenced = model_position_referenced != 0U;
+    out->acquisition_valid = model_position_valid != 0U;
     return true;
 }
 bool bus_observation_get_latest(BusObservation *out)

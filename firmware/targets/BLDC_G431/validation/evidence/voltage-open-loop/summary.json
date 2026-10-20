@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "result": "CANDIDATE_INSTALLED_LOGIC_DEFAULT_OFF_PASS",
+  "target": "BLDC_control V1",
+  "parent_commit": "4ef1e25b6f7ec6d7fc010f643fef6516c34866b5",
+  "candidate": {
+    "hex_sha256": "5021fa45bf4e6a459e77aa45644b790eebe067d682e613ce6aef6f6f3374e8d8",
+    "files": {
+      "BLDC_control V1.hex": "5021fa45bf4e6a459e77aa45644b790eebe067d682e613ce6aef6f6f3374e8d8",
+      "BLDC_control V1.axf": "45418aab08992897e780549d04eec10a616f6037fb21eb02d63f4f0844d15c58",
+      "BLDC_control V1.map": "23c10ce75a7bbeba4771dc9dc94c9b2b2f1d21a6a68ec5e0c26a561002626adc"
+    },
+    "loaded_flash_bytes": 41120,
+    "config_bytes": 8,
+    "result_bytes": 72,
+    "legacy_mailbox_bytes": 20,
+    "legacy_snapshot_bytes": 184,
+    "keil_code_bytes": 40482,
+    "keil_ro_data_bytes": 626,
+    "keil_rw_data_bytes": 352,
+    "keil_zi_data_bytes": 7944
+  },
+  "initial_request": {
+    "voltage_vector_v": 0.3,
+    "electrical_frequency_hz": 2.0,
+    "voltage_max_v": 0.5,
+    "electrical_frequency_abs_max_hz": 5.0,
+    "phase_nominal_current_trip_a": 0.25,
+    "phase_nominal_current_is_calibrated": false,
+    "bus_min_v": 10.0,
+    "bus_max_v": 14.0,
+    "normal_duration_s": 3.0,
+    "independent_deadline_s": 3.5,
+    "zero_samples": 4096
+  },
+  "verification": {
+    "keil_rebuild": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "keil_final_incremental": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "checks": [
+      {
+        "command": ".venv/Scripts/python.exe -B -X utf8 firmware/app/motor/tests/verify_voltage_open_loop.py",
+        "passed": 11,
+        "scope": "实际ARM纯模块，独立解析相位对照"
+      },
+      {
+        "command": ".venv/Scripts/python.exe -B -X utf8 firmware/targets/BLDC_G431/validation/tests/verify_model.py",
+        "passed": 188,
+        "scope": "实际ARM台架与HCC/时间替身；旧135组加新53组"
+      },
+      {
+        "command": ".venv/Scripts/python.exe -B -X utf8 firmware/targets/BLDC_G431/validation/tests/verify_open_loop_tool.py",
+        "passed": 16,
+        "scope": "主机替身，不接设备"
+      },
+      {
+        "command": ".venv/Scripts/python.exe -B -X utf8 firmware/targets/BLDC_G431/validation/tests/verify_candidate_tool.py",
+        "passed": 19,
+        "scope": "镜像/压缩MAP与错误身份拒绝，不接设备"
+      }
+    ],
+    "offline_prepare": "PASS",
+    "hex_axf_load_bytes_equal": true,
+    "compressed_map_load_length_checked": true,
+    "source_and_header_hashes_frozen": 212
+  },
+  "unchanged_artifacts": {
+    "build/observe": {
+      "BLDC_G431_Observe.axf": "67a8a1616c8a42d9bb0602bcf9706d47a5ef2b297239d9c3ba84a79594189264",
+      "BLDC_G431_Observe.hex": "b2ca00eea00a72477dfbaaaf21a1179525468b9bcb5ccc593a921797fe6040ef",
+      "BLDC_G431_Observe.map": "f7d0da575e3b78c01968304d170dbae4ef8d0c2900f0d4b21ac8eec43bdc45a6"
+    },
+    "build/timing": {
+      "BLDC_G431_Timing.axf": "54ca05ba624d675811ca59d9865530b0ad58665421abae396eedadbab8930586",
+      "BLDC_G431_Timing.hex": "46b4bafd9237ed352641d1c0103f69cd578b5f509acbcbc98bf778aecd6ad526",
+      "BLDC_G431_Timing.map": "be0a9b801f44bb8b28626ed98247792008c1c3f9cb04864981a7b71dedd6ea7d"
+    }
+  },
+  "source_sha256": {
+    "firmware/app/motor/voltage_open_loop.h": "5ea2b69320cde293b25e83377eb0a7c9bb6cbf179ae72063f76b8caacf818af8",
+    "firmware/app/motor/voltage_open_loop.c": "9ecf3f6dd90a3f240a9a708cccf1c244e62a353792132f9545b0a150e73712c6",
+    "firmware/app/motor/tests/verify_voltage_open_loop.py": "fa6be74106761054a9cd97dc6d984131dcf8e7c44183b88ea4e552f82e2c5386",
+    "firmware/app/motor/tests/voltage_open_loop_model.c": "07ca74e23ba8e83baee41bddb13b5c2531b0513bade4cbe266fa8b5e1c8ede59",
+    "firmware/targets/BLDC_G431/validation/target_validation.c": "ec64fb54078c139cdd6fbbe6ea876e1a7f24202e351789fa853dc934ac361952",
+    "firmware/targets/BLDC_G431/validation/target_validation.h": "620d695b9a56ebb74d767e30796a09726fc8dd3c20d17113525be59f17db5964",
+    "firmware/targets/BLDC_G431/validation/tests/model.c": "809565a27ea6bb8e60f620ef4026d4c2c1d8be83136b6365b4b581c96c436d41",
+    "firmware/targets/BLDC_G431/validation/tests/verify_model.py": "7edd9f5af4d21f0c989a317bbfc114d84f5cf3ef2f36b3f4dd2eb53cee810473",
+    "firmware/targets/BLDC_G431/validation/tools/open_loop_once.py": "963643ca35d67eda780bd5930e1dfde6066fb823e032fc0a97e3e4c96e2c7447",
+    "firmware/targets/BLDC_G431/validation/tests/verify_open_loop_tool.py": "7a451d3cc0f6a42fbf7dd06ea744affea671eaae749bd14d140fd24ea3c59eca",
+    "firmware/targets/BLDC_G431/validation/tools/candidate_manifest.py": "bb09e6ee37f2028e682d00316c4a27fc5a2149a00856b96fbfa0918eca770fba",
+    "firmware/targets/BLDC_G431/validation/tests/verify_candidate_tool.py": "1908c6300668af0b21740ef28b1ba8b6bf05f2fab32c284b3c0a892eafa2aba6"
+  },
+  "user_keil_options_preserved": true,
+  "hardware": {
+    "initial_enumeration": "No ST-Link detected;操作者随后接回并确认纯逻辑条件",
+    "operator_logic_only_confirmed": true,
+    "flashed": true,
+    "connection_mode_for_install": "NORMAL",
+    "native_download_verified": true,
+    "independent_loaded_flash_bytes_matched": 41120,
+    "image_hex_sha256": "5021fa45bf4e6a459e77aa45644b790eebe067d682e613ce6aef6f6f3374e8d8",
+    "callback_per_ms": 10.0,
+    "software_vbus_v": 2.718799352645874,
+    "position_valid": true,
+    "position_turns": 0.55059814453125,
+    "faults_or_moe_detected": false,
+    "request_written": false,
+    "stage_attempts": 0,
+    "enable_attempts": 0,
+    "zero_capture_performed": false,
+    "mechanical_trial_performed": false,
+    "old_observe_zero_reused": false,
+    "manual_vbus_newly_measured": false
+  },
+  "motor_qualified": false,
+  "foc_qualified": false,
+  "current_gain_or_polarity_confirmed": false,
+  "electrical_calibration_confirmed": false,
+  "actual_isr_deadline_qualified": false,
+  "limits": [
+    "软件模型不证明实际ISR耗时；保留HCC截止和独立TIM6关断。",
+    "名义电流只作辅助异常监视；仍须核对实物通道、极性与增益量级。",
+    "机械运动、方向、极对数与编码器跟随尚未实测。",
+    "Observe及Timing未重建，既有证据继续按原镜像身份归属。"
+  ],
+  "local_evidence": "validation/local-evidence/20261020-voltage-open-loop-01",
+  "preparation_note": "首次prepare因旧工具未处理ARMCC压缩MAP尺寸而拒绝；修复并补拒绝用例后，在新candidate-02目录冻结通过。"
+}

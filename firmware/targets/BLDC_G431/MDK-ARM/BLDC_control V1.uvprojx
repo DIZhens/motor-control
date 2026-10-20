@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G431xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../validation</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../validation;../../../app/motor;../../../../control</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -685,6 +685,11 @@
               <FileType>1</FileType>
               <FilePath>../validation/timing_probe.c</FilePath>
             </File>
+            <File>
+              <FileName>voltage_open_loop.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../../../app/motor/voltage_open_loop.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -902,7 +907,7 @@
               <RVCTZI>0</RVCTZI>
               <RVCTOtherData>0</RVCTOtherData>
               <ModuleSelection>0</ModuleSelection>
-              <IncludeInBuild>0</IncludeInBuild>
+              <IncludeInBuild>2</IncludeInBuild>
               <AlwaysBuild>2</AlwaysBuild>
               <GenerateAssemblyFile>2</GenerateAssemblyFile>
               <AssembleAssemblyFile>2</AssembleAssemblyFile>

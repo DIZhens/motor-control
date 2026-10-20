@@ -53,7 +53,10 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     command += ["-D" + item for item in settings.findtext("Define").split(",")]
     objects = []
     for source in [root / "validation/tests/model.c", root / "validation/target_validation.c",
-                   root / "validation/protection_probe.c", root / "validation/timing_probe.c"]:
+                   root / "validation/protection_probe.c", root / "validation/timing_probe.c",
+                   root.parents[1] / "app/motor/voltage_open_loop.c",
+                   root.parents[2] / "control/electrical_angle.c",
+                   root.parents[2] / "control/foc_math.c"]:
         obj = temp / (source.stem + ".o")
         result = subprocess.run(command + ["-c", str(source), "-o", str(obj)],
                                 capture_output=True, text=True)
@@ -186,6 +189,18 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
                       "stage_called", "stage_accepted", "second_called", "second_accepted"]
             data = self.cpu.mem_read(symbols["g_target_validation_timing"], 40)
             return dict(zip(fields, struct.unpack("<10I", data)))
+
+        def open_loop(self):
+            fields = ["sequence", "request", "active", "result", "module_state", "module_reason",
+                      "samples", "enabled_samples", "voltage", "frequency", "offset_b", "offset_c",
+                      "peak_current", "start_position", "end_position", "displacement", "min_duty", "max_duty"]
+            data = self.cpu.mem_read(symbols["g_target_validation_open_loop"], 72)
+            return dict(zip(fields, struct.unpack("<8I10f", data)))
+
+        def open_loop_submit(self, voltage=0.3, frequency=2.0, key=KEY, duration=3500000, duty=0.5):
+            self.cpu.mem_write(symbols["g_target_validation_open_loop_config"],
+                               struct.pack("<ff", voltage, frequency))
+            self.submit(15, key=key, duration=duration, duty=duty)
 
     def powered(duration=2000, duty=0.5):
         m = Model()
@@ -527,6 +542,181 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     assert m.word("g_target_validation_timing_recovery_ticks") == 2
     assert m.status("interval_max_cycles") == 25500
     passed("100 us cadence recovery retains out-of-window interval evidence")
+
+    # 开环运行真实纯电压模块和台架执行器；HCC、SSI、电流与时间仍为明确替身。
+    # 完整 4096 点统计由正式命令 4 产生，不向内部零偏或状态直接写入成功值。
+    def zero_ready(b=-0.012, c=-0.001):
+        m = Model()
+        m.write("model_current_b_a", b, "f"); m.write("model_current_c_a", c, "f")
+        m.submit(4); m.tick(4096)
+        assert m.capture()["result"] == 1 and m.capture()["count"] == 4096
+        assert not m.moe() and m.word("model_enable_calls") == 0
+        return m
+
+    def open_powered(**payload):
+        m = zero_ready()
+        m.open_loop_submit(**payload); m.tick()
+        assert m.open_loop()["active"] == 1 and m.open_loop()["samples"] == 0
+        assert m.status("state") == 1 and not m.moe() and m.word("model_stage_calls") == 0
+        m.tick()
+        assert m.word("model_stage_calls") == 1 and not m.moe()
+        assert bytes(m.cpu.mem_read(symbols["model_last_duty"], 12)) == struct.pack("<3f", 0.5, 0.5, 0.5)
+        m.tick()
+        assert m.moe() and m.word("model_enable_calls") == 1
+        assert bytes(m.cpu.mem_read(symbols["model_last_duty"], 12)) == struct.pack("<3f", 0.5, 0.5, 0.5)
+        assert m.open_loop()["module_state"] == 1
+        return m
+
+    m = Model(pending=15); m.tick(20)
+    assert m.status("state") == 0 and not m.moe() and m.open_loop()["request"] == 0
+    assert struct.unpack("<3I", m.cpu.mem_read(symbols["model_open_loop_sizes"], 12)) == (8, 72, 184)
+    assert m.offsets["mailbox_size"] == 20 and m.offsets["legacy_size"] == 76
+    passed("open-loop extension preserves old mailbox/snapshot ABI and discards reset-time requests")
+    m = Model(); m.open_loop_submit(); m.tick(3)
+    assert m.status("result") == 19 and not m.moe() and m.word("model_enable_calls") == 0
+    passed("open loop requires a real completed zero-current capture in this startup")
+    m = Model(); m.submit(4); m.tick(10); m.submit(1); m.tick(); m.open_loop_submit(); m.tick()
+    assert m.status("result") == 19 and not m.moe()
+    passed("partial or cancelled zero window cannot authorize open loop")
+    for b, c in [(0.101, 0.0), (-0.101, 0.0), (0.0, 0.101)]:
+        m = zero_ready(b, c); m.open_loop_submit(); m.tick()
+        assert m.status("result") == 19 and m.word("model_enable_calls") == 0
+        passed("zero-current mean outside hard envelope is rejected: " + str((b, c)))
+    m = Model(); m.submit(4); m.tick(); m.write("model_current_b_a", 0.051, "f"); m.tick(4095)
+    assert m.capture()["result"] == 1
+    m.open_loop_submit(); m.tick(); assert m.status("result") == 19 and not m.moe()
+    passed("complete but noisy zero-current capture cannot authorize open loop")
+    for payload, reason in [({"voltage": 0.0}, 4), ({"voltage": -0.1}, 4),
+                            ({"voltage": 0.501}, 4), ({"voltage": float("nan")}, 4),
+                            ({"voltage": float("inf")}, 4), ({"frequency": 0.0}, 4),
+                            ({"frequency": 5.001}, 4), ({"frequency": -5.001}, 4),
+                            ({"frequency": float("nan")}, 4), ({"key": 0}, 3),
+                            ({"duration": 3499999}, 4), ({"duration": 3500001}, 4),
+                            ({"duty": 0.3}, 4)]:
+        m = zero_ready(); m.open_loop_submit(**payload); m.tick(3)
+        assert m.status("result") == reason and m.open_loop()["result"] == reason
+        assert not m.moe() and m.word("model_stage_calls") == m.word("model_enable_calls") == 0
+        assert m.word("g_target_validation_request") == m.sequence
+        assert m.memory_word(symbols["g_target_validation_request"] + 8) == 0
+        passed("open-loop payload/key rejects before staging: " + str(payload))
+    for frequency in [-5.0, 5.0]:
+        m = open_powered(voltage=0.5, frequency=frequency)
+        m.submit(1); m.tick()
+        assert not m.moe() and m.open_loop()["result"] == 2
+        passed("open-loop accepts hard envelope edge without changing old duty limits: " + str(frequency))
+
+    m = open_powered()
+    capture_before = m.capture()
+    assert math.isclose(m.open_loop()["offset_b"], -0.012, abs_tol=1e-7)
+    assert math.isclose(m.open_loop()["offset_c"], -0.001, abs_tol=1e-7)
+    # 主机修改 config 或提交 BUSY 请求不能修改已接受的电压、频率和输出所有者。
+    m.cpu.mem_write(symbols["g_target_validation_open_loop_config"], struct.pack("<ff", 20.0, 200.0))
+    active = m.status("active_request_sequence")
+    m.submit(3, key=KEY); m.tick()
+    assert m.status("result") == 5 and m.status("active_request_sequence") == active and m.moe()
+    assert math.isclose(m.open_loop()["voltage"], 0.3, abs_tol=1e-7)
+    assert m.open_loop()["frequency"] == 2.0
+    for remaining, expected_state in [(4998, 1), (1, 2), (5000, 3), (5000, 4), (10000, 5), (4999, 5)]:
+        m.tick(remaining)
+        assert m.moe() and m.open_loop()["module_state"] == expected_state
+    m.tick()
+    result = m.open_loop()
+    assert result["active"] == 0 and result["result"] == 1
+    assert result["module_state"] == 6 and result["module_reason"] == 0
+    assert result["samples"] == 30002 and result["enabled_samples"] == 30001
+    assert m.status("result") == m.word("g_target_validation_stop_reason") == 1 and not m.moe()
+    assert m.word("model_enable_calls") == 1 and m.word("model_stage_calls") == 30001
+    assert m.word("model_common_duty_failures") > 0
+    assert 0.45 < result["min_duty"] < 0.5 < result["max_duty"] < 0.55
+    assert result["peak_current"] < 1e-7 and m.capture() == capture_before
+    assert result["sequence"] % 2 == 0 and not (m.memory_word(TIM6) & 1)
+    m.tick(100)
+    assert m.open_loop() == result and m.word("model_enable_calls") == 1 and not m.moe()
+    passed("all five open-loop segments complete by module, freeze diagnostics, preserve zero, and never replay")
+
+    m = open_powered(frequency=-2.0); m.tick(11000)
+    assert m.open_loop()["module_state"] == 3 and m.moe()
+    m.submit(1); m.tick()
+    assert m.open_loop()["module_state"] == 8 and m.open_loop()["module_reason"] == 9
+    assert m.open_loop()["result"] == 2 and not m.moe()
+    passed("negative electrical frequency is executable and operator Stop cancels ongoing rotation")
+    m = zero_ready(); m.open_loop_submit(); m.tick(); m.submit(1); m.tick(4)
+    assert m.open_loop()["result"] == 2 and m.word("model_enable_calls") == 0
+    assert m.word("model_stage_calls") == 0 and not m.moe()
+    passed("open-loop Stop before first neutral stage prevents any power attempt")
+
+    for field, value, fmt, reason in [
+            ("model_position_valid", 0, "I", 20), ("model_position_referenced", 0, "I", 20),
+            ("model_position_age_ticks", 101, "I", 20), ("model_position_future_ticks", 1, "I", 20),
+            ("model_position_turns", float("nan"), "f", 20), ("model_position_turns", 1.0, "f", 20),
+            ("model_bus_valid", 0, "I", 7), ("model_bus_age_ticks", 101, "I", 7),
+            ("model_bus_future_ticks", 1, "I", 7), ("model_bus_voltage", 9.9, "f", 7),
+            ("model_current_valid", 0, "I", 6), ("model_current_mask", 4, "I", 6),
+            ("model_current_b_a", float("nan"), "f", 6), ("model_step_ticks", 4, "I", 6),
+            ("model_step_us", 20, "I", 6), ("model_stage_ok", 0, "I", 8)]:
+        m = open_powered(); m.write(field, value, fmt); m.tick()
+        assert not m.moe() and m.open_loop()["result"] == reason
+        assert m.word("model_enable_calls") == 1
+        m.tick(5); assert m.word("model_enable_calls") == 1
+        passed("open-loop loss of fresh prerequisite fails off without re-enable: " + field)
+    m = zero_ready(); m.write("model_position_valid", 0); m.open_loop_submit(); m.tick(3)
+    assert m.status("result") == 20 and m.word("model_enable_calls") == 0
+    passed("open loop requires a fresh valid encoder before neutral staging")
+    m = zero_ready(); m.open_loop_submit(); m.tick(2); m.write("model_enable_ok", 0); m.tick()
+    assert m.open_loop()["result"] == 9 and not m.moe() and m.word("model_enable_calls") == 1
+    passed("open-loop failed HCC enable is terminal")
+    for b, c in [(0.25, -0.10), (0.14, 0.14)]:
+        m = open_powered(); m.write("model_current_b_a", b - 0.012, "f")
+        m.write("model_current_c_a", c - 0.001, "f"); m.tick()
+        assert m.open_loop()["result"] == 22 and not m.moe()
+        assert m.open_loop()["peak_current"] >= 0.25
+        passed("nominal current auxiliary monitor checks measured B/C and reconstructed A: " + str((b, c)))
+    m = open_powered(); m.advance_guard(150)
+    assert not m.moe() and m.word("g_target_validation_stop_reason") == 6
+    m.tick(); assert m.open_loop()["result"] == 6 and m.word("model_enable_calls") == 1
+    passed("independent TIM6 shuts open loop off when ADC stops; next ADC freezes failure")
+    m = open_powered()
+    deadline = m.word("s_deadline_cycles")
+    m.memory_write(DWT_CYCCNT, deadline); m.write("s_last_sample_cycles", deadline)
+    m.call("model_guard")
+    assert not m.moe() and m.word("g_target_validation_stop_reason") == 18
+    m.tick(); assert m.open_loop()["result"] == 18 and m.open_loop()["module_state"] == 8
+    assert m.word("model_enable_calls") == 1
+    passed("independent total deadline is OPEN_LOOP_TIMEOUT, never false completion")
+    m = open_powered(); m.call("model_trip_event")
+    assert not m.moe() and m.word("g_target_validation_stop_reason") == 11
+    m.tick(); assert m.open_loop()["result"] == 11 and m.word("model_enable_calls") == 1
+    passed("Trip asynchronously revokes open-loop power and cannot be undone by later stage")
+    m = open_powered(); m.memory_write(TIM1 + 0x44, 0); m.tick()
+    assert not m.moe() and m.open_loop()["result"] == 10 and m.word("model_enable_calls") == 1
+    passed("unexpected external open-loop power off is terminal")
+
+    m = zero_ready(); m.write("model_position_turns", 0.98, "f"); m.open_loop_submit(); m.tick(3)
+    m.write("model_position_turns", 0.01, "f"); m.tick()
+    assert math.isclose(m.open_loop()["displacement"], 0.03, abs_tol=1e-6)
+    m.write("model_position_turns", 0.99, "f"); m.tick()
+    assert math.isclose(m.open_loop()["displacement"], 0.01, abs_tol=1e-6)
+    assert math.isclose(m.open_loop()["start_position"], 0.98, abs_tol=1e-6)
+    assert math.isclose(m.open_loop()["end_position"], 0.99, abs_tol=1e-6)
+    m.submit(1); m.tick()
+    passed("encoder observation unwraps new timestamps across both periodic boundaries without controlling voltage")
+    m = open_powered(); m.write("model_position_age_ticks", 2); m.tick()
+    assert m.moe() and m.open_loop()["displacement"] == 0.0
+    m.write("model_position_age_ticks", 4); m.write("model_position_turns", 0.30, "f"); m.tick()
+    assert m.open_loop()["result"] == 20 and not m.moe()
+    passed("duplicate encoder timestamps do not integrate twice and changed payload at same timestamp fails")
+    m = open_powered(); m.write("model_position_turns", 0.75, "f"); m.tick()
+    assert m.open_loop()["result"] == 20 and not m.moe()
+    passed("exact half-turn encoder ambiguity fails instead of inventing an unwrap direction")
+    m = zero_ready(); m.memory_write(DWT_CYCCNT, 0xFFFFFF00)
+    m.open_loop_submit(); m.tick(3)
+    assert m.moe() and m.word("model_enable_calls") == 1
+    deadline = m.word("s_deadline_cycles")
+    m.memory_write(DWT_CYCCNT, deadline); m.write("s_last_sample_cycles", deadline)
+    m.call("model_guard")
+    assert m.word("g_target_validation_stop_reason") == 18 and not m.moe()
+    m.tick(); assert m.open_loop()["result"] == 18
+    passed("open-loop independent total deadline remains terminal across DWT wrap")
 
 print(f"PASS: {len(cases)} ARM-executed G431 validation cases.")
 print("Fake HCC/time only; does not prove electrical behavior, interrupt latency or hardware L1/L2.")
