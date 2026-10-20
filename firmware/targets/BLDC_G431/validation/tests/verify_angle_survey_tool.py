@@ -52,7 +52,9 @@ class FakeSession(baseline.FakeSession):
     def execute(self, tag, arguments):
         result = super().execute(tag, arguments)
         if len(arguments) == 3 and 16 in self.writes:
-            value = observation()
+            excursion = self.payload_parameters[1]
+            value = observation((0.99, (0.99-excursion/7)%1, 0.99))
+            value["excursion_turns"] = excursion
             value["request_sequence"] = self.last_sequence
             self.raw_survey = encode(value)
         return result
@@ -74,7 +76,7 @@ class Tests(unittest.TestCase):
             access.assert_not_called()
 
     def test_parameters_and_confirmation_reject_before_access(self):
-        for args in [["--excursion-turns", "0"], ["--excursion-turns", "0.251"],
+        for args in [["--excursion-turns", "0"], ["--excursion-turns", "1.001"],
                      ["--excursion-turns", "nan"], ["--voltage-v", "0.501"],
                      ["--action", "execute", "--prepared", "x", "--zero-summary", "x"],
                      ["--action", "zero", "--prepared", "x", "--bench-confirmed", "--vbus-dmm-v", "nan"]]:
@@ -85,7 +87,7 @@ class Tests(unittest.TestCase):
 
     def test_old_prepared_rejected_before_identity_read(self):
         with patch.object(loop, "load_prepared", return_value=({}, Path("x"))), patch.object(loop.Session, "__init__") as access:
-            with self.assertRaisesRegex(RuntimeError, "没有静态"):
+            with self.assertRaisesRegex(RuntimeError, "没有本版"):
                 survey.Session(Path("out"), Path("old.json"), Path("cli"), "execute", 0.3, 0.25)
             access.assert_not_called()
 
@@ -161,6 +163,34 @@ class Tests(unittest.TestCase):
             self.assertEqual(result["direction_source"],"observed_outward_delta")
             self.assertTrue(result["mapping_candidate_consistent"])
             self.assertFalse(result["electrical_calibration_confirmed"])
+
+    def test_full_turn_confirms_scale_in_either_direction_across_zero(self):
+        for direction, start in [(1, 0.98), (-1, 0.02)]:
+            value = observation((start, (start+direction/7)%1, start))
+            value["excursion_turns"] = 1.0
+            result = survey.analyze(value)
+            self.assertEqual(result["encoder_direction_candidate"], direction)
+            self.assertTrue(result["pole_pairs_confirmed"])
+            self.assertTrue(result["mapping_candidate_consistent"])
+            for p in result["pole_pairs_estimates_out_and_back"]: self.assertAlmostEqual(p,7)
+            self.assertFalse(result["electrical_calibration_confirmed"])
+            self.assertFalse(result["calibration_applied"])
+
+    def test_full_turn_rejects_wrong_scale_alias_and_stall(self):
+        for delta in [0, 0.5, 1/8, 2/7, 1/7.26]:
+            value = observation((0.2, (0.2+delta)%1, 0.2)); value["excursion_turns"] = 1.0
+            self.assertFalse(survey.analyze(value)["pole_pairs_confirmed"])
+        value = observation((0.2, 0.2+1/7.24, 0.2)); value["excursion_turns"] = 1.0
+        self.assertTrue(survey.analyze(value)["pole_pairs_confirmed"])
+
+    def test_full_turn_payload_is_read_back_before_unique_commit(self):
+        with TemporaryDirectory() as tmp:
+            session=FakeSession(tmp); session.payload_parameters=survey.parameters(0.3,1.0)
+            anchor=loop.zero(session,12); session.action="execute"
+            with patch.object(loop.time,"monotonic",baseline.Clock()):
+                result=survey.execute_once(session,anchor,12)
+            self.assertEqual(session.writes,[4,16])
+            self.assertTrue(result["mapping"]["pole_pairs_confirmed"])
 
     def test_failure_cleanup_only_once(self):
         with TemporaryDirectory() as tmp:

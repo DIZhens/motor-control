@@ -427,7 +427,7 @@ static bool prepare_open_loop(const TargetValidationMailbox *request,
         || request->common_duty != 0.5f || !finite_float(requested->voltage_v)
         || requested->voltage_v <= 0.0f || requested->voltage_v > 0.5f
         || !finite_float(requested->electrical_frequency_hz)
-        || (survey ? (requested->electrical_frequency_hz <= 0.0f || requested->electrical_frequency_hz > 0.25f)
+        || (survey ? (requested->electrical_frequency_hz <= 0.0f || requested->electrical_frequency_hz > 1.0f)
             : (requested->electrical_frequency_hz == 0.0f || requested->electrical_frequency_hz < -5.0f
                 || requested->electrical_frequency_hz > 5.0f))) {
         failure = TARGET_VALIDATION_RESULT_BAD_REQUEST;

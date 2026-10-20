@@ -129,7 +129,7 @@ typedef struct {
 /* 命令 16 独立 payload，不改命令 15 的 8 字节语义；duration_us 固定 5500000。 */
 typedef struct {
     float voltage_v; /* (0,0.5] V，沿用低电压和名义电流辅助限制。 */
-    float excursion_turns; /* (0,0.25] 电角圈；轨迹为 0 → excursion → 0。 */
+    float excursion_turns; /* (0,1] 电角圈；轨迹为 0 → excursion → 0，一整圈可核对极对数。 */
 } TargetValidationAngleSurveyConfig;
 
 /* 每个保持段仅统计末尾 250 ms 中时间戳不同的新 SSI 观测。

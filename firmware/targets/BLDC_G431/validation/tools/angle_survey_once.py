@@ -23,7 +23,7 @@ WINDOW_FIELDS = {"sample_count": "I", "first_position_time": "Q", "last_position
 
 def parameters(voltage, excursion):
     voltage, excursion = loop.parameters(voltage, excursion)
-    require(0 < excursion <= 0.25, "静态往返角幅必须满足 0 < excursion <= 0.25 电角圈")
+    require(0 < excursion <= 1.0, "静态往返角幅必须满足 0 < excursion <= 1 电角圈")
     return voltage, excursion
 
 
@@ -69,7 +69,7 @@ def extra_layout(build, gdb, output):
 def prepare(build, output, gdb, expected=None):
     report = loop.prepare(build, output, gdb, expected)
     report["angle_survey_layout"] = extra_layout(output / "artifacts", gdb, output)
-    report["angle_survey_schema"] = 1
+    report["angle_survey_schema"] = 2
     report["angle_survey_tool_sha256"] = loop.candidate.digest(Path(__file__))
     report["open_loop_tool_sha256"] = loop.candidate.digest(Path(loop.__file__))
     loop.common.save(output / "prepared.json", report)
@@ -83,8 +83,8 @@ class Session(loop.Session):
     def __init__(self, output, prepared, cli, action, voltage, excursion):
         payload = parameters(voltage, excursion)
         frozen, _ = loop.load_prepared(prepared)
-        require(frozen.get("angle_survey_schema") == 1 and "angle_survey_layout" in frozen,
-            "候选没有静态往返能力；禁止连接旧镜像")
+        require(frozen.get("angle_survey_schema") == 2 and "angle_survey_layout" in frozen,
+            "候选没有本版静态往返清单；禁止连接旧候选")
         require(frozen["angle_survey_tool_sha256"] == loop.candidate.digest(Path(__file__))
             and frozen["open_loop_tool_sha256"] == loop.candidate.digest(Path(loop.__file__)),
             "执行工具已改变，请重新离线冻结候选")
@@ -134,7 +134,7 @@ def circular_delta(value):
 
 
 def analyze(survey, pole_pairs=7, direction=None):
-    """离线评估标称映射的一致性；不确认极对数，也不把结果装到目标板。"""
+    """比较角度、位移及完整电角圈的比例；不自动安装标定或打开正式控制。"""
     require(isinstance(pole_pairs, int) and 1 <= pole_pairs <= 64 and direction in [None, -1, 1], "非法映射假设")
     positions = [w["mean_position_turns"] for w in survey["windows"]]
     excursion = survey["excursion_turns"]
@@ -149,15 +149,25 @@ def analyze(survey, pole_pairs=7, direction=None):
     error = max(abs(circular_delta(o - offset)) for o in offsets)
     usable = (survey["stable_window_mask"] == 7 and direction * outward > 0.01
         and direction * backward < -0.01 and abs(returned) <= 0.003 and error <= 0.035)
+    # 完整一圈且机械位移低于半圈时，端点圆差的分支唯一；本目标标称7极对。
+    # 不用短行程、静止或半圈歧义估计极对数；往返均须落在标称值±0.25内。
+    full_turn = excursion == 1.0
+    observed_poles = [excursion / abs(v) for v in [outward, backward]] \
+        if full_turn and all(0.01 < abs(v) < 0.5 for v in [outward, backward]) else []
+    poles_match = (usable and full_turn and pole_pairs >= 3 and len(observed_poles) == 2
+        and all(abs(p - pole_pairs) <= 0.25 for p in observed_poles))
     return {"nominal_pole_pairs": pole_pairs, "encoder_direction_candidate": direction,
         "direction_source": "observed_outward_delta" if inferred else "explicit_hypothesis",
         "outward_mechanical_turns": outward, "backward_mechanical_turns": backward,
         "return_error_mechanical_turns": returned,
         "offset_samples_electrical_turns": offsets, "offset_candidate_electrical_turns": offset,
         "max_offset_residual_electrical_turns": error,
-        "mapping_candidate_consistent": usable, "pole_pairs_confirmed": False,
+        "mapping_candidate_consistent": usable, "pole_pairs_confirmed": poles_match,
+        "full_electrical_turn_requested": full_turn,
+        "pole_pairs_estimates_out_and_back": observed_poles,
+        "pole_pairs_tolerance": 0.25,
         "electrical_calibration_confirmed": False, "calibration_applied": False,
-        "limits": "稳定、方向、返回与残差只是候选筛选；静摩擦、外力和励磁不足仍可能影响结果。"}
+        "limits": "极对数结论仅来自完整电角圈往返比例；零位仍为候选，精度、静摩擦及跳极影响未作全区间验收。"}
 
 
 def execute_once(session, anchor, vbus_dmm):

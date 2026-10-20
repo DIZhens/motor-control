@@ -750,16 +750,16 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     assert m.status("result") == 19 and m.word("model_enable_calls") == 0
     passed("static survey discards reset-time request and requires this-boot full zero capture")
     for payload, reason in [({"voltage": 0.501}, 4), ({"excursion": 0.0}, 4),
-                            ({"excursion": 0.251}, 4), ({"excursion": float("nan")}, 4),
+                            ({"excursion": 1.001}, 4), ({"excursion": float("nan")}, 4),
                             ({"key": 0}, 3), ({"duration": 3500000}, 4), ({"duty": 0.3}, 4)]:
         m = zero_ready(); m.survey_submit(**payload); m.tick(3)
         assert m.status("result") == reason and not m.moe()
         assert m.word("model_stage_calls") == m.word("model_enable_calls") == 0
         passed("static survey rejects invalid payload before staging: " + str(payload))
 
-    def survey_powered():
+    def survey_powered(**payload):
         m = zero_ready(); m.write("model_position_period_ticks", 20)
-        m.survey_submit(); m.tick(3)
+        m.survey_submit(**payload); m.tick(3)
         assert m.moe() and m.word("model_enable_calls") == 1
         assert m.survey()["request"] == m.sequence and m.survey()["result"] == 0
         return m
@@ -812,6 +812,16 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     assert not m.moe() and m.word("g_target_validation_stop_reason") == 18
     m.tick(); assert m.survey()["result"] == 18 and m.survey()["stable_mask"] == 0
     passed("static survey independent deadline is failure rather than false completion")
+
+    m = survey_powered(excursion=1.0)
+    m.write("model_position_turns",0.98,"f"); m.tick(15000)
+    m.write("model_position_turns",(0.98+1/7)%1,"f"); m.tick(15000)
+    m.write("model_position_turns",0.98,"f"); m.tick(20000)
+    r=m.survey()
+    assert r["result"]==1 and r["stable_mask"]==7 and r["excursion"]==1.0 and not m.moe(),r
+    assert [w["count"] for w in r["windows"]]==[250,250,250]
+    assert m.word("model_stage_calls")==50001 and m.word("model_enable_calls")==1
+    passed("one full electrical turn preserves five-second trajectory, three SSI windows and unique enable")
 
     # 使用独立R/L电气替身闭合真实ARM PI和stage；电流符号按桥→电机定义，
     # 再经低边Shunt物理方向生成采样值，不能直接把目标填回输入。

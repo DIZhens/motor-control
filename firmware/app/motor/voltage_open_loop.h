@@ -70,7 +70,7 @@ typedef struct {
     uint32_t max_current_age_ticks;
     uint32_t max_bus_age_ticks;
     VoltageOpenLoopProfile profile; /* 零初始化保留原旋转轨迹语义。 */
-    float excursion_turns; /* STATIC_SURVEY 的电角往返幅度，(0,0.25]；旋转轨迹必须为零。 */
+    float excursion_turns; /* STATIC_SURVEY 的电角往返幅度，(0,1]；旋转轨迹必须为零。 */
 } VoltageOpenLoopConfig;
 
 typedef struct {

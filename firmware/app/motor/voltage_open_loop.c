@@ -56,8 +56,11 @@ static bool config_valid(const VoltageOpenLoopConfig *config)
         return false;
     }
     if (config->profile == VOLTAGE_OPEN_LOOP_STATIC_SURVEY) {
+        step_turns = config->excursion_turns *
+            ((float)config->max_step_ticks / (float)config->frequency_ramp_ticks);
         return config->target_electrical_hz == 0.0f && isfinite(config->excursion_turns) &&
-            config->excursion_turns > 0.0f && config->excursion_turns <= 0.25f;
+            config->excursion_turns > 0.0f && config->excursion_turns <= 1.0f &&
+            isfinite(step_turns) && step_turns <= 0.25f;
     }
     if (config->profile != VOLTAGE_OPEN_LOOP_ROTATING || config->excursion_turns != 0.0f ||
         config->target_electrical_hz == 0.0f) {
@@ -278,6 +281,10 @@ bool voltage_open_loop_update_with_trig(VoltageOpenLoop *loop,
     }
     if (loop->config.profile == VOLTAGE_OPEN_LOOP_STATIC_SURVEY) {
         static_survey_trajectory(loop, elapsed, &voltage, &frequency, &phase);
+        /* 轨迹可移出完整一电角圈；三角后端和公共相位始终使用[0,1)。 */
+        if (phase >= 1.0f) {
+            phase -= 1.0f;
+        }
         rounding_error = 0.0f;
     } else {
         previous = loop->last_update_time - loop->started_at;

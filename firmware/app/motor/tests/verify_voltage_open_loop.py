@@ -402,8 +402,22 @@ with tempfile.TemporaryDirectory(prefix="voltage-open-loop-") as directory:
     assert states == {1, 2, 9, 10, 11, 12, 5}
     model.expect_off(COMPLETE, NONE)
     CASES.append("静态轨迹七段与独立解析值一致，三个保持角无漂移，返回零角后缓降并撤销")
+    model = Model(survey | {"excursion_turns": 1.0})
+    model.start()
+    while model.step(2):
+        t = model.now - model.base_time
+        phase = (t-300)/100 if 300 <= t < 400 else (700-t)/100 if 600 <= t < 700 else 0.0
+        phase %= 1.0
+        voltage = 0.5 * (t/100 if t < 100 else (1000-t)/100 if t >= 900 else 1.0)
+        assert 0 <= model.values[5] < 1 and math.isclose(model.values[5], phase, abs_tol=1e-7)
+        assert math.isclose(model.values[3], voltage*math.cos(math.tau*phase), abs_tol=1e-6)
+        assert math.isclose(model.values[4], voltage*math.sin(math.tau*phase), abs_tol=1e-6)
+    model.expect_off(COMPLETE, NONE)
+    CASES.append("完整一电角圈往返在一圈端点归一化为零，解析电压、相位和关断一致")
+    Model(survey | {"excursion_turns": 1.0, "max_step_ticks": 100}, valid=False)
+    CASES.append("完整行程不允许单拍超过四分之一电角圈")
     for override in [{"profile": 2}, {"target_electrical_hz": 1.0}, {"excursion_turns": 0},
-                     {"excursion_turns": 0.251}, {"excursion_turns": math.nan},
+                     {"excursion_turns": 1.001}, {"excursion_turns": math.nan},
                      {"timeout_ticks": 1000}, {"alignment_hold_ticks": 0xFFFFFFFF}]:
         Model(survey | override, valid=False)
     Model({"excursion_turns": 0.25}, valid=False)
