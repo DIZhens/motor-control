@@ -141,7 +141,7 @@ class Tests(unittest.TestCase):
         for positions, mask in [((0.2,0.2,0.2),7), ((0.2,0.235714,0.2),7),
                                  ((0.2,0.164286,0.21),7), ((0.2,0.164286,0.2),3)]:
             with self.subTest(positions=positions, mask=mask):
-                result = survey.analyze(observation(positions, mask))
+                result = survey.analyze(observation(positions, mask), direction=-1)
                 self.assertFalse(result["mapping_candidate_consistent"])
                 self.assertFalse(result["pole_pairs_confirmed"])
                 self.assertFalse(result["calibration_applied"])
@@ -153,6 +153,14 @@ class Tests(unittest.TestCase):
         self.assertAlmostEqual(result["offset_candidate_electrical_turns"], 0.93)
         self.assertLess(result["max_offset_residual_electrical_turns"], 1e-6)
         self.assertFalse(result["pole_pairs_confirmed"])
+
+    def test_direction_is_rebuilt_from_observation_instead_of_old_phase_order(self):
+        for direction in [-1,1]:
+            result=survey.analyze(observation((0.3,0.3+direction*0.25/7,0.3)))
+            self.assertEqual(result["encoder_direction_candidate"],direction)
+            self.assertEqual(result["direction_source"],"observed_outward_delta")
+            self.assertTrue(result["mapping_candidate_consistent"])
+            self.assertFalse(result["electrical_calibration_confirmed"])
 
     def test_failure_cleanup_only_once(self):
         with TemporaryDirectory() as tmp:

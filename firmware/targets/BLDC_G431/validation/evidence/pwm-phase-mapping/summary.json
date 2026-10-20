@@ -1,0 +1,331 @@
+{
+  "schema_version": 1,
+  "result": "PHYSICAL_PWM_MAPPING_CORRECTED_STATIC_CANDIDATE_RECORDED_OUTPUT_OFF",
+  "parent_commit": "9a4c936",
+  "target": "BLDC_control V1",
+  "hex_sha256": "2b882a4832cfc39f21182d9c81b9f9c7952914f1704f08bb2846aeb03b91b040",
+  "loaded_flash_bytes": 43016,
+  "artifact_sha256": {
+    "BLDC_control V1.hex": "2b882a4832cfc39f21182d9c81b9f9c7952914f1704f08bb2846aeb03b91b040",
+    "BLDC_control V1.axf": "3c133c76b728ed6bf78f2d5e833e509beebf66971c87a7353870c4c10fb35827",
+    "BLDC_control V1.map": "6d74c076847859d5cfbc8b4362cc9c38732fc17554223147cba38d14eb7595fa"
+  },
+  "other_rebuilt_artifacts": {
+    "observe": {
+      "BLDC_G431_Observe.axf": "ab96dc4ce12070897e815af9389a96261ecea0300a44f211d92004ffe5c6814c",
+      "BLDC_G431_Observe.hex": "82bab791e9df8a62733119f58a652e6ad6f9e7020067fe6da14fdf0d5327055c",
+      "BLDC_G431_Observe.map": "f7d0da575e3b78c01968304d170dbae4ef8d0c2900f0d4b21ac8eec43bdc45a6"
+    },
+    "timing": {
+      "BLDC_G431_Timing.axf": "6626937801395a4304c82dc2b92578c98ec7822529aeba3dfd19d955b04bfbfc",
+      "BLDC_G431_Timing.hex": "fa3cdd02ee741780e709cd5350f2ee2b92e1c18c64737f555c869ce29ceaa37d",
+      "BLDC_G431_Timing.map": "be0a9b801f44bb8b28626ed98247792008c1c3f9cb04864981a7b71dedd6ea7d"
+    }
+  },
+  "physical_pwm_channels": {
+    "A": 3,
+    "B": 2,
+    "C": 1
+  },
+  "current_channels_changed": false,
+  "pwm_frequency_changed": false,
+  "hardware_protection_configuration_changed": false,
+  "verification": {
+    "actual_platform_arm_cases": 101,
+    "legacy_timing_arm_cases": 15,
+    "angle_survey_host_tests": 11,
+    "three_targets_full_rebuild": {
+      "BLDC_control V1": {
+        "errors": 0,
+        "warnings": 0
+      },
+      "BLDC_G431_Observe": {
+        "errors": 0,
+        "warnings": 0
+      },
+      "BLDC_G431_Timing": {
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    "independent_netlist_expected_phases_tested": true,
+    "hex_axf_map_dwarf_verified": true
+  },
+  "hardware": {
+    "operator_logic_confirmed": true,
+    "native_download_verified": true,
+    "independent_loaded_flash_match": true,
+    "callback_per_ms": 9.983122362869198,
+    "software_bus_v": 12.017094612121582,
+    "position_valid": true,
+    "moe": false,
+    "high_inputs": 0,
+    "low_inputs": 0,
+    "trip_causes": 0,
+    "target_request_writes": 4,
+    "zero_capture_performed": true,
+    "static_survey_executed": true,
+    "stage_attempts_total": 100002,
+    "enable_attempts_total": 2,
+    "consumer_max_observed_cycles": 5749,
+    "consumer_max_observed_us": 33.81764705882353,
+    "consumer_is_full_adc_irq": false,
+    "consumer_is_wcet_qualified": false
+  },
+  "connection_issue": {
+    "error": "探针本体DEV_CONNECT_ERR",
+    "target_writes_before_failure": 0,
+    "operator_usb_replug_confirmed": true,
+    "subsequent_explicit_install_succeeded": true
+  },
+  "current_calibration_confirmed": false,
+  "electrical_calibration_confirmed": false,
+  "foc_qualified": false,
+  "old_direction_candidate_carried": false,
+  "diagnosis_evidence": "../angle-survey/pwm-phase-mapping-audit.json",
+  "limits": [
+    "修正后0.3V回程差约4.11机械度，未通过候选门限；经操作者明确同意的0.4V单次对照约0.110机械度，通过初步筛选。",
+    "方向+1和offset约0.025594电角圈仅是本轮候选；7极对仍为标称，标定未安装，正式控制许可保持关闭。",
+    "电流窗口与物理相输出关系相符，不能代替独立电流增益/极性参考或全工作区精度。",
+    "增加励磁后回程差变小支持励磁/机械因素影响的判断，但不能据此唯一确定静摩擦、齿槽转矩或编码器安装误差的贡献。",
+    "旧保护、PWM、时序证据保持原镜像身份；本次不声称真实保护门限、完整IRQ/WCET或带电FOC已验收。"
+  ],
+  "local_evidence": "validation/local-evidence/20261021-angle-survey-01/phase-map-fix",
+  "trials": [
+    {
+      "local_raw": "survey-01/summary.json",
+      "request_sequence": 2,
+      "zero": {
+        "local_raw": "zero-01/summary.json",
+        "request_sequence": 1,
+        "samples": 4096,
+        "capture_sha256": "84ff2467611f96413032d01716757de96d2b0bdb84461c9778a167f745d43d5e",
+        "offset_b_a": -0.012343174777925014,
+        "offset_c_a": -0.0015698712086305022
+      },
+      "voltage_v": 0.30000001192092896,
+      "excursion_electrical_turns": 0.25,
+      "sample_count": 50002,
+      "enabled_samples": 50001,
+      "stage_attempts_delta": 50001,
+      "stage_successes_delta": 50001,
+      "enable_attempts_delta": 1,
+      "enable_successes_delta": 1,
+      "nominal_peak_abs_current_a": 0.11224083602428436,
+      "duty_min": 0.47819000482559204,
+      "duty_max": 0.521809995174408,
+      "survey": {
+        "sequence": 4,
+        "request_sequence": 2,
+        "result": 1,
+        "stable_window_mask": 7,
+        "voltage_v": 0.30000001192092896,
+        "excursion_turns": 0.25,
+        "windows": [
+          {
+            "sample_count": 250,
+            "first_position_time": 2443620,
+            "last_position_time": 2448600,
+            "mean_position_turns": 0.4237060546875,
+            "span_turns": 0.0,
+            "first_position_turns": 0.4237060546875,
+            "last_position_turns": 0.4237060546875,
+            "mean_nominal_b_a": 0.04804442450404167,
+            "mean_nominal_c_a": 0.05179467797279358
+          },
+          {
+            "sample_count": 250,
+            "first_position_time": 2473620,
+            "last_position_time": 2478600,
+            "mean_position_turns": 0.4626816511154175,
+            "span_turns": 6.103515625e-05,
+            "first_position_turns": 0.462646484375,
+            "last_position_turns": 0.46270751953125,
+            "mean_nominal_b_a": -0.0838245078921318,
+            "mean_nominal_c_a": 0.08885353803634644
+          },
+          {
+            "sample_count": 250,
+            "first_position_time": 2503620,
+            "last_position_time": 2508600,
+            "mean_position_turns": 0.43511962890625,
+            "span_turns": 0.0,
+            "first_position_turns": 0.43511962890625,
+            "last_position_turns": 0.43511962890625,
+            "mean_nominal_b_a": 0.048529140651226044,
+            "mean_nominal_c_a": 0.051648348569869995
+          }
+        ]
+      },
+      "mapping": {
+        "nominal_pole_pairs": 7,
+        "encoder_direction_candidate": 1,
+        "direction_source": "observed_outward_delta",
+        "outward_mechanical_turns": 0.03897559642791748,
+        "backward_mechanical_turns": -0.02756202220916748,
+        "return_error_mechanical_turns": 0.01141357421875,
+        "offset_samples_electrical_turns": [
+          0.9659423828125,
+          0.9887715578079224,
+          0.04583740234375
+        ],
+        "offset_candidate_electrical_turns": 0.0001837809880573804,
+        "max_offset_residual_electrical_turns": 0.04565362135569262,
+        "mapping_candidate_consistent": false,
+        "pole_pairs_confirmed": false,
+        "electrical_calibration_confirmed": false,
+        "calibration_applied": false,
+        "limits": "稳定、方向、返回与残差只是候选筛选；静摩擦、外力和励磁不足仍可能影响结果。"
+      },
+      "return_error_mechanical_degrees": 4.10888671875,
+      "final_moe": false,
+      "final_high_inputs": 0,
+      "final_low_inputs": 0,
+      "final_guard_running": false,
+      "final_trip_causes": 0,
+      "invalid_current_count": 0,
+      "final_result": 1,
+      "module_state": 6,
+      "module_reason": 0
+    },
+    {
+      "local_raw": "survey-02-v04/summary.json",
+      "request_sequence": 4,
+      "zero": {
+        "local_raw": "zero-02-v04/summary.json",
+        "request_sequence": 3,
+        "samples": 4096,
+        "capture_sha256": "c1e49430ee23468344ea03e5a8bdc60b3c2bbc3aaa2db0a08368924b4808f96b",
+        "offset_b_a": -0.013450130820274353,
+        "offset_c_a": -0.001871868153102696
+      },
+      "voltage_v": 0.4000000059604645,
+      "excursion_electrical_turns": 0.25,
+      "sample_count": 50002,
+      "enabled_samples": 50001,
+      "stage_attempts_delta": 50001,
+      "stage_successes_delta": 50001,
+      "enable_attempts_delta": 1,
+      "enable_successes_delta": 1,
+      "nominal_peak_abs_current_a": 0.14337381720542908,
+      "duty_min": 0.4709376096725464,
+      "duty_max": 0.5290623903274536,
+      "survey": {
+        "sequence": 8,
+        "request_sequence": 4,
+        "result": 1,
+        "stable_window_mask": 7,
+        "voltage_v": 0.4000000059604645,
+        "excursion_turns": 0.25,
+        "windows": [
+          {
+            "sample_count": 250,
+            "first_position_time": 6529200,
+            "last_position_time": 6534180,
+            "mean_position_turns": 0.43438720703125,
+            "span_turns": 0.0,
+            "first_position_turns": 0.43438720703125,
+            "last_position_turns": 0.43438720703125,
+            "mean_nominal_b_a": 0.06586990505456924,
+            "mean_nominal_c_a": 0.06780002266168594
+          },
+          {
+            "sample_count": 250,
+            "first_position_time": 6559200,
+            "last_position_time": 6564180,
+            "mean_position_turns": 0.46392822265625,
+            "span_turns": 0.0,
+            "first_position_turns": 0.46392822265625,
+            "last_position_turns": 0.46392822265625,
+            "mean_nominal_b_a": -0.10976176708936691,
+            "mean_nominal_c_a": 0.11799231916666031
+          },
+          {
+            "sample_count": 250,
+            "first_position_time": 6589200,
+            "last_position_time": 6594180,
+            "mean_position_turns": 0.43408203125,
+            "span_turns": 0.0,
+            "first_position_turns": 0.43408203125,
+            "last_position_turns": 0.43408203125,
+            "mean_nominal_b_a": 0.06484558433294296,
+            "mean_nominal_c_a": 0.06725585460662842
+          }
+        ]
+      },
+      "mapping": {
+        "nominal_pole_pairs": 7,
+        "encoder_direction_candidate": 1,
+        "direction_source": "observed_outward_delta",
+        "outward_mechanical_turns": 0.029541015625,
+        "backward_mechanical_turns": -0.02984619140625,
+        "return_error_mechanical_turns": -0.00030517578125,
+        "offset_samples_electrical_turns": [
+          0.04071044921875,
+          0.99749755859375,
+          0.03857421875
+        ],
+        "offset_candidate_electrical_turns": 0.025594075520833336,
+        "max_offset_residual_electrical_turns": 0.02809651692708348,
+        "mapping_candidate_consistent": true,
+        "pole_pairs_confirmed": false,
+        "electrical_calibration_confirmed": false,
+        "calibration_applied": false,
+        "limits": "稳定、方向、返回与残差只是候选筛选；静摩擦、外力和励磁不足仍可能影响结果。"
+      },
+      "return_error_mechanical_degrees": -0.10986328125,
+      "final_moe": false,
+      "final_high_inputs": 0,
+      "final_low_inputs": 0,
+      "final_guard_running": false,
+      "final_trip_causes": 0,
+      "invalid_current_count": 0,
+      "final_result": 1,
+      "module_state": 6,
+      "module_reason": 0
+    }
+  ],
+  "preparation_wait_s": 5,
+  "operator_reports": {
+    "powered": "供电正常；准备时间改为5秒",
+    "after_v03_and_before_v04": "刚才无异常，同意0.4V单次对照",
+    "new_dmm_reading_reported": false,
+    "vbus_dmm_reference_v": 12.12,
+    "reference": "沿用先前操作者读数，不冒充本次新实测",
+    "after_v04_manual_observation": null
+  },
+  "candidate": {
+    "nominal_pole_pairs": 7,
+    "encoder_direction_candidate": 1,
+    "direction_source": "observed_outward_delta",
+    "outward_mechanical_turns": 0.029541015625,
+    "backward_mechanical_turns": -0.02984619140625,
+    "return_error_mechanical_turns": -0.00030517578125,
+    "offset_samples_electrical_turns": [
+      0.04071044921875,
+      0.99749755859375,
+      0.03857421875
+    ],
+    "offset_candidate_electrical_turns": 0.025594075520833336,
+    "max_offset_residual_electrical_turns": 0.02809651692708348,
+    "mapping_candidate_consistent": true,
+    "pole_pairs_confirmed": false,
+    "electrical_calibration_confirmed": false,
+    "calibration_applied": false,
+    "limits": "稳定、方向、返回与残差只是候选筛选；静摩擦、外力和励磁不足仍可能影响结果。"
+  },
+  "raw_summary_sha256": {
+    "zero-01/summary.json": "1612db5ad4811126768a7bcb4a4cf5d444d66fe6526ce8c9908194091941510d",
+    "survey-01/summary.json": "c40f05a3fd584ca80838e52babd7b35e61dadbc7bd5eafbf5ef6886923a54c65",
+    "zero-02-v04/summary.json": "edacfb05a1756920ee28ba055ed93c809db742ea1555f3960cc6e54887fc534b",
+    "survey-02-v04/summary.json": "54bea307979fcda6b7c0436b17bb04fb54a6d406549f4f55e1643fc661eb0c76",
+    "operator-voltage-04.json": "68d5418f214eb33365b124e106f294a30616328e3419a532eded3dc2e0813cc3"
+  },
+  "source_sha256": {
+    "firmware/targets/BLDC_G431/platform/realtime_motor_io.c": "3b4deab7aed3aeb8e8ca94ab2647400c1bbf3fd9e36a7d14b84d2115f130e6df",
+    "firmware/targets/BLDC_G431/validation/tools/angle_survey_once.py": "749e8662ddf1e1630818506115440d8f105e2999b2c1804e83a970ecb40092eb",
+    "firmware/targets/BLDC_G431/validation/tests/verify_platform.py": "6fa06205c54cdb05dc1723484a08498a91f464706b384f5b9b68455ae80a5665",
+    "hardware/BLDC_G431/HARDWARE_BASELINE.md": "aad9400504ae4e2d35145b62caf88c7a72584539e3c06a6fab075f1945d8840b",
+    "hardware/BLDC_G431/HARDWARE_DESIGN.md": "b1dbefa037f598e2581852da494964e973cb21dc704ecc7aa40948a43bbade38"
+  }
+}

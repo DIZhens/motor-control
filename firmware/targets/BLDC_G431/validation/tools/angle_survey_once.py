@@ -133,20 +133,24 @@ def circular_delta(value):
     return (value + 0.5) % 1.0 - 0.5
 
 
-def analyze(survey, pole_pairs=7, direction=-1):
+def analyze(survey, pole_pairs=7, direction=None):
     """离线评估标称映射的一致性；不确认极对数，也不把结果装到目标板。"""
-    require(isinstance(pole_pairs, int) and 1 <= pole_pairs <= 64 and direction in [-1, 1], "非法映射假设")
+    require(isinstance(pole_pairs, int) and 1 <= pole_pairs <= 64 and direction in [None, -1, 1], "非法映射假设")
     positions = [w["mean_position_turns"] for w in survey["windows"]]
     excursion = survey["excursion_turns"]
     outward = circular_delta(positions[1] - positions[0])
     backward = circular_delta(positions[2] - positions[1])
     returned = circular_delta(positions[2] - positions[0])
+    inferred = direction is None
+    if inferred:
+        direction = 1 if outward > 0 else -1
     offsets = [(pole_pairs * direction * p - a) % 1.0 for p, a in zip(positions, [0, excursion, 0])]
     offset = (offsets[0] + sum(circular_delta(o - offsets[0]) for o in offsets) / 3) % 1.0
     error = max(abs(circular_delta(o - offset)) for o in offsets)
     usable = (survey["stable_window_mask"] == 7 and direction * outward > 0.01
         and direction * backward < -0.01 and abs(returned) <= 0.003 and error <= 0.035)
     return {"nominal_pole_pairs": pole_pairs, "encoder_direction_candidate": direction,
+        "direction_source": "observed_outward_delta" if inferred else "explicit_hypothesis",
         "outward_mechanical_turns": outward, "backward_mechanical_turns": backward,
         "return_error_mechanical_turns": returned,
         "offset_samples_electrical_turns": offsets, "offset_candidate_electrical_turns": offset,

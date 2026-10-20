@@ -554,9 +554,11 @@ bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *request)
         SET_BIT(htim1.Instance->CR1, TIM_CR1_UDIS);
         __DSB();
         if (staging_time_available()) {
-            htim1.Instance->CCR1 = phase_a;
+            /* 原始网表：PA8/PB13(CH1)=C，PA9/PB14(CH2)=B，PA10/PB15(CH3)=A。
+             * HCC 的 A/B/C 始终指物理相；仅在此适配寄存器顺序，不互换电流通道。 */
+            htim1.Instance->CCR1 = phase_c;
             htim1.Instance->CCR2 = phase_b;
-            htim1.Instance->CCR3 = phase_c;
+            htim1.Instance->CCR3 = phase_a;
             __DSB();
             if (staging_time_available() && s_stage_window_open
                 && (s_callback_epoch == s_actuation_epoch)

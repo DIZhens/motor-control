@@ -152,8 +152,8 @@ V1 的目标不是高功率密度量产控制器，而是建立一块 **可观�
 
 | 引脚 | 复用 / 模式 | 用途 |
 |---|---|---|
-| PA8 / PA9 / PA10 | TIM1_CH1/2/3 | A/B/C 高侧 PWM |
-| PB13 / PB14 / PB15 | TIM1_CH1N/2N/3N | A/B/C 低侧 PWM |
+| PA8 / PA9 / PA10 | TIM1_CH1/2/3 | C/B/A 高侧 PWM，按原始网表物理相 |
+| PB13 / PB14 / PB15 | TIM1_CH1N/2N/3N | C/B/A 低侧 PWM，按原始网表物理相 |
 | PA0 | ADC1_IN1 + COMP3_INP | VBUS 检测 / 过压 |
 | PA4 | ADC2_IN17 | 功率区 NTC |
 | PA15 / PB3 / PB4 | GPIO CS / SPI1_SCK / SPI1_MISO | MT6701 SSI |

@@ -6,6 +6,7 @@ is an ordering/deadline regression, not a cycle-accurate peripheral or WCET test
 """
 from pathlib import Path
 import os
+import re
 import struct
 import subprocess
 import tempfile
@@ -32,7 +33,26 @@ CEN, UDIS, DIR, MOE = 1, 2, 16, 1 << 15
 BREAKS = (1 << 7) | (1 << 8)
 STOP = 0x0801F000
 NEUTRAL = (2125, 2125, 2125)
-REQUEST = (850, 2125, 3400)
+def physical_phase_channels():
+    """从原始板卡网表和固定 LQFP48 引脚事实独立得到期望，不读取生产 C 赋值。"""
+    netlist = ROOT.parents[2] / "hardware/BLDC_G431/schematic/Netlist_Schematic1_2026-09-09.tel"
+    text = netlist.read_text(encoding="utf-8-sig")
+    # ST CubeMX STM32G431C(6-8-B)Tx.xml：30/31/32=PA8/9/10，27/28/29=PB13/14/15。
+    high = {30: 1, 31: 2, 32: 3}
+    low = {27: 1, 28: 2, 29: 3}
+    result = {}
+    for phase in "ABC":
+        h = re.search(r"^INH"+phase+r" ; U4\.(\d+) U5\.", text, re.M)
+        l = re.search(r"^INL"+phase+r" ; U4\.(\d+) U5\.", text, re.M)
+        assert h and l, "网表缺少物理相输入"
+        assert high[int(h[1])] == low[int(l[1])], "高低侧通道配对不符"
+        result[phase] = high[int(h[1])]
+    assert sorted(result.values()) == [1,2,3]
+    return result
+
+
+PHASE_CHANNELS = physical_phase_channels()
+REQUEST = tuple(dict(zip(PHASE_CHANNELS.values(), (850,2125,3400)))[channel] for channel in [1,2,3])
 STAGE, NULL_REQUEST, DUPLICATE, OFF, ENABLE = 2, 4, 8, 16, 32
 
 
@@ -288,6 +308,18 @@ class Model:
 def run(image):
     cases = []
     def passed(name): cases.append(name)
+    for phase in "ABC":
+        m = Model(image)
+        values = [0.5,0.5,0.5]
+        values["ABC".index(phase)] = 0.2
+        m.cpu.mem_write(m.symbols["model_request"], struct.pack("<3f", *values))
+        m.tick(STAGE)
+        expected = list(NEUTRAL)
+        expected[PHASE_CHANNELS[phase]-1] = 850
+        assert m.word("model_stage_result") == 1 and tuple(m.shadow) == tuple(expected)
+        m.tick(0)
+        assert m.active == tuple(expected) and not m.moe()
+        passed("原始网表确定物理相 "+phase+" 在 CH"+str(PHASE_CHANNELS[phase])+" 预装载和生效")
     m = Model(image)
     assert m.word("model_bind_result") == m.word("model_arm_result") == m.word("model_start_result") == 1
     assert m.word("model_ug_after_adc") == 0 and m.active == NEUTRAL and not m.moe()
