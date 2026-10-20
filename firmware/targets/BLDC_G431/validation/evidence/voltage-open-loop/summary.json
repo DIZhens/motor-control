@@ -215,5 +215,6 @@
     "automatic_retry": false,
     "fresh_state_obtained": false,
     "note": "额外只读身份连接停在探针电压信息，未完成新的Flash读回；不替代motion-01末尾的有效关断记录。"
-  }
+  },
+  "reverse_comparison_evidence": "reverse-comparison.json"
 }
