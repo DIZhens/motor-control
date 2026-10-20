@@ -1,4 +1,4 @@
-/* 直接执行公共 Runtime；HCC 替身只模拟下一拍 duty 边界和功率 epoch，不接设备。 */
+/* 直接执行公共 Runtime；HCC 替身模拟旧下一拍/新显式75us边界与功率epoch，不接设备。 */
 #include "control_runtime.h"
 #include <math.h>
 #include <stddef.h>
@@ -17,6 +17,12 @@ float model_gain_c = -0.8f;
 int32_t model_direction = 1;
 float model_prediction_s = 0.00005f;
 uint32_t model_speed_divider = 20U;
+uint32_t model_fast_period_ticks = 1U;
+uint32_t model_observation_divider = 20U;
+uint32_t model_zero_samples = 16U;
+uint32_t model_zero_settle_samples = 4U;
+float model_current_max_interval_s = 0.000051f;
+uint32_t model_explicit_boundaries; /* 1仅由下面的显式update事件装载pending。 */
 float model_voltage_ratio = 0.45f;
 float model_normal_utilization = 0.45f;
 float model_current_trip_a = 1.2f;
@@ -63,14 +69,24 @@ uint32_t model_pending_epoch;
 uint32_t model_pending_valid;
 uint64_t model_pending_time;
 uint64_t model_active_source_time;
+uint64_t model_event_time_us; /* 合成物理事件时刻；不是ControlTime的tick数。 */
+uint64_t model_pending_apply_us;
+uint64_t model_active_apply_us;
+uint64_t model_last_boundary_us;
+uint32_t model_boundary_count;
+uint32_t model_boundary_errors;
 uint32_t model_enable_boundary_errors;
 uint32_t model_enable_non_neutral_errors;
+uint64_t model_enable_active_source_time;
+uint64_t model_enable_fresh_source_time;
 PhaseDutyRequest model_pending_duty;
 PhaseDutyRequest model_active_duty = { 0.5f, 0.5f, 0.5f };
 
 /* 固定简单诊断布局；读取的数值来自真实 Runtime 与算法实例。 */
 uint32_t model_diag[13];
 float model_values[16];
+const uint32_t model_current_interval_offset = offsetof(CurrentControllerInput, interval_s);
+const uint32_t model_speed_interval_offset = offsetof(SpeedControllerInput, interval_s);
 
 static bool model_angle_trig(void *context, float turns, float *sine, float *cosine)
 {
@@ -147,7 +163,7 @@ bool realtime_motor_io_get_facts(RealtimeMotorIoFacts *facts)
 {
     facts->normal_voltage_utilization = model_normal_utilization;
     facts->control_time_ticks_per_second = 20000U;
-    facts->fast_tick_period_ticks = 1U;
+    facts->fast_tick_period_ticks = model_fast_period_ticks;
     return model_facts_ok != 0U;
 }
 
@@ -176,6 +192,7 @@ bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *duty)
     model_pending_duty = *duty;
     model_pending_epoch = model_epoch;
     model_pending_time = model_time;
+    model_pending_apply_us = model_time * 50U + 75U;
     model_pending_valid = 1U;
     return true;
 }
@@ -183,12 +200,18 @@ bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *duty)
 bool realtime_motor_io_power_enable(void)
 {
     model_enable_count++;
+    model_enable_active_source_time = model_active_source_time;
+    model_enable_fresh_source_time = model_pending_time;
     if (model_active_epoch != model_epoch || model_active_source_time >= model_time) {
         model_enable_boundary_errors++;
         return false;
     }
     if (model_active_duty.phase_a_duty != 0.5f || model_active_duty.phase_b_duty != 0.5f
-        || model_active_duty.phase_c_duty != 0.5f) {
+        || model_active_duty.phase_c_duty != 0.5f
+        || model_pending_valid == 0U || model_pending_epoch != model_epoch
+        || model_pending_time != model_time
+        || model_pending_duty.phase_a_duty != 0.5f || model_pending_duty.phase_b_duty != 0.5f
+        || model_pending_duty.phase_c_duty != 0.5f) {
         model_enable_non_neutral_errors++;
         return false;
     }
@@ -227,21 +250,21 @@ void model_init(void)
 {
     ControlRuntimeConfig config = {0};
     config.control_time_ticks_per_second = 20000U;
-    config.fast_tick_period_ticks = 1U;
-    config.observation_divider = 20U;
+    config.fast_tick_period_ticks = model_fast_period_ticks;
+    config.observation_divider = model_observation_divider;
     config.position_max_age_ticks = 100U;
     config.bus_max_age_ticks = 100U;
     config.velocity_estimator.max_velocity_rpm = 3000.0f;
     config.velocity_estimator.velocity_filter_time_s = 0.001f;
     config.current_measurement.measured_phases = CURRENT_MEASUREMENT_PHASE_BC;
-    config.current_measurement.calibration_sample_count = 16U;
+    config.current_measurement.calibration_sample_count = model_zero_samples;
     config.current_measurement.max_offset_abs_a = 0.10f;
     config.current_measurement.max_peak_to_peak_a = 0.05f;
     config.current_measurement.gain_correction_enabled = model_gain_enabled != 0U;
     config.current_measurement.signed_gain[0] = 1.0f;
     config.current_measurement.signed_gain[1] = model_gain_b;
     config.current_measurement.signed_gain[2] = model_gain_c;
-    config.current_zero_settle_samples = 4U;
+    config.current_zero_settle_samples = model_zero_settle_samples;
     config.current_zero_velocity_limit_rpm = 5.0f;
     config.current_zero_calibration_permitted = model_zero_permitted != 0U;
     config.electrical_angle.pole_pairs = 7U;
@@ -263,7 +286,7 @@ void model_init(void)
     config.control.current.integral_limit_v = 4.0f;
     config.control.current.reference_current_limit_a = 0.6f;
     config.control.current.max_voltage_ratio = model_voltage_ratio;
-    config.control.current.max_interval_s = 0.000051f;
+    config.control.current.max_interval_s = model_current_max_interval_s;
     config.control.speed.kp_a_per_rpm = 0.006f;
     config.control.speed.ki_a_per_rpm_s = 0.04f;
     config.control.speed.tracking_gain_per_s = 20.0f;
@@ -288,7 +311,15 @@ void model_step(void)
     MotorCommand command;
     model_trig_step_calls = 0U;
     model_time += model_tick_step;
-    if (model_pending_valid != 0U && model_pending_time < model_time
+    if (model_explicit_boundaries != 0U && model_pending_valid != 0U
+        && model_pending_apply_us < model_time * 50U) {
+        /* 未跨目标UEV的旧请求不能被新sample的stage覆盖身份。
+         * 以外部时序故障证据交给真实Runtime；Stop也不能掩盖已经发生的违规。 */
+        model_boundary_errors++;
+        model_fault_evidence |= 8U;
+        realtime_motor_io_safe_off();
+    }
+    if (model_explicit_boundaries == 0U && model_pending_valid != 0U && model_pending_time < model_time
         && model_pending_epoch == model_epoch) {
         model_active_duty = model_pending_duty;
         model_active_epoch = model_pending_epoch;
@@ -307,6 +338,33 @@ void model_step(void)
         model_command_null ? NULL : &command, model_has_command != 0U);
     model_has_command = 0U;
     model_diagnostics();
+}
+
+/* 100us控制slot只有sample+75us是有效UEV；中间载波谷底不提交。
+ * Python对象积分到此事件后显式调用，不能由下一sample代替真实生效时刻。 */
+void model_update_boundary(void)
+{
+    if (model_explicit_boundaries == 0U || model_event_time_us % 100U != 75U) {
+        return;
+    }
+    if (model_boundary_count != 0U && model_event_time_us <= model_last_boundary_us) {
+        model_boundary_errors++;
+        return;
+    }
+    model_last_boundary_us = model_event_time_us;
+    model_boundary_count++;
+    if (model_pending_valid != 0U) {
+        if (model_pending_epoch != model_epoch || model_event_time_us != model_pending_apply_us) {
+            model_boundary_errors++;
+            realtime_motor_io_safe_off();
+            return;
+        }
+        model_active_duty = model_pending_duty;
+        model_active_epoch = model_pending_epoch;
+        model_active_source_time = model_pending_time;
+        model_active_apply_us = model_event_time_us;
+        model_pending_valid = 0U;
+    }
 }
 
 /* 只用于验证控制计算遇坏内部数值也不能继续输出；不为产品增加诊断写入口。 */

@@ -371,6 +371,10 @@ ADC 丢失、旧快照失效、低优先级代码被 ADC 抢占的交错，以�
 覆盖受控启停、内外环分频、正反目标、有符号电流修正、测量/施加角和失败关断。
 它通过实际跨拍 duty 驱动独立双精度 PMSM，合成对象包含反电势、坐标耦合和机械负载，
 采用固定理想母线；不包含真实回灌、死区、采样噪声或指令执行周期。
+同一套完整 Runtime 检查保留旧 50 µs 节拍，并覆盖当前 100 µs 电流／1 ms 速度节拍。
+当前对象每拍先沿用旧 duty 积分 75 µs，经显式有效更新边界后再以新 duty 积分 25 µs；
+125 µs 是新电压保持区间的中点预测，不是输出延迟。Stop／故障取消待生效请求，后续
+边界不能恢复旧 epoch；该替身不模拟真实 ISR 截止或硬件 watchdog。
 诊断采集增量覆盖冻结偏置后的连续原始统计、
 锁存/请求身份、重复请求、BUSY、Stop 与异常中止；主机替身验证前检失败零写入、
 单地址一次写、应答丢失不补发和采后复核。模型不代替 UART 链路、
@@ -386,6 +390,9 @@ ADC 丢失、旧快照失效、低优先级代码被 ADC 抢占的交错，以�
 
 ```powershell
 python firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py --trace-output "$env:TEMP\motor-foc-model\closed-loop.csv"
+
+# 导出当前 20 / 10 / 1 kHz 时序的分段对象轨迹；默认仍执行两套测试。
+python firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py --trace-timing slot --trace-output "$env:TEMP\motor-foc-model\slot-closed-loop.csv"
 ```
 
 同目录同时生成 `closed-loop.metadata.json`，记录合成对象、控制配置和每行积分前状态／
@@ -393,5 +400,9 @@ python firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py --trace-ou
 `verify_foc_trace(csv_path, metadata_path, report_path)`，先将本目录 `tests/` 加入 path。
 仅依赖基础 `ode45`，不需要 Simulink；抽取起步、降速、反转切换和 Stop 附近的连续区段，
 每段只取首状态，随后累计独立积分比较。误差表示两个数值对象的一致性，不能解释为传感器精度。
+旧默认导出保持 schema 1；`--trace-timing slot` 使用 schema 2，记录生效边界与边界后的实际
+电压／duty，MATLAB 按同一边界分段续积分，不把一拍的两段电压平均后代替时序。
+[当前节拍的软件模型摘要与曲线](../validation/evidence/slot-foc-model/summary.json) 保存
+30 组 ARM 检查、两套独立复算及损坏分段电压应拒绝的反例；不替代实物闭环验收。
 [集成检查点 130a410 的软件模型摘要与曲线](../validation/evidence/foc-runtime-model/summary.json)
 保留原源码身份，明确区分模型与实物范围；后续后台诊断的实测不改写这份模型证据。

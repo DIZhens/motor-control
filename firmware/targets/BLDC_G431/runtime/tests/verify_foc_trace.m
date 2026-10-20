@@ -6,9 +6,15 @@ function report = verify_foc_trace(csv_path, metadata_path, report_path)
 assert(isfile(csv_path) && isfile(metadata_path), '找不到轨迹或参数文件。');
 assert(~isfile(report_path), '报告已存在，拒绝覆盖。');
 metadata = jsondecode(fileread(metadata_path));
-assert(metadata.schema_version == 1, '不支持的轨迹格式版本。');
+assert(ismember(metadata.schema_version, [1, 2]), '不支持的轨迹格式版本。');
 plant = metadata.plant;
 dt = metadata.sample_interval_s;
+boundary_delay = dt;
+if metadata.schema_version == 2
+    boundary_delay = metadata.actuation_boundary_delay_s;
+    assert(isfinite(boundary_delay) && boundary_delay > 0 && boundary_delay < dt ...
+        && metadata.actuation_hold_interval_s == dt, '分段输出时间配置非法。');
+end
 values = [plant.resistance_ohm, plant.inductance_d_h, plant.inductance_q_h, ...
     plant.flux_linkage_wb, plant.inertia_kg_m2, plant.viscous_friction_nm_s, ...
     plant.pole_pairs, dt];
@@ -19,6 +25,9 @@ trace = readtable(csv_path, 'VariableNamingRule', 'preserve');
 columns = {'time_s', 'applied_voltage_alpha_v', 'applied_voltage_beta_v', ...
     'true_id_a', 'true_iq_a', 'true_omega_rad_s', 'true_mechanical_turns', ...
     'load_torque_nm', 'state', 'target_velocity_rpm'};
+if metadata.schema_version == 2
+    columns = [columns, {'post_boundary_voltage_alpha_v', 'post_boundary_voltage_beta_v'}];
+end
 assert(all(ismember(columns, trace.Properties.VariableNames)), '轨迹缺少必要列。');
 data = trace{:, columns};
 assert(size(data, 1) >= 3 && all(isfinite(data), 'all'), '轨迹长度不足或包含非有限数。');
@@ -54,9 +63,17 @@ for section = 1:numel(starts)
         alpha = data(row, 2);
         beta = data(row, 3);
         load_torque = data(row, 8);
+        % 头段保留上一有效 duty；新 duty 只在实际声明的 UEV 边界进入对象。
         [~, solution] = ode45(@(~, x) pmsm_derivative(x, alpha, beta, load_torque, plant), ...
-            [0, dt], state, options);
+            [0, boundary_delay], state, options);
         state = solution(end, :)';
+        if metadata.schema_version == 2
+            alpha = data(row, 11);
+            beta = data(row, 12);
+            [~, solution] = ode45(@(~, x) pmsm_derivative(x, alpha, beta, load_torque, plant), ...
+                [0, dt - boundary_delay], state, options);
+            state = solution(end, :)';
+        end
         actual = [state(1:3)', state(4) / (2 * pi)];
         expected = [data(row + 1, 4:6), data(row + 1, 7)];
         errors(row - first + 1, :) = actual - expected;
@@ -72,11 +89,12 @@ end
 
 passed = all([segments.passed]);
 report = struct('schema_version', 1, 'passed', passed, ...
+    'trace_schema_version', metadata.schema_version, ...
     'scope', '合成连续 PMSM 数值对象；不证明真实2804参数、硬件采样时序或闭环稳定性', ...
-    'method', '基础MATLAB ode45；每拍固定alpha/beta电压与负载，每段累计积分', ...
+    'method', '基础MATLAB ode45；按轨迹声明的输出边界分段保持alpha/beta，每段累计积分', ...
     'power_off_simplification', '关断段的零alpha/beta电压只代表理想零电压衰减，不模拟功率级实际开路或二极管行为', ...
     'csv_path', char(csv_path), 'metadata_path', char(metadata_path), ...
-    'sample_interval_s', dt, 'plant', plant, ...
+    'sample_interval_s', dt, 'actuation_boundary_delay_s', boundary_delay, 'plant', plant, ...
     'error_columns', {{'id_a', 'iq_a', 'mechanical_omega_rad_s', 'mechanical_turns'}}, ...
     'max_abs_error', overall, 'absolute_limits', limits, 'segments', segments);
 if passed
