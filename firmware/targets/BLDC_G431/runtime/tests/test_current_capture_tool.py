@@ -1,6 +1,6 @@
 """Observe 电流工具的纯主机替身测试；不启动构建、不运行调试器、不访问串口或 SWD。"""
 
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from copy import deepcopy
 import importlib.util
 import io
@@ -210,6 +210,48 @@ class Tests(unittest.TestCase):
         self.assertAlmostEqual(report["phases"]["C"]["corrected"]["mean_a"], 0.0, places=6)
         self.assertEqual(report["phases"]["B"]["raw"]["variance_a2"], report["phases"]["B"]["corrected"]["variance_a2"])
         self.assertFalse(report["gain_applied"] or report["motor_or_foc_qualified"] or report["automatic_retry"])
+        self.assertEqual(report["reference_source"], "dmm")
+        self.assertEqual(report["reference_quality"], "dmm-reading")
+
+    def test_reference_default_preserves_existing_positional_arguments(self):
+        for reference in [tool.Reference("B", 0.1, 2.68), tool.Reference("C", -0.1, 2.68, True)]:
+            self.assertEqual(reference.source, "dmm")
+            reference.validate()
+        self.assertTrue(tool.Reference("C", -0.1, 2.68, True).logic_only_confirmed)
+
+    def test_supply_display_reference_records_coarse_quality_without_changing_acquisition(self):
+        self.reference = tool.Reference("B", 0.05, 2.68, True, source="supply-display")
+        report = self.acquire()
+        self.assertEqual(report["reference_source"], "supply-display")
+        self.assertEqual(report["reference_current_a"], 0.05)
+        self.assertEqual(report["reference_quality"], "coarse-comparison")
+        self.assertIn("不证明绝对精度", report["reference_limitations"])
+        self.assertIn("不是万用表电流测量", report["reference_limitations"])
+        self.assertEqual(report["vbus_dmm_v"], 2.68)
+        self.assertEqual(report["write_count"], len(self.backend.writes))
+        self.assertEqual(len(self.backend.writes), 1)
+        self.assertFalse(report["gain_applied"] or report["motor_or_foc_qualified"] or report["automatic_retry"])
+
+    def test_invalid_reference_source_and_supply_current_fail_before_any_device_access(self):
+        for source in ["", "supply", "DMM", None]:
+            self.reference = tool.Reference("B", 0.05, 2.68, True, source=source)
+            with self.subTest(source=source), self.assertRaisesRegex(RuntimeError, "来源"):
+                self.acquire()
+        self.reference = tool.Reference("B", 0.25001, 2.68, True, source="supply-display")
+        with self.assertRaisesRegex(RuntimeError, "电源实际显示的有符号参考电流"):
+            self.acquire()
+        self.reference = tool.Reference("B", 0.05, math.nan, True, source="supply-display")
+        with self.assertRaisesRegex(RuntimeError, "万用表 VBUS"):
+            self.acquire()
+        self.assertEqual(self.backend.reads, [])
+        self.assertEqual(self.backend.writes, [])
+
+    def test_supply_reference_does_not_bypass_power_preflight(self):
+        self.reference = tool.Reference("B", 0.05, 2.68, True, source="supply-display")
+        self.backend.mutate = lambda tag, blocks: blocks.update(bdtr_after=packed_word(0x8000)) if tag == "pre-health-1" else None
+        with self.assertRaisesRegex(RuntimeError, "MOE"):
+            self.acquire()
+        self.assertEqual(self.backend.writes, [])
 
     def test_reference_limits_and_confirmation_fail_before_any_read_or_write(self):
         for reference in [tool.Reference("A", 0.1, 2.68, True), tool.Reference("B", 0.25001, 2.68, True),
@@ -529,6 +571,26 @@ class Tests(unittest.TestCase):
                 tool.main(arguments + ["--acquire"])
             prepare.assert_not_called()
             backend.assert_not_called()
+
+    def test_cli_reference_source_defaults_and_choices_are_checked_before_device(self):
+        arguments = ["--build-dir", str(self.root), "--expected-hex-sha256", "a" * 64,
+                     "--output", str(self.root / "new"), "--reference-phase", "B",
+                     "--reference-current-a", "0.05", "--vbus-dmm-v", "2.68"]
+        for extra, source in [([], "dmm"), (["--reference-source", "supply-display"], "supply-display")]:
+            with self.subTest(source=source), \
+                 patch.object(tool, "Reference", wraps=tool.Reference) as reference, \
+                 patch.object(tool, "prepare_build", return_value=self.prepared), \
+                 patch.object(tool, "CubeBackend") as backend, redirect_stdout(io.StringIO()):
+                self.assertEqual(tool.main(arguments + extra), 0)
+                self.assertEqual(reference.call_args.kwargs["source"], source)
+                self.assertEqual(reference.call_args.args[2], 2.68)
+                backend.assert_not_called()
+        with patch.object(tool, "prepare_build") as prepare, patch.object(tool, "CubeBackend") as backend, \
+             redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            tool.main(arguments + ["--reference-source", "unknown"])
+        self.assertEqual(error.exception.code, 2)
+        prepare.assert_not_called()
+        backend.assert_not_called()
 
     def test_backend_exact_write_address_width_once_and_no_other_commands(self):
         cli = self.root / "fake-cli.exe"

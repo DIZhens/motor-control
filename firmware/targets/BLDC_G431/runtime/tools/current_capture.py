@@ -70,11 +70,14 @@ class Reference:
     current_a: float
     vbus_dmm_v: float
     logic_only_confirmed: bool = False
+    source: str = "dmm"  # 末尾新增默认项，保留已有四个位置参数的含义。
 
     def validate(self, acquire=False):
         require(self.phase in ("B", "C"), "参考相只能为 B 或 C")
+        require(self.source in ("dmm", "supply-display"), "参考电流来源只能为 dmm 或 supply-display")
+        current_label = "电源实际显示的" if self.source == "supply-display" else "万用表"
         require(math.isfinite(self.current_a) and abs(self.current_a) <= 0.25,
-                "万用表有符号参考电流必须有限且绝对值不超过 0.25 A")
+                current_label + "有符号参考电流必须有限且绝对值不超过 0.25 A")
         require(math.isfinite(self.vbus_dmm_v) and 0.0 <= self.vbus_dmm_v <= 3.6,
                 "万用表 VBUS 必须有限且位于 0..3.6 V")
         require(not acquire or self.logic_only_confirmed,
@@ -561,6 +564,11 @@ def run_acquisition(backend, prepared, reference, clock=time.monotonic, sleep=ti
                                               for field, value in raw.items()}}
     return {"status": "无功率已知电流采集完成", "request_sequence": sequence,
             "reference_phase": reference.phase, "reference_current_a": reference.current_a,
+            "reference_source": reference.source,
+            "reference_quality": "coarse-comparison" if reference.source == "supply-display" else "dmm-reading",
+            "reference_limitations": ("电源实际显示电流仅用于基础幅值和方向粗对照，不证明绝对精度，不是万用表电流测量。"
+                                      if reference.source == "supply-display"
+                                      else "独立万用表电流读数不自动构成精度、增益或FOC验收。"),
             "vbus_dmm_v": reference.vbus_dmm_v, "before": before, "after": after,
             "capture": result, "phases": phases, "files": prepared.hashes,
             "write_count": 1, "automatic_retry": False, "gain_applied": False,
@@ -573,14 +581,18 @@ def main(argv=None):
     parser.add_argument("--expected-hex-sha256", required=True, help="明确指定的本次 HEX SHA256")
     parser.add_argument("--output", type=Path, required=True, help="新的证据目录，禁止覆盖")
     parser.add_argument("--reference-phase", choices=["B", "C"], required=True, help="独立浮地参考电流实际流过的采样相")
-    parser.add_argument("--reference-current-a", type=float, required=True, help="万用表读到的有符号电流，绝对值不超过 0.25 A")
+    parser.add_argument("--reference-source", choices=["dmm", "supply-display"], default="dmm",
+                        help="参考电流来源；默认万用表，电源实际显示仅作粗对照，不证明绝对精度")
+    parser.add_argument("--reference-current-a", type=float, required=True,
+                        help="指定来源的实际有符号电流，绝对值不超过 0.25 A；不是电源限流设定值")
     parser.add_argument("--vbus-dmm-v", type=float, required=True, help="当前 VBUS 对 GND 的万用表实测电压，0..3.6 V")
     parser.add_argument("--logic-only-confirmed", action="store_true", help="确认电机母线电源和电机三相断开；启动校零时外部注入源断开，零偏 READY 后才接入限流注入支路")
     parser.add_argument("--acquire", action="store_true", help="显式执行一次 HOTPLUG 无功率采集；默认仅离线准备")
     parser.add_argument("--gdb", type=Path, default=DEFAULT_GDB, help="离线 ARM GDB 路径")
     parser.add_argument("--cli", type=Path, default=DEFAULT_CLI, help="STM32CubeProgrammer CLI 路径")
     args = parser.parse_args(argv)
-    reference = Reference(args.reference_phase, args.reference_current_a, args.vbus_dmm_v, args.logic_only_confirmed)
+    reference = Reference(args.reference_phase, args.reference_current_a, args.vbus_dmm_v,
+                          args.logic_only_confirmed, source=args.reference_source)
     reference.validate(acquire=args.acquire)
     prepared = prepare_build(args.build_dir.resolve(), args.expected_hex_sha256, args.output.resolve(), args.gdb.resolve())
     backend = None
