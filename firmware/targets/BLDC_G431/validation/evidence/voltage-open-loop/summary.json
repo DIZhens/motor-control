@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "result": "CANDIDATE_INSTALLED_LOGIC_DEFAULT_OFF_PASS",
+  "result": "FINITE_LOW_VOLTAGE_OPEN_LOOP_TRIAL_COMPLETE_OUTPUT_OFF",
   "target": "BLDC_control V1",
   "parent_commit": "4ef1e25b6f7ec6d7fc010f643fef6516c34866b5",
   "candidate": {
@@ -90,10 +90,12 @@
     "firmware/targets/BLDC_G431/validation/target_validation.h": "620d695b9a56ebb74d767e30796a09726fc8dd3c20d17113525be59f17db5964",
     "firmware/targets/BLDC_G431/validation/tests/model.c": "809565a27ea6bb8e60f620ef4026d4c2c1d8be83136b6365b4b581c96c436d41",
     "firmware/targets/BLDC_G431/validation/tests/verify_model.py": "7edd9f5af4d21f0c989a317bbfc114d84f5cf3ef2f36b3f4dd2eb53cee810473",
-    "firmware/targets/BLDC_G431/validation/tools/open_loop_once.py": "963643ca35d67eda780bd5930e1dfde6066fb823e032fc0a97e3e4c96e2c7447",
-    "firmware/targets/BLDC_G431/validation/tests/verify_open_loop_tool.py": "7a451d3cc0f6a42fbf7dd06ea744affea671eaae749bd14d140fd24ea3c59eca",
+    "firmware/targets/BLDC_G431/validation/tools/open_loop_once.py": "c43ea06c9548bbab00589f76333db5bb367ff52a9dc125760e7cf60b1a7202ce",
+    "firmware/targets/BLDC_G431/validation/tests/verify_open_loop_tool.py": "317944bbb2f39389b9ecb77015555cb5e7fd6447ce807155b4186293e37fbd6f",
     "firmware/targets/BLDC_G431/validation/tools/candidate_manifest.py": "bb09e6ee37f2028e682d00316c4a27fc5a2149a00856b96fbfa0918eca770fba",
-    "firmware/targets/BLDC_G431/validation/tests/verify_candidate_tool.py": "1908c6300668af0b21740ef28b1ba8b6bf05f2fab32c284b3c0a892eafa2aba6"
+    "firmware/targets/BLDC_G431/validation/tests/verify_candidate_tool.py": "1908c6300668af0b21740ef28b1ba8b6bf05f2fab32c284b3c0a892eafa2aba6",
+    "firmware/targets/BLDC_G431/validation/tools/pwm_once.py": "67c0fc250066a20676b2d39ee3a8ee1a4621ad71cc5d3fa3a0bd1a6a6566b388",
+    "firmware/targets/BLDC_G431/validation/tests/verify_pwm_tool.py": "c2979fb3a0c522a8189c10f1b8409c97f332b3b184cfff3610bb3e0ddd29bbf8"
   },
   "user_keil_options_preserved": true,
   "hardware": {
@@ -109,13 +111,23 @@
     "position_valid": true,
     "position_turns": 0.55059814453125,
     "faults_or_moe_detected": false,
-    "request_written": false,
-    "stage_attempts": 0,
-    "enable_attempts": 0,
-    "zero_capture_performed": false,
-    "mechanical_trial_performed": false,
+    "request_written": true,
+    "stage_attempts": 30001,
+    "enable_attempts": 1,
+    "zero_capture_performed": true,
+    "mechanical_trial_performed": true,
     "old_observe_zero_reused": false,
-    "manual_vbus_newly_measured": false
+    "manual_vbus_newly_measured": false,
+    "operator_powered_confirmation": {
+      "current_a": 0.02,
+      "mode": "CV",
+      "vbus_dmm_v": 12.12,
+      "abnormal_heating": false,
+      "stlink_3v3_disconnected": true,
+      "motor_phases_restored": true,
+      "external_injection_removed": true,
+      "motor_fixed_unloaded": true
+    }
   },
   "motor_qualified": false,
   "foc_qualified": false,
@@ -123,11 +135,85 @@
   "electrical_calibration_confirmed": false,
   "actual_isr_deadline_qualified": false,
   "limits": [
-    "软件模型不证明实际ISR耗时；保留HCC截止和独立TIM6关断。",
-    "名义电流只作辅助异常监视；仍须核对实物通道、极性与增益量级。",
-    "机械运动、方向、极对数与编码器跟随尚未实测。",
-    "Observe及Timing未重建，既有证据继续按原镜像身份归属。"
+    "本轮证明一次有限低幅值电压序列与实际转动、自动关断；未完成FOC闭环。",
+    "编码器净位移包含初始定向和降压阶段，不包含关断后自由滑行；不能据其确认7极对、严格同步或电角度零位。",
+    "名义峰值电流使用冻结零偏与名义增益，不能当作电流精度或独立保护资格。",
+    "33.5us为本次consumer最大观测，非完整ADC IRQ/WCET；不据此扩大工作包络。",
+    "目测方向未确认，保留原编码器坐标符号，不将其自动安装为电机正方向。"
   ],
   "local_evidence": "validation/local-evidence/20261020-voltage-open-loop-01",
-  "preparation_note": "首次prepare因旧工具未处理ARMCC压缩MAP尺寸而拒绝；修复并补拒绝用例后，在新candidate-02目录冻结通过。"
+  "preparation_note": "首次prepare因旧工具未处理ARMCC压缩MAP尺寸而拒绝；修复并补拒绝用例后，在新candidate-02目录冻结通过。",
+  "zero_window": {
+    "request_sequence": 1,
+    "samples": 4096,
+    "first_sample_time": 3138202,
+    "last_sample_time": 3146392,
+    "offset_b_a": -0.012967821210622787,
+    "offset_c_a": -0.0004584357957355678,
+    "peak_to_peak_b_a": 0.019434884190559387,
+    "peak_to_peak_c_a": 0.019434715155512094,
+    "sample_interval_min_cycles": 16998,
+    "sample_interval_max_cycles": 17002,
+    "capture_sha256": "daaa68b3ad631392606a58409221409cc76449dfa469786ce63e818fc8b64fc6",
+    "recaptured": false,
+    "recovered_read_only_after_host_transient_uie_rejection": true,
+    "cleanup_safe_off_sequence": 2
+  },
+  "trial": {
+    "request_sequence": 3,
+    "voltage_vector_v": 0.30000001192092896,
+    "electrical_frequency_hz": 2,
+    "sample_count": 30002,
+    "enabled_samples": 30001,
+    "enable_attempts": 1,
+    "enable_successes": 1,
+    "stage_attempts": 30001,
+    "stage_successes": 30001,
+    "encoder_start_turns": 0.3365478515625,
+    "encoder_end_turns": 0.952392578125,
+    "encoder_displacement_turns": -0.3841552734375,
+    "encoder_displacement_degrees": -138.2958984375,
+    "nominal_peak_abs_current_a": 0.11460492014884949,
+    "duty_min": 0.47820690274238586,
+    "duty_max": 0.5217930674552917,
+    "consumer_max_observed_cycles": 5695,
+    "consumer_max_observed_us": 33.5,
+    "consumer_is_full_adc_irq": false,
+    "consumer_is_wcet_qualified": false,
+    "final_moe": false,
+    "final_high_inputs": 0,
+    "final_low_inputs": 0,
+    "final_guard_running": false,
+    "invalid_current_count": 0,
+    "final_trip_causes": 0,
+    "final_result": 1,
+    "module_state": 6,
+    "module_reason": 0,
+    "operator": {
+      "rotated": true,
+      "smooth": true,
+      "abnormalities_reported": false,
+      "supply_mode": "CV",
+      "visual_direction_confirmed": false,
+      "operator_report": "转了但是时间太短了而且还要看电源没注意是顺时针还是逆时针；平稳，无异常，CV",
+      "additional_power_request_sent": false
+    }
+  },
+  "host_fix": {
+    "cause": "SWD可读到Core TIM1_UP/BRK IRQ为了防止HAL吞UIF而临时清除的UIE位；永久置1断言误拒绝",
+    "firmware_changed": false,
+    "reflashed": false,
+    "check": "新工具改核对10kHz callback及20kHz ControlTime推进，静态PWM配置不变，旧工具默认检查兼容；只读恢复原4096点与唯一SAFE_OFF链",
+    "open_loop_tool_tests_passed": 19,
+    "legacy_pwm_tool_cases_passed": 67,
+    "candidate_after_host_fix": "candidate-03",
+    "hex_unchanged": true
+  },
+  "additional_readonly_recheck": {
+    "result": "CONNECTION_DID_NOT_COMPLETE",
+    "new_target_writes": 0,
+    "automatic_retry": false,
+    "fresh_state_obtained": false,
+    "note": "额外只读身份连接停在探针电压信息，未完成新的Flash读回；不替代motion-01末尾的有效关断记录。"
+  }
 }

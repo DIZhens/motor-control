@@ -234,17 +234,25 @@ def preflight(session, tag, vbus_dmm=None, stationary=True):
     # ControlTime 仍是 20 kHz，不能把两种时基混为一谈。
     first, blocks1 = session.read(tag + "-1")
     second, blocks2 = session.read(tag + "-2")
+    probe = check_pair(first, second, blocks1, blocks2, vbus_dmm, stationary)
+    return first, second, probe
+
+
+def check_pair(first, second, blocks1, blocks2, vbus_dmm=None, stationary=True):
+    """只读健康对照；UIE 可能在正常 IRQ 中瞬时为零，实际时基须持续推进。"""
     require(all(first[k] == second[k] for k in checks.COUNTERS)
             and first["result"] == second["result"] and first["stop_reason"] == second["stop_reason"],
             "读取期间事务发生变化")
     ticks = (second["uw_tick"] - first["uw_tick"]) & 0xFFFFFFFF
     samples = (second["fast_tick_count"] - first["fast_tick_count"]) & 0xFFFFFFFF
     require(0 < ticks < 30000 and 9 < samples / ticks < 11, "10 kHz 采样/SysTick 未推进或复位")
+    control_ticks = (second["current.observation_time"] - first["current.observation_time"]) % (1 << 64)
+    require(18 < control_ticks / ticks < 22, "20 kHz ControlTime 未推进或复位")
     require(blocks1["probe"] == blocks2["probe"], "保护证据读取期间改变")
     probe = checks.read_probe(blocks2["probe"])
     for state in [first, second]:
         checks.check_healthy(state)
-        pwm.check_configuration(state)
+        pwm.check_configuration(state, check_update_irq=False)
         require(state["position_valid"] and math.isfinite(state["position_turns"])
                 and 0 <= state["position_turns"] < 1, "位置无效")
         require(vbus_dmm is None or abs(state["bus_v"] - vbus_dmm) <= 0.3
@@ -252,7 +260,7 @@ def preflight(session, tag, vbus_dmm=None, stationary=True):
     delta = (second["position_turns"] - first["position_turns"] + 0.5) % 1 - 0.5
     require((not stationary or abs(delta) <= 0.002) and second["position_samples"] != first["position_samples"],
             "转轴未静止或位置发布未推进")
-    return first, second, probe
+    return probe
 
 
 def zero_bounds(stats):
@@ -276,9 +284,101 @@ def zero(session, vbus_dmm):
     stats = current.decode_capture(raw[0], session.layout["current_fields"], request)
     zero_bounds(stats)
     return {"result": "OPEN_LOOP_ZERO_READY_OUTPUT_OFF", "hex_sha256": session.hex_sha256,
+            "zero_origin": "captured",
             "final": after, "capture": updated, "statistics": stats,
             "zero_capture_hex": raw[0].hex(), "zero_capture_sha256": hashlib.sha256(raw[0]).hexdigest(),
             "request_sequence": request, "sample_count": 4096, "vbus_dmm_v": vbus_dmm}
+
+
+def recover_zero(session, failed_zero_summary_path, vbus_dmm):
+    """只读恢复 UIE 瞬态误判后的同一完整零点；不重采、不写目标或旧证据。"""
+    failed_path = Path(failed_zero_summary_path).resolve()
+    folder = failed_path.parent
+    failure = json.loads(failed_path.read_text(encoding="utf-8"))
+    require(failure.get("result") == "FAILED_NO_RETRY" and failure.get("action") == "zero"
+            and failure.get("error") == "Unexpected PWM update IRQ ownership"
+            and failure.get("write_attempted") is True and failure.get("automatic_retry") is False,
+            "只恢复明确的 UIE 瞬态误判，不接受其他失败")
+    identity = json.loads((folder / "identity.json").read_text(encoding="utf-8"))
+    require(identity["hex_sha256"] == session.hex_sha256, "原零点候选不同")
+
+    def archived(tag):
+        # 使用现有完整解码器解码原始块，写出的派生 JSON 只进入新的恢复目录。
+        reader = object.__new__(Session)
+        reader.out, reader.layout = session.out, session.layout
+        def upload(_, blocks):
+            data = {name: (folder / (tag + "-" + name + ".bin")).read_bytes() for name, _, _ in blocks}
+            require(all(len(data[name]) == size for name, _, size in blocks), "原始 SWD 块不完整")
+            return data
+        reader.upload = upload
+        return Session.read(reader, "recovery-original-" + tag)
+
+    names = ["zero-before-1", "zero-before-2", "zero-after-1", "zero-after-2", "exception-after-safe-off"]
+    original = {name: archived(name) for name in names}
+    before1, before2, after1, after2, cleanup = [original[name][0] for name in names]
+    probe_before = check_pair(before1, before2, original[names[0]][1], original[names[1]][1], vbus_dmm)
+    probe_after = check_pair(after1, after2, original[names[2]][1], original[names[3]][1], vbus_dmm)
+    require(not after1["pwm"]["update_irq_enabled"] or not after2["pwm"]["update_irq_enabled"],
+            "原失败未包含 UIE 瞬态零")
+    require(probe_before == probe_after and failure.get("cleanup") == cleanup, "原保护或清理证据不一致")
+    request = after2["active_request_sequence"]
+    stop_request = ((request + 1) & 0xFFFFFFFF) or 1
+    require(request == (((before2["mailbox_sequence"] + 1) & 0xFFFFFFFF) or 1)
+            and failure.get("cleanup_request_sequence") == stop_request,
+            "原零点到唯一 SAFE_OFF 的序号不连续")
+    for state in [before1, before2, after1, after2, cleanup]:
+        require(all(state[k] == 0 for k in current.UNCHANGED), "原现场已有 stage/enable，不作此类恢复")
+    for state in [after1, after2]:
+        require(state["command_sequence"] == state["mailbox_sequence"] == state["active_request_sequence"] == request
+                and state["result"] == state["stop_reason"] == 1 and state["mailbox_command"] == 4,
+                "原 4096 点窗口未 COMPLETE")
+    require(cleanup["command_sequence"] == cleanup["mailbox_sequence"] == stop_request
+            and cleanup["active_request_sequence"] == request and cleanup["mailbox_command"] == 1
+            and cleanup["result"] == cleanup["stop_reason"] == 2,
+            "原清理不是唯一 SAFE_OFF")
+    checks.check_healthy(cleanup)
+    pwm.check_configuration(cleanup, check_update_irq=False)
+    require(all(cleanup[k] == after2[k] for k in checks.COUNTERS
+                if k not in ["command_sequence", "mailbox_sequence"]), "SAFE_OFF 外出现额外事务或计数变化")
+    require(original[names[3]][1]["probe"] == original[names[4]][1]["probe"], "清理改写保护证据")
+    expected_writes = {
+        "submit-zero-once.log": [(session.layout["request"] + 4, [4, 0, 2000, float_bits(0.5)]),
+                                 (session.layout["request"], [request])],
+        "exception-safe-off-only.log": [(session.layout["request"] + 4, [1, 0, 0, float_bits(0.5)]),
+                                        (session.layout["request"], [stop_request])]}
+    found_writes = {}
+    for path in folder.glob("*.log"):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        rows = re.findall(r"w @(0x[0-9a-fA-F]+):\s*((?:0x[0-9a-fA-F]+\s*)+)", text)
+        if rows:
+            found_writes[path.name] = [(int(address, 0), [int(value, 0) for value in values.split()])
+                                      for address, values in rows]
+    require(found_writes == expected_writes, "原失败目录存在额外写入或 payload 不同")
+    raw = original[names[2]][1]["capture"]
+    require(raw == original[names[3]][1]["capture"] == original[names[4]][1]["capture"],
+            "原窗口/清理后的零点原始数据不同")
+    stats = current.decode_capture(raw, session.layout["current_fields"], request)
+    zero_bounds(stats)
+    first, final, probe = preflight(session, "zero-recovery-live", vbus_dmm)
+    require(probe == probe_after, "本启动保护锚已变化")
+    for state in [first, final]:
+        require(all(state[k] == cleanup[k] for k in checks.COUNTERS)
+                and state["result"] == state["stop_reason"] == 2 and state["mailbox_command"] == 1,
+                "本启动事务/计数与原清理锚不同")
+        elapsed = (state["uw_tick"] - cleanup["uw_tick"]) & 0xFFFFFFFF
+        samples = (state["fast_tick_count"] - cleanup["fast_tick_count"]) & 0xFFFFFFFF
+        ticks = (state["current.observation_time"] - cleanup["current.observation_time"]) % (1 << 64)
+        require(0 < elapsed < 1800000 and 9 < samples / elapsed < 11 and 18 < ticks / elapsed < 22,
+                "与原启动时基不连续或超过 30 分钟")
+    live = session.upload("zero-recovery-unchanged", [("capture", session.layout["capture"], 80)])["capture"]
+    require(live == raw, "当前零点已变化，不能恢复")
+    return {"result": "OPEN_LOOP_ZERO_READY_OUTPUT_OFF", "zero_origin": "recovered_after_safe_off",
+        "hex_sha256": session.hex_sha256, "final": final, "capture": probe, "statistics": stats,
+        "zero_capture_hex": raw.hex(), "zero_capture_sha256": hashlib.sha256(raw).hexdigest(),
+        "request_sequence": request, "sample_count": 4096, "vbus_dmm_v": vbus_dmm,
+        "recovery_failure_summary": str(failed_path), "recovery_failure_sha256": candidate.digest(failed_path),
+        "cleanup_request_sequence": stop_request, "target_writes": 0, "automatic_retry": False,
+        "motor_qualified": False, "foc_qualified": False, "calibration_applied": False}
 
 
 def check_zero_anchor(session, anchor, first, before, probe):
@@ -290,15 +390,27 @@ def check_zero_anchor(session, anchor, first, before, probe):
     stats = current.decode_capture(raw, session.layout["current_fields"], anchor["request_sequence"])
     require(stats == anchor["statistics"] and probe == anchor["capture"], "零点统计或保护锚改变")
     zero_bounds(stats)
+    old = anchor["final"]
+    require(old["active_request_sequence"] == anchor["request_sequence"], "零点请求与活动锚不同")
+    if anchor.get("zero_origin") == "captured":
+        require(old["result"] == old["stop_reason"] == 1 and old["mailbox_command"] == 4
+                and old["command_sequence"] == anchor["request_sequence"], "直接采集锚不合法")
+    else:
+        require(anchor.get("zero_origin") == "recovered_after_safe_off"
+                and anchor.get("target_writes") == 0 and anchor.get("automatic_retry") is False
+                and candidate.digest(Path(anchor["recovery_failure_summary"])) == anchor["recovery_failure_sha256"]
+                and old["result"] == old["stop_reason"] == 2 and old["mailbox_command"] == 1
+                and old["command_sequence"] == anchor["cleanup_request_sequence"]
+                == (((anchor["request_sequence"] + 1) & 0xFFFFFFFF) or 1), "恢复来源或 SAFE_OFF 锚不合法")
     for state in [first, before]:
-        old = anchor["final"]
         require(all(state[k] == old[k] for k in checks.COUNTERS)
-                and state["result"] == old["result"] == 1
-                and state["stop_reason"] == old["stop_reason"] == 1
-                and state["mailbox_command"] == 4, "启动/事务计数已改变，不能复用零点")
+                and state["result"] == old["result"] and state["stop_reason"] == old["stop_reason"]
+                and state["mailbox_command"] == old["mailbox_command"], "启动/事务计数已改变，不能复用零点")
         elapsed = (state["uw_tick"] - old["uw_tick"]) & 0xFFFFFFFF
         fast = (state["fast_tick_count"] - old["fast_tick_count"]) & 0xFFFFFFFF
-        require(0 < elapsed < 1800000 and 9 < fast / elapsed < 11, "时基不连续或零点锚超过 30 分钟")
+        ticks = (state["current.observation_time"] - old["current.observation_time"]) % (1 << 64)
+        require(0 < elapsed < 1800000 and 9 < fast / elapsed < 11 and 18 < ticks / elapsed < 22,
+                "时基不连续或零点锚超过 30 分钟")
     live = session.upload("zero-anchor-current", [("capture", session.layout["capture"], 80)])["capture"]
     require(live == raw, "目标零点请求/计数/偏移已改变")
     return stats

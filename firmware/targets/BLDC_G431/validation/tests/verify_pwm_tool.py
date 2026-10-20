@@ -197,4 +197,12 @@ for after_write in [False, True]:
         else:
             assert not session.calls and "cleanup" not in failure
 
+transient = healthy()
+transient["pwm"]["update_irq_enabled"] = False
+rejected(lambda: pwm.check_configuration(transient))
+pwm.check_configuration(transient, check_update_irq=False)
+cases += 1
+transient["pwm"]["period_counts"] = 4249
+rejected(lambda: pwm.check_configuration(transient, check_update_irq=False))
+
 print(f"PASS: {cases} host PWM-tool safety cases; no hardware access.")

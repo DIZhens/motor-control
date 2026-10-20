@@ -47,12 +47,12 @@ class Session(common.Session):
         return state, blocks
 
 
-def check_configuration(state, expected_repetition=3):
+def check_configuration(state, expected_repetition=3, *, check_update_irq=True):
     cfg = state["pwm"]
     require(cfg["center_aligned_mode"] == 1 and cfg["clock_division"] == cfg["prescaler"] == 0
             and cfg["period_counts"] == 4250 and cfg["repetition"] == expected_repetition,
             "Unexpected PWM timing configuration")
-    require(cfg["update_irq_enabled"] == (expected_repetition == 3),
+    require(not check_update_irq or cfg["update_irq_enabled"] == (expected_repetition == 3),
             "Unexpected PWM update IRQ ownership")
     require([item["mode"] for item in cfg["channels"]] == [6, 6, 6, 7]
             and all(item["selection"] == 0 and item["preload"] for item in cfg["channels"]),

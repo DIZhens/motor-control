@@ -68,15 +68,20 @@ class FakeSession:
         self.parameters = loop.parameters(0.3, 2)
         self.action, self.cli, self.calls = "zero", "fake-cli", []
         self.timeout, self.bad_echo, self.motion = False, False, False
+        self.control_stalled, self.history = False, {}
 
     def read(self, tag):
         for key, delta in [("uw_tick", 50), ("fast_tick_count", 500), ("current.observation_time", 1000),
                            ("bus.observation_time", 1000), ("position_samples", 50)]:
+            if self.control_stalled and key in ["current.observation_time", "bus.observation_time"]:
+                continue
             self.state[key] += delta
         if self.motion:
             self.state["position_turns"] += 0.01
         self.last_sequence = self.state["mailbox_sequence"]
-        return deepcopy(self.state), {"probe": struct.pack("<17I", *self.probe.values())}
+        result = deepcopy(self.state), {"probe": struct.pack("<17I", *self.probe.values()), "capture": self.raw_capture}
+        self.history[tag] = deepcopy(result)
+        return result
 
     def execute(self, tag, arguments):
         def cli(command, stdout, stderr, timeout):
@@ -104,7 +109,7 @@ class FakeSession:
                     for key, delta in [("enable_attempts", 1), ("enable_successes", 1),
                                        ("stage_attempts", 30000), ("stage_successes", 30000)]:
                         self.state[key] += delta
-                    stats = loop.current.decode_capture(self.raw_capture, CURRENT_LAYOUT, sequence - 1)
+                    stats = loop.current.decode_capture(self.raw_capture, CURRENT_LAYOUT, loop.common.word(self.raw_capture, 8))
                     values = [6, sequence, int(self.timeout), 0 if self.timeout else 1, 4 if self.timeout else 6,
                         0, 30001, 30000, *self.parameters, stats["phase_b.mean_a"], stats["phase_c.mean_a"],
                         0.12, 0.25, 0.5, 0.25, 0.47, 0.53]
@@ -251,6 +256,84 @@ class Tests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "静止"):
                 loop.zero(session, 12)
             self.assertEqual(session.calls, [])
+
+    def test_transient_uie_zero_passes_but_control_time_stall_rejected(self):
+        with TemporaryDirectory() as tmp:
+            session = FakeSession(tmp)
+            session.state["pwm"]["update_irq_enabled"] = False
+            loop.preflight(session, "uie-transient", 12)
+            self.assertEqual(session.calls, [])
+            self.assertFalse(session.state["pwm"]["update_irq_enabled"])
+            session.control_stalled = True
+            with self.assertRaisesRegex(RuntimeError, "ControlTime"):
+                loop.preflight(session, "control-stopped", 12)
+            self.assertEqual(session.calls, [])
+
+    def recovery_fixture(self, root):
+        original, anchor = self.make_zero(root / "original")
+        original.history["zero-after-2"][0]["pwm"]["update_irq_enabled"] = False
+        original.action = "zero"
+        loop.submit(original, 1, "exception-safe-off-only")
+        cleanup, _ = original.read("exception-after-safe-off")
+        failure = {"result": "FAILED_NO_RETRY", "action": "zero", "error": "Unexpected PWM update IRQ ownership",
+            "write_attempted": True, "automatic_retry": False, "cleanup_request_sequence": 2, "cleanup": cleanup}
+        path = original.out / "summary.json"
+        path.write_text(json.dumps(failure), encoding="utf-8")
+        (original.out / "identity.json").write_text(json.dumps({"hex_sha256": original.hex_sha256}), encoding="utf-8")
+        for name, command, sequence, duration in [("submit-zero-once.log", 4, 1, 2000),
+                                                ("exception-safe-off-only.log", 1, 2, 0)]:
+            (original.out / name).write_text("w @0x20000004: 0x%08x 0x00000000 0x%08x 0x3f000000\nw @0x20000000: 0x%08x\n" %
+                (command, duration, sequence), encoding="utf-8")
+        live = FakeSession(root / "live")
+        live.state, live.raw_capture, live.mailbox = deepcopy(original.state), original.raw_capture, deepcopy(original.mailbox)
+        live.last_sequence, live.action = 2, "execute"
+        return original, live, path
+
+    def test_recover_zero_read_only_then_real_safe_off_anchor_executes_once(self):
+        with TemporaryDirectory() as tmp:
+            original, live, path = self.recovery_fixture(Path(tmp))
+            def read_archived(reader, tag):
+                return deepcopy(original.history[tag.removeprefix("recovery-original-")])
+            with patch.object(REAL_SESSION, "read", read_archived):
+                recovered = loop.recover_zero(live, path, 12)
+            self.assertEqual(live.calls, [])
+            self.assertEqual(live.writes, [])
+            self.assertEqual(recovered["request_sequence"], 1)
+            self.assertEqual(recovered["final"]["mailbox_command"], 1)
+            self.assertEqual(recovered["final"]["command_sequence"], 2)
+            self.assertEqual(recovered["final"]["active_request_sequence"], 1)
+            self.assertEqual(recovered["final"]["result"], 2)
+            result = loop.execute_once(live, recovered, 12, Clock())
+            self.assertEqual(result["request_sequence"], 3)
+            self.assertEqual(result["zero_request_sequence"], 1)
+            self.assertEqual(live.writes, [15])
+
+    def test_recovery_rejects_unrelated_failure_or_changed_evidence_without_write(self):
+        for mutation in ["failure", "original-stage", "capture", "extra-write", "live-counter", "live-capture", "live-time"]:
+            with self.subTest(mutation=mutation), TemporaryDirectory() as tmp:
+                original, live, path = self.recovery_fixture(Path(tmp))
+                if mutation == "failure":
+                    failure = json.loads(path.read_text(encoding="utf-8"))
+                    failure["error"] = "different error"
+                    path.write_text(json.dumps(failure), encoding="utf-8")
+                elif mutation == "original-stage":
+                    original.history["zero-after-1"][0]["stage_attempts"] = 1
+                elif mutation == "capture":
+                    original.history["zero-after-2"][1]["capture"] = bytes(80)
+                elif mutation == "extra-write":
+                    (original.out / "another.log").write_text("w @0x20000000: 0x00000003\n", encoding="utf-8")
+                elif mutation == "live-counter":
+                    live.state["guard_irq_count"] += 1
+                elif mutation == "live-capture":
+                    live.raw_capture = bytes(80)
+                else:
+                    live.control_stalled = True
+                def read_archived(reader, tag):
+                    return deepcopy(original.history[tag.removeprefix("recovery-original-")])
+                with patch.object(REAL_SESSION, "read", read_archived), self.assertRaises(RuntimeError):
+                    loop.recover_zero(live, path, 12)
+                self.assertEqual(live.calls, [])
+                self.assertEqual(live.writes, [])
 
     def test_zero_limits_and_partial_windows(self):
         for changes in [{"statistics.phase_b.mean_a": 0.101, "statistics.phase_b.max_a": 0.11},
