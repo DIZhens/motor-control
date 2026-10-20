@@ -12,7 +12,8 @@
 
 typedef enum {
     G431_RUNTIME_TIMING_STAGE = 1,
-    G431_RUNTIME_TIMING_COMPUTE = 2
+    G431_RUNTIME_TIMING_COMPUTE = 2,
+    G431_RUNTIME_TIMING_COMPUTE_STAGE = 3
 } G431RuntimeTimingMode;
 
 typedef enum {
@@ -93,7 +94,8 @@ typedef struct {
      * 2 IRQ首末USER标记；3原锚点至调用入口；4调用返回至IRQ末标记；
      * 5速度拍/6观测刷新拍/7普通快拍/8慢拍的直接调用耗时。
      * 末标记后的统计、发布和异常入出栈不在行2内；这些行不是未插桩WCET。
-     * stage模式只使用行0..4；compute模式真实HCC stage次数必须为0。 */
+     * stage模式只使用行0..4；compute仅sink、真实stage为0；
+     * compute-stage行0包含同一次Runtime调用中的真实HCC stage，不使用sink。 */
     G431RuntimeTimingMetric rows[G431_RUNTIME_TIMING_ROWS];
 } G431RuntimeTimingResult;
 

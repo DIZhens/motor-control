@@ -22,6 +22,7 @@ uint32_t model_bad_anchor_read;
 uint32_t model_bad_deadline_read;
 uint32_t model_moe_read;
 uint32_t model_force_enable;
+uint32_t model_duplicate_stage_port;
 uint32_t model_sink_override;
 uint32_t model_sink_component;
 uint32_t model_sink_bits;
@@ -53,6 +54,7 @@ const uint32_t model_runtime_phase_offset = offsetof(ControlRuntime, phase);
 const uint32_t model_motor_state_offset = offsetof(Motor, state);
 
 bool g431_runtime_timing_enable(void);
+bool g431_runtime_timing_stage_port(const PhaseDutyRequest *request);
 
 bool position_observation_get_latest(PositionObservation *observation)
 {
@@ -87,6 +89,9 @@ bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *duty)
     model_stage_count++;
     model_last_duty = *duty;
     model_cycles += model_stage_cost;
+    if (model_duplicate_stage_port != 0U) {
+        (void)g431_runtime_timing_stage_port(duty);
+    }
     if (model_force_enable != 0U) {
         (void)g431_runtime_timing_enable();
     }

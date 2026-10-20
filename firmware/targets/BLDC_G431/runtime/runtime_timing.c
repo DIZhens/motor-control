@@ -38,19 +38,37 @@ static bool s_timing_fixture_ready;
 static bool s_timing_in_step;
 static bool s_timing_irq_open;
 static bool s_timing_pending;
-/* 第80拍立即关断，下一真实采样空拍复核并发布，不追加第81次控制。 */
+/* 第80拍仅存末点并关断；通过下一真实采样许可后才聚合、计数和发布。 */
 static bool s_timing_terminal_pending;
-static G431RuntimeTimingFailure s_timing_terminal_reason;
+typedef struct {
+    uint32_t work;
+    uint32_t anchor;
+    uint32_t irq;
+    uint32_t front;
+    uint32_t tail;
+} TimingDurations;
+enum {
+    TIMING_POINT_SPEED = 1U,
+    TIMING_POINT_OBSERVATION = 2U,
+    TIMING_POINT_LIMITED = 4U,
+    TIMING_POINT_OVER_DEADLINE = 8U
+};
+/* 固定5word原始时长及分类；regular-only IRQ不能覆盖末点。 */
+static TimingDurations s_timing_terminal_durations;
+static uint32_t s_timing_terminal_flags;
 static bool s_timing_speed_updated;
 static bool s_timing_limited;
 static uint32_t s_timing_irq_begin;
 static uint32_t s_timing_work_begin;
 static uint32_t s_timing_work_end;
 static uint32_t s_timing_failure;
-static uint32_t s_timing_step_sink_calls;
+static uint32_t s_timing_step_port_calls;
 static uint32_t s_timing_step_observation_reads;
 static ControlTime s_timing_now;
 static float s_timing_position;
+
+static void timing_record_metrics(const TimingDurations *durations, uint32_t flags);
+static bool timing_coverage_complete(void);
 
 static void timing_publish(void)
 {
@@ -149,7 +167,8 @@ void g431_runtime_timing_init(ElectricalAngleTrig trig, void *trig_context,
     s_timing_irq_open = false;
     s_timing_pending = false;
     s_timing_terminal_pending = false;
-    s_timing_terminal_reason = G431_RUNTIME_TIMING_FAILURE_NONE;
+    memset(&s_timing_terminal_durations, 0, sizeof(s_timing_terminal_durations));
+    s_timing_terminal_flags = 0U;
     g_target_runtime_timing_active = 0U;
     g_target_runtime_timing_sequence = 0U;
     motor_init(&s_timing_motor);
@@ -197,10 +216,12 @@ bool g431_runtime_timing_prepare(uint32_t request_word, bool permitted)
     s_timing_irq_open = false;
     s_timing_pending = false;
     s_timing_terminal_pending = false;
-    s_timing_terminal_reason = G431_RUNTIME_TIMING_FAILURE_NONE;
+    memset(&s_timing_terminal_durations, 0, sizeof(s_timing_terminal_durations));
+    s_timing_terminal_flags = 0U;
     s_timing_in_step = false;
     if (!permitted || (request_word >> 2U) == 0U
-        || (mode != G431_RUNTIME_TIMING_STAGE && mode != G431_RUNTIME_TIMING_COMPUTE)
+        || (mode != G431_RUNTIME_TIMING_STAGE && mode != G431_RUNTIME_TIMING_COMPUTE
+            && mode != G431_RUNTIME_TIMING_COMPUTE_STAGE)
         || s_timing_stamp_read == NULL) {
         timing_freeze(G431_RUNTIME_TIMING_FAILURE_NOT_READY);
         return false;
@@ -265,14 +286,17 @@ bool g431_runtime_timing_bus_latest(BusObservation *observation)
     return true;
 }
 
-bool g431_runtime_timing_sink(const PhaseDutyRequest *request)
+bool g431_runtime_timing_stage_port(const PhaseDutyRequest *request)
 {
-    if (!s_timing_in_step || request == NULL || s_timing_step_sink_calls != 0U
-        || s_timing_result.mode != G431_RUNTIME_TIMING_COMPUTE) {
+    bool accepted;
+
+    if (!s_timing_in_step || request == NULL || s_timing_step_port_calls != 0U
+        || (s_timing_result.mode != G431_RUNTIME_TIMING_COMPUTE
+            && s_timing_result.mode != G431_RUNTIME_TIMING_COMPUTE_STAGE)) {
         timing_remember_failure(G431_RUNTIME_TIMING_FAILURE_CONTROL);
         return false;
     }
-    /* 有界比较同时拒绝NaN/Inf；只验证计算数值，不执行真实stage检查或提交。 */
+    /* 有界比较同时拒绝NaN/Inf；非法或重复调用不得到达真实HCC。 */
     if (!(request->phase_a_duty >= REALTIME_MOTOR_IO_DUTY_MIN
             && request->phase_a_duty <= REALTIME_MOTOR_IO_DUTY_MAX)
         || !(request->phase_b_duty >= REALTIME_MOTOR_IO_DUTY_MIN
@@ -282,10 +306,22 @@ bool g431_runtime_timing_sink(const PhaseDutyRequest *request)
         timing_remember_failure(G431_RUNTIME_TIMING_FAILURE_CONTROL);
         return false;
     }
-    s_timing_step_sink_calls++;
-    s_timing_result.sink_calls++;
-    /* 只接收隔离Runtime算出的数值，使同源函数走完；绝无真实stage或硬件accepted。 */
-    return true;
+    s_timing_step_port_calls++;
+    if (s_timing_result.mode == G431_RUNTIME_TIMING_COMPUTE) {
+        s_timing_result.sink_calls++;
+        /* 仅sink模式接收数值，不伪造真实HCC接受。 */
+        return true;
+    }
+    /* 在同一次Runtime的原提交位置同步进入真实HCC，禁止返回后另补stage。 */
+    s_timing_result.real_stage_calls++;
+    accepted = realtime_motor_io_stage_phase_duty(request);
+    if (accepted) {
+        s_timing_result.real_stage_accepted++;
+    } else {
+        /* Runtime随后会锁存ACTUATION；这里先保存直接拒绝原因。 */
+        timing_remember_failure(G431_RUNTIME_TIMING_FAILURE_STAGE);
+    }
+    return accepted;
 }
 
 bool g431_runtime_timing_enable(void)
@@ -320,8 +356,11 @@ bool g431_runtime_timing_step(ControlTime now, bool permitted)
     }
     if (s_timing_terminal_pending) {
         /* 第80拍Platform完整IRQ出口已执行；当拍许可先由上方检查。
-         * 保留第80拍work/IRQ/stamp，收尾只做关断复核与结果发布。 */
-        timing_freeze(s_timing_terminal_reason);
+         * 只有此处才把末点计成功；早于此处的失败/取消保留79点统计。
+         * 使用冻结的时长和分类，不从下一IRQ的DWT/锚点重算。 */
+        timing_record_metrics(&s_timing_terminal_durations, s_timing_terminal_flags);
+        timing_freeze(timing_coverage_complete() ? G431_RUNTIME_TIMING_FAILURE_NONE
+            : G431_RUNTIME_TIMING_FAILURE_INCOMPLETE);
         return true;
     }
     s_timing_failure = G431_RUNTIME_TIMING_FAILURE_NONE;
@@ -345,7 +384,7 @@ bool g431_runtime_timing_step(ControlTime now, bool permitted)
         s_timing_result.state = G431_RUNTIME_TIMING_ACTIVE;
     }
     s_timing_now = now;
-    s_timing_step_sink_calls = 0U;
+    s_timing_step_port_calls = 0U;
     s_timing_step_observation_reads = 0U;
     s_timing_speed_updated = false;
     s_timing_limited = false;
@@ -391,7 +430,7 @@ bool g431_runtime_timing_step(ControlTime now, bool permitted)
         if (s_timing_motor.faults != 0U || s_timing_motor.state != MOTOR_STATE_RUN
             || s_timing_runtime.phase != CONTROL_RUNTIME_RUNNING
             || !s_timing_runtime.current_output.valid || !s_timing_runtime.current_dq.valid
-            || s_timing_step_sink_calls != 1U) {
+            || s_timing_step_port_calls != 1U) {
             timing_remember_failure(G431_RUNTIME_TIMING_FAILURE_CONTROL);
         }
     }
@@ -459,13 +498,71 @@ static void timing_add_metric(G431RuntimeTimingMetric *metric, uint32_t cycles)
     metric->sum_cycles += cycles;
 }
 
+static void timing_record_metrics(const TimingDurations *durations, uint32_t flags)
+{
+    timing_add_metric(&s_timing_result.rows[0], durations->work);
+    timing_add_metric(&s_timing_result.rows[1], durations->anchor);
+    timing_add_metric(&s_timing_result.rows[2], durations->irq);
+    timing_add_metric(&s_timing_result.rows[3], durations->front);
+    timing_add_metric(&s_timing_result.rows[4], durations->tail);
+    if (s_timing_result.mode == G431_RUNTIME_TIMING_COMPUTE
+        || s_timing_result.mode == G431_RUNTIME_TIMING_COMPUTE_STAGE) {
+        if ((flags & TIMING_POINT_SPEED) != 0U) {
+            s_timing_result.speed_updates++;
+            timing_add_metric(&s_timing_result.rows[5], durations->work);
+        }
+        if ((flags & TIMING_POINT_OBSERVATION) != 0U) {
+            s_timing_result.observation_refreshes++;
+            timing_add_metric(&s_timing_result.rows[6], durations->work);
+        }
+        if ((flags & (TIMING_POINT_SPEED | TIMING_POINT_OBSERVATION)) != 0U) {
+            s_timing_result.slow_samples++;
+            timing_add_metric(&s_timing_result.rows[8], durations->work);
+        } else {
+            s_timing_result.fast_samples++;
+            timing_add_metric(&s_timing_result.rows[7], durations->work);
+        }
+        if ((flags & TIMING_POINT_LIMITED) != 0U) {
+            s_timing_result.limited_samples++;
+        }
+    }
+    if ((flags & TIMING_POINT_OVER_DEADLINE) != 0U) {
+        s_timing_result.over_stage_deadline_samples++;
+        /* 只统计work返回点；Platform另核完整IRQ绝对截止。 */
+        s_timing_result.over_consumer_budget_samples++;
+    }
+    s_timing_result.completed_samples++;
+}
+
+static bool timing_coverage_complete(void)
+{
+    bool complete = s_timing_result.completed_samples == G431_RUNTIME_TIMING_SAMPLES
+        && s_timing_result.enable_attempts == 0U;
+
+    if (s_timing_result.mode == G431_RUNTIME_TIMING_STAGE) {
+        return complete && s_timing_result.real_stage_calls == G431_RUNTIME_TIMING_SAMPLES
+            && s_timing_result.real_stage_accepted == G431_RUNTIME_TIMING_SAMPLES
+            && s_timing_result.sink_calls == 0U;
+    }
+    if (s_timing_result.mode == G431_RUNTIME_TIMING_COMPUTE) {
+        complete = complete && s_timing_result.real_stage_calls == 0U
+            && s_timing_result.real_stage_accepted == 0U
+            && s_timing_result.sink_calls == G431_RUNTIME_TIMING_SAMPLES;
+    } else {
+        complete = complete && s_timing_result.real_stage_calls == G431_RUNTIME_TIMING_SAMPLES
+            && s_timing_result.real_stage_accepted == G431_RUNTIME_TIMING_SAMPLES
+            && s_timing_result.sink_calls == 0U;
+    }
+    return complete && s_timing_result.speed_updates == 8U && s_timing_result.observation_refreshes == 8U
+        && s_timing_result.fast_samples == 72U && s_timing_result.slow_samples == 8U
+        && s_timing_result.limited_samples > 0U
+        && s_timing_result.limited_samples < G431_RUNTIME_TIMING_SAMPLES;
+}
+
 void g431_runtime_timing_irq_exit(uint32_t cycles, bool permitted)
 {
-    uint32_t work;
-    uint32_t anchor;
-    uint32_t irq;
-    uint32_t front;
-    uint32_t tail;
+    TimingDurations durations;
+    uint32_t flags;
 
     if (g_target_runtime_timing_active == 0U) {
         return;
@@ -490,80 +587,39 @@ void g431_runtime_timing_irq_exit(uint32_t cycles, bool permitted)
     if (!s_timing_pending) {
         return; /* regular-only ADC IRQ不充当一个控制采样。 */
     }
-    work = s_timing_work_end - s_timing_work_begin;
-    anchor = s_timing_work_end - s_timing_begin_stamp.callback_start_cycles;
-    irq = cycles - s_timing_irq_begin;
-    front = s_timing_work_begin - s_timing_begin_stamp.callback_start_cycles;
-    tail = cycles - s_timing_work_end;
-    s_timing_result.last_irq_cycles = irq;
+    durations.work = s_timing_work_end - s_timing_work_begin;
+    durations.anchor = s_timing_work_end - s_timing_begin_stamp.callback_start_cycles;
+    durations.irq = cycles - s_timing_irq_begin;
+    durations.front = s_timing_work_begin - s_timing_begin_stamp.callback_start_cycles;
+    durations.tail = cycles - s_timing_work_end;
+    s_timing_result.last_irq_cycles = durations.irq;
     /* 使用Platform实际slot的绝对截止；中间谷底不重置预算，末标记后仍留异常返回预留。 */
-    if (irq >= s_timing_result.last_irq_budget_cycles
+    if (durations.irq >= s_timing_result.last_irq_budget_cycles
         || s_timing_result.last_irq_budget_cycles >= REALTIME_MOTOR_IO_CONTROL_PERIOD_CYCLES) {
         timing_remember_failure(G431_RUNTIME_TIMING_FAILURE_IRQ_BUDGET);
-    } else if (irq == 0U || work == 0U || anchor > irq || tail > irq
-        || work > anchor || front > anchor || anchor != work + front
-        || (s_timing_begin_stamp.callback_start_cycles - s_timing_irq_begin) > irq) {
+    } else if (durations.irq == 0U || durations.work == 0U || durations.anchor > durations.irq
+        || durations.tail > durations.irq || durations.work > durations.anchor
+        || durations.front > durations.anchor || durations.anchor != durations.work + durations.front
+        || (s_timing_begin_stamp.callback_start_cycles - s_timing_irq_begin) > durations.irq) {
         timing_remember_failure(G431_RUNTIME_TIMING_FAILURE_CLOCK);
     }
     if (s_timing_failure != G431_RUNTIME_TIMING_FAILURE_NONE) {
         timing_freeze((G431RuntimeTimingFailure)s_timing_failure);
         return;
     }
-    timing_add_metric(&s_timing_result.rows[0], work);
-    timing_add_metric(&s_timing_result.rows[1], anchor);
-    timing_add_metric(&s_timing_result.rows[2], irq);
-    timing_add_metric(&s_timing_result.rows[3], front);
-    timing_add_metric(&s_timing_result.rows[4], tail);
-    if (s_timing_result.mode == G431_RUNTIME_TIMING_COMPUTE) {
-        if (s_timing_speed_updated) {
-            s_timing_result.speed_updates++;
-            timing_add_metric(&s_timing_result.rows[5], work);
-        }
-        if (s_timing_step_observation_reads != 0U) {
-            s_timing_result.observation_refreshes++;
-            timing_add_metric(&s_timing_result.rows[6], work);
-        }
-        if (s_timing_speed_updated || s_timing_step_observation_reads != 0U) {
-            s_timing_result.slow_samples++;
-            timing_add_metric(&s_timing_result.rows[8], work);
-        } else {
-            s_timing_result.fast_samples++;
-            timing_add_metric(&s_timing_result.rows[7], work);
-        }
-        if (s_timing_limited) {
-            s_timing_result.limited_samples++;
-        }
-    }
-    if (anchor >= s_timing_result.last_stage_budget_cycles) {
-        s_timing_result.over_stage_deadline_samples++;
-    }
-    /* 同一绝对截止由Platform再复核；此处统计不能代替其末端保护。 */
-    if (anchor >= s_timing_result.last_stage_budget_cycles) {
-        s_timing_result.over_consumer_budget_samples++;
-    }
+    flags = (s_timing_speed_updated ? TIMING_POINT_SPEED : 0U)
+        | (s_timing_step_observation_reads != 0U ? TIMING_POINT_OBSERVATION : 0U)
+        | (s_timing_limited ? TIMING_POINT_LIMITED : 0U)
+        | (durations.anchor >= s_timing_result.last_stage_budget_cycles ? TIMING_POINT_OVER_DEADLINE : 0U);
     s_timing_pending = false;
-    s_timing_result.completed_samples++;
-    if (s_timing_result.completed_samples == G431_RUNTIME_TIMING_SAMPLES) {
-        bool complete = s_timing_result.enable_attempts == 0U;
-        if (s_timing_result.mode == G431_RUNTIME_TIMING_STAGE) {
-            complete = complete && s_timing_result.real_stage_calls == G431_RUNTIME_TIMING_SAMPLES
-                && s_timing_result.real_stage_accepted == G431_RUNTIME_TIMING_SAMPLES
-                && s_timing_result.sink_calls == 0U;
-        } else {
-            complete = complete && s_timing_result.real_stage_calls == 0U
-                && s_timing_result.real_stage_accepted == 0U
-                && s_timing_result.sink_calls == G431_RUNTIME_TIMING_SAMPLES
-                && s_timing_result.speed_updates == 8U && s_timing_result.observation_refreshes == 8U
-                && s_timing_result.fast_samples == 72U && s_timing_result.slow_samples == 8U
-                && s_timing_result.limited_samples > 0U
-                && s_timing_result.limited_samples < G431_RUNTIME_TIMING_SAMPLES;
-        }
-        /* 不在最慢控制拍追加stamp读取和256B发布；active持续到下一采样收尾。
-         * 立即关断并锁存首因，取消/BUSY仍可按原语义终止待收尾窗口。 */
+    if (s_timing_result.completed_samples == G431_RUNTIME_TIMING_SAMPLES - 1U) {
+        s_timing_terminal_durations = durations;
+        s_timing_terminal_flags = flags;
+        /* 最慢末拍不追加metrics/coverage/stamp/发布；先实际关断。
+         * active持续到下一采样，失败/取消不把本末点计入成功统计。 */
         realtime_motor_io_safe_off();
-        s_timing_terminal_reason = complete ? G431_RUNTIME_TIMING_FAILURE_NONE
-            : G431_RUNTIME_TIMING_FAILURE_INCOMPLETE;
-        timing_remember_failure(s_timing_terminal_reason);
         s_timing_terminal_pending = true;
+        return;
     }
+    timing_record_metrics(&durations, flags);
 }

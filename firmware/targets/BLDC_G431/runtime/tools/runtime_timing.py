@@ -21,7 +21,9 @@ from current_capture import (CubeBackend, DEFAULT_CLI, DEFAULT_GDB, DHCSR, FLASH
 CLOCK_HZ, SAMPLES, RESULT_SIZE = 170000000, 80, 256
 DEADLINE_COUNT, PERIOD_COUNTS, CONTROL_CYCLES = 1700, 4250, 17000
 EVIDENCE_ROOT = Path(__file__).resolve().parents[2] / "validation/local-evidence"
-MODES = {"stage": 1, "compute": 2}
+MODES = {"stage": 1, "compute": 2, "compute-stage": 3}
+WORK_NAMES = {1: "真实 HCC stage 调用", 2: "同源 Runtime→sink 调用",
+              3: "同源 Runtime→真实 HCC stage 调用"}
 ROW_NAMES = ["work 入口至返回", "Platform 锚点至 work 返回", "IRQ C 入口至出口",
              "Platform 锚点至 work 入口", "work 返回至 IRQ C 出口", "速度更新拍 work",
              "观测刷新拍 work", "普通快拍 work", "慢拍 work"]
@@ -52,9 +54,12 @@ FAILURE_NAMES = ["NONE", "NOT_READY", "ABORTED", "BUSY", "CLOCK", "CONTROL", "ST
                  "POWER", "INCOMPLETE", "IRQ_BUDGET"]
 EXPECTED_ENUMS = {"G431_RUNTIME_TIMING_" + name: value for value, name in enumerate(STATE_NAMES)}
 EXPECTED_ENUMS.update({"G431_RUNTIME_TIMING_FAILURE_" + name: value for value, name in enumerate(FAILURE_NAMES)})
-EXPECTED_ENUMS.update({"G431_RUNTIME_TIMING_" + name.upper(): value for name, value in MODES.items()})
+EXPECTED_ENUMS.update({"G431_RUNTIME_TIMING_" + name.upper().replace("-", "_"): value
+                       for name, value in MODES.items()})
 LIMITS = ["母线电源、电池、三相及外部注入必须断开；真实 MOE 必须始终为零。",
           "stage 模式只证明有限窗口的真实 HCC 提交；compute 模式只调用显式 sink，不能算真实 stage 接受。",
+          "compute-stage 在隔离同源 Runtime 内提交真实 HCC；合成电流、母线、位置和标定不是现场反馈或带电 RUN 许可。",
+          "真实 stage 接受不等于每次请求均已跨 UEV 生效，也不证明栅极波形或闭环控制。",
           "IRQ 行仅为 C 首末标记区间，含 HAL 和 Platform 尾部；末标记后的统计、发布及异常开销未计入，不证明 WCET。",
           "各行含嵌套区间与测量开销，不能相加推算完整路径或函数净耗时。",
           "失败和超时保留原始结果；不补发、不烧录、不复位、不清故障、不自动切换模式。"]
@@ -82,7 +87,7 @@ def request_mode(request):
 
 def next_request(previous, mode):
     request_mode(previous)
-    require(mode in MODES.values(), "只允许明确的 stage 或 compute 模式")
+    require(mode in MODES.values(), "只允许明确的 stage、compute 或 compute-stage 模式")
     nonce = (previous >> 2) + 1
     require(nonce <= 0x3FFFFFFF, "请求 nonce 已耗尽，拒绝自动回绕")
     return (nonce << 2) | mode
@@ -117,7 +122,7 @@ def timing_row(result, index, expected):
         if count > 1:
             require((count - 1) * low + high <= total <= (count - 1) * high + low,
                     "计时总和不包含声明的最小和最大样本：" + ROW_NAMES[index])
-    return {"name": ROW_NAMES[index], **values,
+    return {"name": ROW_NAMES[index].replace("work", WORK_NAMES[result["mode"]]), **values,
             "min_us": low * 1e6 / CLOCK_HZ, "max_us": high * 1e6 / CLOCK_HZ,
             "mean_us": total * 1e6 / (count * CLOCK_HZ) if count else None}
 
@@ -127,13 +132,15 @@ def validate_complete(result, request):
     require(result["request_word"] == request and result["state"] == 3, "结果不是本次请求的 COMPLETE")
     require(result["completed_samples"] == SAMPLES and result["enable_attempts"] == 0
             and result["last_shadow_faults"] == 0, "完成拍数或无功率统计不完整")
-    stage = result["mode"] == MODES["stage"]
-    expected = {"real_stage_calls": 80 if stage else 0, "real_stage_accepted": 80 if stage else 0,
-                "sink_calls": 0 if stage else 80, "speed_updates": 0 if stage else 8,
-                "observation_refreshes": 0 if stage else 8, "fast_samples": 0 if stage else 72,
-                "slow_samples": 0 if stage else 8}
+    stage_only = result["mode"] == MODES["stage"]
+    real_stage = result["mode"] in (MODES["stage"], MODES["compute-stage"])
+    expected = {"real_stage_calls": SAMPLES if real_stage else 0,
+                "real_stage_accepted": SAMPLES if real_stage else 0,
+                "sink_calls": 0 if real_stage else SAMPLES, "speed_updates": 0 if stage_only else 8,
+                "observation_refreshes": 0 if stage_only else 8, "fast_samples": 0 if stage_only else 72,
+                "slow_samples": 0 if stage_only else 8}
     require(all(result[field] == value for field, value in expected.items()), "模式专属 stage/sink 或分支次数不符")
-    require(result["limited_samples"] == 0 if stage else 0 < result["limited_samples"] < SAMPLES,
+    require(result["limited_samples"] == 0 if stage_only else 0 < result["limited_samples"] < SAMPLES,
             "模式限幅覆盖不符")
     require(result["last_bdtr"] & 0x8000 == 0 and result["last_cr1"] & 1,
             "最后返回点功率或计数器状态非法")
@@ -149,7 +156,7 @@ def validate_complete(result, request):
             "最后返回点或完整窗口超过slot绝对截止")
     require(result["last_entry_count"] <= PERIOD_COUNTS and result["last_timer_count"] <= PERIOD_COUNTS,
             "timer读数超出中心对齐范围")
-    counts = [80] * 5 + ([0] * 4 if stage else [8, 8, 72, 8])
+    counts = [80] * 5 + ([0] * 4 if stage_only else [8, 8, 72, 8])
     rows = [timing_row(result, index, count) for index, count in enumerate(counts)]
     require(rows[2]["max_cycles"] < CONTROL_CYCLES, "COMPLETE 的 IRQ 标记区间达到100us控制周期预算")
     require(rows[1]["sum_cycles"] == rows[0]["sum_cycles"] + rows[3]["sum_cycles"],
@@ -161,7 +168,7 @@ def validate_complete(result, request):
                     for field in ["min_cycles", "max_cycles", "sum_cycles"]), "嵌套计时区间极值异常")
     for key, row in [("last_work_cycles", 0), ("last_anchor_cycles", 1), ("last_irq_cycles", 2)]:
         require(rows[row]["min_cycles"] <= result[key] <= rows[row]["max_cycles"], "最后读数不在对应行极值内")
-    if not stage:
+    if not stage_only:
         require(rows[0]["sum_cycles"] == rows[7]["sum_cycles"] + rows[8]["sum_cycles"],
                 "快慢拍没有完整分割 compute 统计")
     return rows
@@ -355,7 +362,7 @@ def read_health(backend, layout, conditions, tag, timeout_s=10.0, clock=time.mon
 
 def run_measurement(backend, prepared, conditions, mode, clock=time.monotonic, sleep=time.sleep):
     conditions.validate(measure=True)
-    require(mode in MODES, "测量前必须明确指定 stage 或 compute 模式")
+    require(mode in MODES, "测量前必须明确指定 stage、compute 或 compute-stage 模式")
     layout = prepared.layout
     validate_layout(layout)
     flash = backend.read([("flash", FLASH_START, FLASH_SIZE)], "flash-identity")["flash"]
@@ -374,6 +381,7 @@ def run_measurement(backend, prepared, conditions, mode, clock=time.monotonic, s
     require(before["request"] == advanced["request"] == existing["request_word"], "存在未消费或其他主机请求")
     request = next_request(advanced["request"], MODES[mode])
     report = {"status": "FAILED", "success": False, "mode": mode, "request_word": request,
+              "work_path": WORK_NAMES[MODES[mode]],
               "before": before, "pre_health": advanced, "files": prepared.hashes,
               "request_write_attempts": 1, "automatic_retry": False, "hardware_qualified": False,
               "foc_qualified": False, "full_isr_wcet": False, "limits": LIMITS, "issues": [], "result": None}
@@ -438,10 +446,12 @@ def run_measurement(backend, prepared, conditions, mode, clock=time.monotonic, s
             "anchor_us": result["last_anchor_cycles"] * 1e6 / CLOCK_HZ,
             "irq_marked_us": result["last_irq_cycles"] * 1e6 / CLOCK_HZ,
             "entry_to_deadline_cycles": result["last_stage_budget_cycles"],
-            "limit": "只有已记录字段可解释本次返回点；compute 的 sink 不具备真实 stage 接受含义，IRQ末标记后仍有开销。"}
+            "limit": "只有已记录字段可解释本次返回点；sink 与真实 stage 按模式及独立计数区分，IRQ末标记后仍有开销。"}
     report["success"] = not report.get("primary_failure") and report["result"] is not None and report["result"]["state"] == 3
-    report["status"] = ("PASS_POWERLESS_REAL_STAGE_WINDOW_ONLY" if mode == "stage" else
-                        "PASS_POWERLESS_COMPUTE_SINK_WINDOW_ONLY") if report["success"] else "FAILED"
+    statuses = {"stage": "PASS_POWERLESS_REAL_STAGE_WINDOW_ONLY",
+                "compute": "PASS_POWERLESS_COMPUTE_SINK_WINDOW_ONLY",
+                "compute-stage": "PASS_POWERLESS_COMPUTE_REAL_STAGE_WINDOW_ONLY"}
+    report["status"] = statuses[mode] if report["success"] else "FAILED"
     return report
 
 
@@ -459,7 +469,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     conditions = Conditions(args.vbus_dmm_v, args.logic_only_confirmed)
     conditions.validate(args.measure)
-    require(not args.measure or args.mode in MODES, "显式测量必须指定 --mode stage 或 compute")
+    require(not args.measure or args.mode in MODES,
+            "显式测量必须指定 --mode stage、compute 或 compute-stage")
     prepared = prepare_build(args.build_dir.resolve(), args.expected_hex_sha256, args.output.resolve(), args.gdb.resolve())
     backend = None
     try:

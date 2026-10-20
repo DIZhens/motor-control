@@ -204,17 +204,42 @@ with tempfile.TemporaryDirectory(prefix="g431-timing-entry-") as directory:
     assert model.word("model_physical_position_reads") == model.word("model_physical_bus_reads") == 90
     passed("准备拍不计算；后80拍各单次同源Runtime，真实prefix getter与刷新getter开销均存在")
 
+    for mode in [1, 2, 3]:
+        model = Model()
+        model.request(mode=mode)
+        model.tick(80)
+        assert model.result["state"] == 1 and model.word("g_target_runtime_timing_active") == 1
+        assert model.entries["g431_runtime_timing_runtime_step"] == (0 if mode == 1 else 80)
+        pending = struct.unpack("<64I", model.cpu.mem_read(symbols["s_timing_result"], 256))
+        assert pending[6] == 79 and [pending[index] for index in range(28, 48, 4)] == [79] * 5
+        raw80 = bytes(model.cpu.mem_read(symbols["s_timing_result"] + 68, 44))
+        model.write("entry_current_valid", 0)
+        model.tick()
+        assert model.result["state"] == 4 and model.result["failure"] == 1 and model.result["count"] == 79
+        assert model.health["faults"] & 8 and model.permission() == 0
+        assert model.entries["g431_runtime_timing_runtime_step"] == (0 if mode == 1 else 80)
+        assert model.result["sinks"] == (80 if mode == 2 else 0)
+        assert model.result["stage_calls"] == model.result["accepted"] == (0 if mode == 2 else 80)
+        assert [row[0] for row in model.result["rows"][:5]] == [79] * 5
+        assert bytes(model.cpu.mem_read(symbols["g_target_runtime_timing_result"] + 68, 44)) == raw80
+    passed("三模式第80拍后Platform撤销采样许可时只冻结79确认点，保留80次端口计数和原始读数")
+
     model = Model()
-    model.request()
+    model.request(mode=3)
     model.tick(80)
     assert model.result["state"] == 1 and model.word("g_target_runtime_timing_active") == 1
     assert model.entries["g431_runtime_timing_runtime_step"] == 80
-    model.write("entry_current_valid", 0)
     model.tick()
-    assert model.result["state"] == 4 and model.result["failure"] == 1 and model.result["count"] == 80
-    assert model.health["faults"] & 8 and model.permission() == 0
-    assert model.entries["g431_runtime_timing_runtime_step"] == model.result["sinks"] == 80
-    passed("第80拍后采样被Platform判无效时，空拍收尾发布FAILED且不运行第81次控制")
+    result = model.result
+    assert result["state"] == 3 and result["count"] == result["stage_calls"] == result["accepted"] == 80
+    assert result["sinks"] == result["enables"] == 0
+    assert result["speeds"] == result["observations"] == result["slow"] == 8 and result["fast"] == 72
+    assert [row[0] for row in result["rows"]] == [80] * 5 + [8, 8, 72, 8]
+    assert model.entries["g431_runtime_timing_runtime_step"] == model.entries["current_controller_update"] == 80
+    assert model.word("model_stage_count") == 80 and model.permission() == 1
+    assert model.health["faults"] == model.word("g_target_runtime_timing_guard_faults") == 0
+    assert model.word("model_real_enable_count") == 0
+    passed("compute-stage真实入口80次同源计算和真实HCC接受，下一健康空拍完成且无sink或功率使能")
 
     model = Model()
     model.request(mode=1)

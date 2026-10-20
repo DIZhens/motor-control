@@ -254,11 +254,17 @@ MAP 压缩 RW 时核对明确的 `COMPRESSED[...]` 物理加载长度，HEX 与 
 | --- | --- | --- |
 | `stage`（1） | 真实 `realtime_motor_io_stage_phase_duty()`，交替不等三相合法 duty | 80 次真实调用、80 次接受，无 Runtime、sink 或 enable |
 | `compute`（2） | 同源 `control_runtime_step()`，合成 RUN、电流和反馈 | 80 次计算，8 次速度更新、8 次观测刷新；80 次数值 sink，真实 stage/enable 均为零 |
+| `compute-stage`（3） | 同源 Runtime 内原提交点直接调用真实 HCC | 80 次计算与真实提交全部接受，sink/enable 为零；保留 8 次速度与观测刷新 |
 
 sink 只检查归一化 duty 的有限值与正常包络，不能被解释为硬件提交接受。compute 模式
 允许跨越中间峰/谷计算，但必须在当前slot的绝对截止以前完成IRQ末标记。
 stage/IRQ预算从Platform只读getter取得，不按CNT/DIR推算；新slot不会刷新旧请求的预算。
 真实MOE始终须为零。合成标定、RUN 和 12 V 输入不是现场测量或控制许可。
+
+`compute-stage` 复用相同隔离试具，在同一次 Runtime 调用的原提交位置进入真实 HCC，
+不在计算返回后另补 stage；直接调用计时因此包含真实提交。每拍最多一次提交，HCC
+拒绝保留 STAGE 首因，任何 enable 尝试仍永远拒绝。第 80 拍立即关断会取消最后一组
+pending，因此 80 次 accepted 不代表全部请求均已跨 UEV 装载，也不代表带电闭环通过。
 
 结果 schema=2，布局为 256 B，9 行分别记录：直接调用、原 Platform 锚点至调用返回、IRQ 首末 USER
 标记、锚点至调用入口、调用返回至末标记、速度拍、观测刷新拍、普通快拍和慢拍。
@@ -266,9 +272,11 @@ stage/IRQ预算从Platform只读getter取得，不按CNT/DIR推算；新slot不�
 及调用本身的测量开销。各行包含分类与嵌套区间，不能相加推算函数净成本。
 
 IRQ 标记区间包含 HAL、健康 publication 及 Platform SSI/母线尾部；末标记后的统计、
-即时 safe-off 和异常入出栈未计入。第 80 拍立即关断并保持 active，下一采样空拍先核对
-真实许可，再复核关断并发布 256 B 结果；不执行第 81 次控制，也不覆盖第 80 拍读数。
-若第 80 拍完整 IRQ 已被 Platform 判为迟到，下一拍必须发布失败。准备和终态收尾拍不属于 80 点。regular-only IRQ
+即时 safe-off 和异常入出栈未计入。前 79 点逐拍聚合；第 80 拍只保存固定计时及分类
+快照并立即关断，保持 active。下一采样空拍先核对真实许可，再聚合末点、核对完整覆盖，
+复核关断并发布 256 B 结果；不执行第 81 次控制，也不覆盖第 80 拍原始读数。
+若末拍完整 IRQ 被判为迟到，或收尾前许可丢失、Stop/BUSY 取消，冻结为 79 个已确认点；
+真实调用计数与末拍原始读数仍保留，不补成成功。准备和终态收尾拍不属于 80 点。regular-only IRQ
 不充当控制拍，缺失或未配对IRQ标记不能COMPLETE。结果另存同一slot的stage/IRQ预算，
 超过绝对截止即失败；成功的有限窗口也不等于未插桩完整ISR已满足该预算或WCET。完整结果与独立健康后检须分别判定。
 
@@ -277,10 +285,12 @@ IRQ 标记区间包含 HAL、健康 publication 及 Platform SSI/母线尾部；
 低母线及有效参考位置；末标记前再读权威 Hardware Trip，不能只凭拍首许可发布完成。
 
 [`tools/runtime_timing.py`](tools/runtime_timing.py) 默认只冻结并核对同次 HEX/AXF/MAP
-和 DWARF。实测须明确 `--measure --mode stage|compute --logic-only-confirmed
+和 DWARF。实测须明确 `--measure --mode stage|compute|compute-stage --logic-only-confirmed
 --vbus-dmm-v <参考读数>`，每次只写一个完整请求。工具不烧录、复位、清故障或补发；
 失败保留首因、原始读数与后健康。现场只由 ST-Link 提供逻辑供电，母线电源、电池、
 电机三相及外部注入源断开。有限诊断结果不授予带电 FOC 许可。
+三种模式继续使用 schema=2 / 256 B；新工具同时核对 `COMPUTE_STAGE=3` 的 DWARF 枚举，
+旧 AXF 或旧 prepared 缺少该能力时在连接设备前拒绝，不通过猜测旧布局发送 mode 3。
 
 ```powershell
 .venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tools/runtime_timing.py --build-dir <同次Timing产物目录> --expected-hex-sha256 <完整SHA256> --output firmware/targets/BLDC_G431/validation/local-evidence/<新目录>
@@ -366,8 +376,8 @@ ADC 丢失、旧快照失效、低优先级代码被 ADC 抢占的交错，以�
 单地址一次写、应答丢失不补发和采后复核。模型不代替 UART 链路、
 实机速度精度或 ISR WCET；软件与实机结论分别记录在 Target 验证页。
 既有 UART、手转反馈、逻辑供电零偏及后台计算计时各有有限实测；软件/CORDIC 对照的
-当前执行身份和范围见验证页。20 / 10 / 1 kHz 下已分别完成真实 stage 与同源 compute
-的有限无功率窗口，镜像和后检查各自归属；尚未完成真实 RUN 计算与提交的集成验收。
+当前执行身份和范围见验证页。20 / 10 / 1 kHz 下已完成同一次 ADC 回调中同源 Runtime
+计算与真实 HCC 提交的有限无功率集成窗口；使用隔离合成输入，正式 RUN 仍未验收。
 后续继续电流增益/方向对照，再按实际时序和实物结果安排受控电角度标定及 FOC。
 各轮镜像与实测范围、既有台架证据仍从
 [VALIDATION.md](../VALIDATION.md) 进入，按具体修改影响选择复测。

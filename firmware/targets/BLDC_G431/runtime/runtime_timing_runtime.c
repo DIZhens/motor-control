@@ -5,7 +5,7 @@
 #define position_observation_get_topology g431_runtime_timing_position_topology
 #define position_observation_get_latest g431_runtime_timing_position_latest
 #define bus_observation_get_latest g431_runtime_timing_bus_latest
-#define realtime_motor_io_stage_phase_duty g431_runtime_timing_sink
+#define realtime_motor_io_stage_phase_duty g431_runtime_timing_stage_port
 #define realtime_motor_io_power_enable g431_runtime_timing_enable
 #define realtime_motor_io_safe_off g431_runtime_timing_safe_off
 #include "../../../app/motor/control_runtime.c"
