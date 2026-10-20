@@ -6,7 +6,114 @@
 当前候选与验收结果统一维护于 [VALIDATION.md](../VALIDATION.md#当前验收2026-10-18)，
 本页保存机制、复用命令及限制，不维护另一套阶段状态。
 
-## 固定时序与截止
+## 20 / 10 / 1 kHz 时序设计
+
+本节定义下一轮实现和验收的目标。下面的「既有实现」仍描述当前源码与历史证据；
+本节不是新配置已经构建、烧录或实测通过的声明。
+
+### 参考依据与频率
+
+[ST 电机控制生态页](https://www.st.com/content/st_com/en/ecosystems/stm32-motor-control-ecosystem.html)
+的 Test configuration 1 使用 20 kHz PWM、10 kHz FOC、1 kHz 速度调节，并包含 G431。
+该测试使用不同控制算法、编译器和采样配置，其负载百分比不能当作本工程的执行预算。
+
+本机官方 `MCSDK_v5.Y.4-Full/MotorControl/` 源码提供了进一步依据：
+
+- `templates/parameters_conversion.h.ftl`：`TF_REGULATION_RATE = PWM_FREQUENCY / REGULATION_EXECUTION_RATE`，
+  `REP_COUNTER = 2 * REGULATION_EXECUTION_RATE - 1`；执行率 2 对应 RCR=3。
+- `MCSDK/MCLib/G4xx/Src/r3_2_g4xx_pwm_curr_fdbk.c`：`R3_2_TIMxInit()` 使用
+  RCR=1 → UG → RCR=3 预置启动相位；`R3_2_GetPhaseCurrents()` 关闭 TRGO，
+  `R3_2_TIMx_UP_IRQHandler()` 配置采集后重新开放 OC4REF；`R3_2_WriteTIMRegisters()` 检查迟到。
+
+参考这些时序原则，继续使用本工程自己的 Platform 合同、固定 B/C 采样和 Motor 状态机，
+不整体移植 MCSDK。速度环仍在同一采样时基上整数分频，不照搬独立 SysTick 慢环。
+
+| 项目 | 目标 |
+| --- | --- |
+| TIM1 PWM | 170 MHz、PSC=0、ARR=4250、中心对齐，20 kHz 不变 |
+| 有效 update event（UEV） | RCR=3，每 100 µs 一个指定谷底，三相 preload 同时装载 |
+| 同步电流采样 / 电流环 | 每个有效 UEV 后只采第一个峰值附近，10 kHz |
+| 速度环 | 每 10 个电流样本更新一次，1 kHz；其余拍保持输出 |
+| SSI / Bus 采集和 Runtime 观测读取 | 各按 10 个电流样本分频，保持 1 kHz |
+| ControlTime | 保持 20000 tick/s；相邻电流样本间隔改为 2 tick |
+
+### 确定的 sample → compute → actuation
+
+以稳态某次有效谷底 UEV 为相对零点。表中峰值使用近似值；CCR4=4240 的触发比
+25 µs 峰值早 10 个 timer count，约 59 ns，最终角度参考还需计入真实采样保持时刻。
+
+| 相对时间 | 事件与数据归属 |
+| --- | --- |
+| 0 µs，谷底 UEV | 硬件装载上一 slot 的完整 CCR1/2/3；短 UP IRQ 核对 slot 后开放采样触发 |
+| 约 25 µs，首个峰值前 | OC4REF 上升沿同步触发 ADC1/2，取得本 slot 的 B/C 电流 |
+| ADC 完成后 | 在进入控制计算前关闭触发门；接收 sample、消费命令、计算当前输出 |
+| 50 µs，谷底 | 重复计数器抑制 UEV，保持原 active CCR；不是本次请求的生效边界 |
+| 约 75 µs，第二个峰值 | 触发门关闭，不产生第二次同步采样 |
+| 90 µs 以前 | 本 slot 的三相 preload 写入、UDIS 释放和复核必须全部完成 |
+| 100 µs，下一有效谷底 UEV | 本次计算的 CCR1/2/3 一起生效，并进入下一个 slot |
+| 约 125 µs | 下一个电流样本，间隔 100 µs |
+
+一次输出保持两个完整 PWM 周期。名义 sample→CCR 生效延迟约 75 µs；保留 10 µs
+提交预留后，trigger→完整 stage 截止约 65 µs，必须再扣 ADC 转换、异常入口及提交前的
+Platform 工作。现有实物入口 CNT≈3829 对应的回调入口→截止约为
+`3829 + 2 * 4250 - 1700 = 10629 cycles`，约 62.5 µs；这是新相位的预算推导，
+不是新固件的计时结果或 WCET。
+
+角度计算必须区分测量时刻和电压作用参考时刻。测量 Park 使用 sample 时刻；若逆 Park
+采用随后 100 µs 电压保持区间的中心，名义预测时间为 75+50=125 µs。
+CCR 生效延迟与保持区间中点不能混称，角度外推也不消除电流闭环的实际延迟。
+电流 PI 的 dt 改为 100 µs、速度 PI 的 dt 为 1 ms，增益需按这两个周期重新检查。
+
+### slot、截止与失败语义
+
+- Platform 独占有效 UEV、触发门、CCR preload 和 slot 身份。UP IRQ 拥有 UIF 的清除，
+  stage 不再清 UIF；接受的请求携带当前 sample slot 和 actuation epoch，只能进入下一指定 UEV。
+  sample 的 ControlTime 按硬件 slot 导出，正常间隔为 2 tick；漏掉 slot 必须保留时间缺口，
+  不能仍只推进 2 tick，从而把旧 Position/Bus 或漏采样伪装成新鲜数据。
+- UP IRQ 仅在该 UEV 后首个上数半周的允许窗口内开放 OC4REF，初始 arming 窗口取 10 µs。
+  必须证明 OC4REF 仍为低、当前 slot 正确且距离首触发有裕量；迟到不能改采第二个峰值。
+  CNT/DIR 会每 50 µs 重复，必须同时使用硬件 UIF、单调 cycle 年龄和 slot 身份防别名。
+- ADC 入口首先关闭后续触发，再做电流换算和控制计算。stage 校验的目标是下一有效 UEV，
+  允许跨越中间的谷底/峰值，不再要求整个计算留在原下数半周。
+- 三相写入仍使用短临界区与 UDIS；UDIS 不得跨过目标 UEV。检查整个事务的完成期限，
+  不把“开始写入时尚未迟到”视为成功，不将迟到结果顺延或自动重放。
+- 原 25 µs consumer guard 不能直接保留，也不能只改为 100 µs。新 guard 必须检查指定
+  UEV 的绝对截止；完整 ADC IRQ 还须包含观测尾部、HAL 收尾和异常返回的余量。
+  实现前先在模型中确定各检查点，实测分别记录 stage、consumer 与完整 IRQ 的范围。
+- 拟采用 Break/UP 优先级 0、ADC 优先级 1、SPI 优先级 2，让 UP 可以打断超时的 ADC。
+  UP 检查上一 slot 是否完整结束、fresh stage 是否具备；超时立即关 MOE、失效 epoch，
+  旧 ADC 服务尚未退出时不得开放新采样。仍须直接检查 UIF/cycle；优先级不能替代迟到判断。
+  ADC busy 必须覆盖整个 IRQ 和 HAL 收尾；fresh stage 交付要求按已使能/预热交付状态判定，
+  首次 UEV、IDLE/FAULT 观察和 Start 的 quiet slot 不得因本就无需提交而误报漏交付。
+  PRIMASK 临界区、同级中断和 CPU 故障仍可能延迟软件关断，不宣称此机制替代独立硬件 Trip。
+- Start 先保持 MOE=0，提交本次 Start 的安全预热输出，并经真实目标 UEV 确认生效；
+  后续 sample 再提交 fresh 请求并核对使能条件。不能把首次 sample 或旧 pending 当作预热完成。
+  Stop/Trip 立即关 MOE、写 neutral 并取消 pending/committed/enable 资格，Drive Timing 持续。
+- neutral、启动重复计数相位与所有 UG 必须在注入 ADC 接受外部触发之前完成。
+  `TIM_TRGO2_RESET` 在 UG 时也可能输出触发，不能把它当作对 UG 永久免疫的关闭状态。
+  清除启动 UIF/待处理中断后，才开放运行期 UIE 与计数；运行期禁止额外 UG。
+
+### 实现范围与最小验收
+
+静态配置先通过 `.ioc` / CubeMX 改 RCR 和 UP IRQ，再调整 Platform 的触发门、slot、
+stage/commit/enable。同步修改 ControlTime 推进、Runtime 装配、1 kHz 分频和心跳门限，
+检查零偏等待/窗口样本数对应的实际时长。长期架构不增加线程、队列或第二个控制状态所有者。
+HCC 对「下一 PWM 周期」的表述需明确为 Target 声明的下一有效更新边界；本配置中它
+间隔两个载波周期。Runtime 的预测参数必须与该具体时序核对，不沿用旧值，也不把
+定时器重复计数、UIF 或 slot 实现泄漏给可移植控制算法。
+三个 Keil Target 共享静态 MCU 配置，必须检查全部构建与受影响诊断；旧工具不得按新镜像
+继续套用 50 µs 采样、原截止或原二进制布局。历史证据仍归原镜像，不改写为新版本通过。
+
+离线模型重点覆盖首次相位、100 µs 采样、第二峰抑制、同一 UEV 三相装载、slot/epoch
+失配、UP 迟到、ADC 超时、跨周期别名、UDIS 截止及 Start/Stop/Trip 交错。
+候选稳定后只做受影响的无功率时序验收：频率、相位、完整最慢控制路径和截止失败关断；
+不重跑无关的全部历史台架流程，也不以构建或模型成功替代实物时序通过。
+
+SSI 接收及 OVR 后收尾仍是独立未解决项：在高优先级 ADC 尾部启动 RX-only IT，可能在
+SPI 获得服务前溢出。降低采样频率不能消除单次接收的这个风险；正式 RUN 许可冻结前必须
+完成有界接收和错误清理的针对性验证。当前未因此增加带电操作或宣称闭环预算通过。
+
+## 既有实现：固定时序与截止
 
 TIM1 与 CPU 同为 170 MHz，PSC=0、ARR=4250、RCR=0，中心对齐模式 1。
 完整 PWM 周期 50 us，峰值和谷底各一次 update；CH4 为 PWM2、CCR4=4240，
