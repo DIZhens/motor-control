@@ -1095,7 +1095,7 @@ static void run_current_hold(const PhaseCurrentObservation *current, uint32_t in
         return;
     }
     s_current_hold_last_sample = current->observation_time;
-    if (!isfinite(peak) || peak >= OPEN_LOOP_NOMINAL_CURRENT_TRIP_A) {
+    if (!isfinite(peak) || peak >= (s_current_survey_active ? CURRENT_SURVEY_NOMINAL_TRIP_A : OPEN_LOOP_NOMINAL_CURRENT_TRIP_A)) {
         stop_operation(TARGET_VALIDATION_RESULT_NOMINAL_CURRENT);
         return;
     }
@@ -1149,7 +1149,7 @@ static void run_current_hold(const PhaseCurrentObservation *current, uint32_t in
     vbeta = output.applied_vd_v * s_current_hold.stator_sine + output.applied_vq_v * s_current_hold.stator_cosine;
     voltage = sqrtf(output.applied_vd_v * output.applied_vd_v
         + output.applied_vq_v * output.applied_vq_v);
-    if (!output.valid || !isfinite(voltage) || voltage > 0.40001f) {
+    if (!output.valid || !isfinite(voltage) || voltage > (s_current_survey_active ? CURRENT_SURVEY_MAX_VOLTAGE_V : 0.4f) + 0.00001f) {
         stop_operation(TARGET_VALIDATION_RESULT_OPEN_LOOP_REJECTED);
         return;
     }

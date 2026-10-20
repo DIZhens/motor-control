@@ -101,7 +101,8 @@ def read_result(session, tag):
     return result
 
 
-def validate_result(observed, session, stats, *, counts=(30002, 30001, 5000), references=None):
+def validate_result(observed, session, stats, *, counts=(30002, 30001, 5000), references=None,
+                    voltage_limit_v=0.4, current_limit_a=0.25, tracking_limits=(0.01, 0.03)):
     require(not observed["moe"] and not observed["halted"] and observed["stop_reason"] == observed["result"] == 1,
         "电流环未正常完成并实际关断")
     require(all(math.isfinite(observed[n]) for n, fmt in FIELDS.items() if fmt == "f"), "电流环结果包含坏数值")
@@ -111,17 +112,18 @@ def validate_result(observed, session, stats, *, counts=(30002, 30001, 5000), re
     require(observed["sample_count"] == counts[0] and observed["enabled_samples"] == counts[1]
         and observed["window_samples"] == counts[2]
         and 0 <= observed["voltage_limited_samples"] < counts[1] - 1
-        and 0 <= observed["max_voltage_v"] <= 0.40001
-        and 0 <= observed["peak_abs_current_a"] < 0.25
+        and 0 <= observed["max_voltage_v"] <= voltage_limit_v + 0.00001
+        and 0 <= observed["peak_abs_current_a"] < current_limit_a
         and 0 <= observed["peak_tracking_error_a"] <= 0.6
-        and abs(observed["mean_alpha_a"]) <= 0.3 and abs(observed["mean_beta_a"]) <= 0.3
+        and abs(observed["mean_alpha_a"]) <= current_limit_a + 0.05 and abs(observed["mean_beta_a"]) <= current_limit_a + 0.05
         and math.hypot(observed["mean_voltage_alpha_v"], observed["mean_voltage_beta_v"])
             <= observed["max_voltage_v"]+0.00001
         and 0.1 <= observed["min_duty"] <= observed["max_duty"] <= 0.9, "电流环窗口、限幅或计数异常")
     error = math.hypot(observed["mean_alpha_a"]-observed["alpha_reference_a"],
         observed["mean_beta_a"]-observed["beta_reference_a"])
     return {"mean_vector_error_nominal_a": error,
-        "tracking_screen_passed": error <= 0.01 and observed["peak_tracking_error_a"] <= 0.03,
+        "tracking_screen_passed": error <= tracking_limits[0] and observed["peak_tracking_error_a"] <= tracking_limits[1],
+        "mean_error_limit_nominal_a": tracking_limits[0], "peak_error_limit_nominal_a": tracking_limits[1],
         "current_gain_accuracy_confirmed": False, "rotor_foc_qualified": False}
 
 

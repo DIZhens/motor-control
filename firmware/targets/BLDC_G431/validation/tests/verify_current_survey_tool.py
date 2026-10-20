@@ -23,7 +23,7 @@ class FakeSession(hold_base.FakeSession):
 
     def __init__(self, output):
         super().__init__(output)
-        self.payload_parameters = survey.parameters(0.06)
+        self.payload_parameters = survey.parameters(0.4)
         self.survey_layout = {"angle_survey":0x20000700,"windows_offset":24,"window_size":48,
             **{"window_"+k:v for k,v in angle_base.WINDOW_OFFSETS.items()}}
         self.layout = dict(self.layout, config=0x20000500)
@@ -39,7 +39,7 @@ class FakeSession(hold_base.FakeSession):
             stats = loop.current.decode_capture(self.raw_capture, base.CURRENT_LAYOUT, loop.common.word(self.raw_capture, 8))
             values = [6, self.last_sequence, 0, 1, 50002, 50001, 7500, 0,
                 self.payload_parameters[0], 0, stats["phase_b.mean_a"], stats["phase_c.mean_a"],
-                self.payload_parameters[0], 0, 0.08, 0.3, 0.48, 0.52, 0.2, 0, 0.002]
+                self.payload_parameters[0], 0, self.payload_parameters[0]+0.02, 1.4, 0.40, 0.60, 1.2, 0, 0.002]
             self.hold_result = struct.pack("<8I13f", *values)
             value = angle_base.observation((0.98, (0.98 + 1/7) % 1, 0.98))
             value.update(request_sequence=self.last_sequence, voltage_v=self.payload_parameters[0], excursion_turns=1.0)
@@ -60,7 +60,7 @@ class Tests(unittest.TestCase):
 
     def test_bad_current_or_missing_confirmation_never_connects(self):
         for args in [["--current-reference-a", "0"], ["--current-reference-a", "-0.06"],
-                     ["--current-reference-a", "0.081"], ["--current-reference-a", "nan"],
+                     ["--current-reference-a", "0.501"], ["--current-reference-a", "nan"],
                      ["--action", "zero", "--prepared", "x"],
                      ["--action", "execute", "--prepared", "x", "--zero-summary", "x", "--bench-confirmed", "--vbus-dmm-v", "nan"]]:
             with TemporaryDirectory() as tmp, patch.object(survey, "Session") as access:
@@ -68,7 +68,7 @@ class Tests(unittest.TestCase):
                 access.assert_not_called()
 
     def test_old_candidate_never_reads_identity(self):
-        with patch.object(loop, "load_prepared", return_value=({}, Path("x"))), patch.object(hold.Session, "__init__") as access:
+        with patch.object(loop, "load_prepared", return_value=({}, Path("x"))), patch.object(loop.Session, "__init__") as access:
             with self.assertRaises(RuntimeError): survey.Session(Path("out"), Path("old"), Path("cli"), "execute", 0.06)
             access.assert_not_called()
 
@@ -96,14 +96,30 @@ class Tests(unittest.TestCase):
             session = FakeSession(tmp); anchor = loop.zero(session, 12); session.action = "execute"
             good = survey.execute_once(session, anchor, 12, clock=base.Clock())
             for field, value in [("sample_count", 30002), ("window_samples", 5000),
-                                 ("max_voltage_v", 0.401), ("peak_abs_current_a", 0.25), ("mean_alpha_a", math.nan)]:
+                                 ("max_voltage_v", 1.801), ("peak_abs_current_a", 0.65), ("mean_alpha_a", math.nan)]:
                 bad = deepcopy(good["current_hold"]); bad[field] = value
                 with self.assertRaises(RuntimeError):
-                    hold.validate_result(bad, session, anchor["statistics"], counts=(50002, 50001, 7500), references=(session.payload_parameters[0], 0.0))
+                    hold.validate_result(bad, session, anchor["statistics"], counts=(50002, 50001, 7500), references=(session.payload_parameters[0], 0.0), voltage_limit_v=1.8, current_limit_a=0.65)
             bad = deepcopy(good["survey"]); bad["windows"][2]["mean_position_turns"] += 0.01
             self.assertFalse(survey.angle.analyze(bad)["pole_pairs_confirmed"])
             bad = deepcopy(good["current_hold"]); bad["mean_alpha_a"] = 0.03
-            self.assertFalse(hold.validate_result(bad, session, anchor["statistics"], counts=(50002, 50001, 7500), references=(session.payload_parameters[0], 0.0))["tracking_screen_passed"])
+            self.assertFalse(hold.validate_result(bad, session, anchor["statistics"], counts=(50002, 50001, 7500), references=(session.payload_parameters[0], 0.0), voltage_limit_v=1.8, current_limit_a=0.65)["tracking_screen_passed"])
+
+    def test_tracking_screen_scales_before_hardware_trial(self):
+        self.assertEqual(survey.tracking_limits(0.06), (0.01,0.03))
+        self.assertAlmostEqual(survey.tracking_limits(0.4)[0],0.02)
+        self.assertAlmostEqual(survey.tracking_limits(0.4)[1],0.05)
+        with TemporaryDirectory() as tmp:
+            session=FakeSession(tmp);anchor=loop.zero(session,12);session.action="execute"
+            report=survey.execute_once(session,anchor,12,clock=base.Clock())
+            good=deepcopy(report["current_hold"]);good["mean_alpha_a"]=0.382;good["peak_tracking_error_a"]=0.048
+            def checked(v):
+                return hold.validate_result(v,session,anchor["statistics"],counts=(50002,50001,7500),
+                    references=(session.payload_parameters[0],0.0),voltage_limit_v=1.8,current_limit_a=0.65,
+                    tracking_limits=survey.tracking_limits(session.payload_parameters[0]))["tracking_screen_passed"]
+            self.assertTrue(checked(good))
+            self.assertFalse(checked(good|{"mean_alpha_a":0.379}))
+            self.assertFalse(checked(good|{"peak_tracking_error_a":0.051}))
 
     def test_failure_only_one_safe_off(self):
         with TemporaryDirectory() as tmp:

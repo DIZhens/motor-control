@@ -904,7 +904,7 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
         assert m.survey(current=True)["request"]==m.sequence
         return m
 
-    for payload,reason in [({"current":0.0},4),({"current":-0.06},4),({"current":0.081},4),
+    for payload,reason in [({"current":0.0},4),({"current":-0.06},4),({"current":0.501},4),
         ({"current":math.nan},4),({"excursion":0.25},4),({"excursion":math.nan},4),
         ({"key":0},3),({"duration":3500000},4),({"duty":0.4},4)]:
         m=zero_ready();m.current_survey_submit(**payload);m.tick(3)
@@ -916,34 +916,36 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     assert m.status("result")==19 and not m.moe()
     passed("current survey needs actual same-boot zero")
 
-    m=current_survey_powered();ia=ibeta=0.0
-    decay=math.exp(-3.1*0.0001/0.002);pending=[(0.5,0.5,0.5)]*2
-    capture=m.capture();moving_error=0.0
-    for i in range(1,50001):
-        applied=pending.pop(0);va,vb,vc=[12.0*(v-sum(applied)/3) for v in applied]
-        ia=decay*ia+(1-decay)*((2*va-vb-vc)/3)/3.1
-        ibeta=decay*ibeta+(1-decay)*(vb-vc)/math.sqrt(3)/3.1
-        b=(-ia+math.sqrt(3)*ibeta)/2;c=(-ia-math.sqrt(3)*ibeta)/2
-        elapsed=2*i
-        phase=(elapsed-30000)/10000 if 30000<=elapsed<40000 else (70000-elapsed)/10000 if 60000<=elapsed<70000 else 1.0 if 40000<=elapsed<60000 else 0.0
-        scale=elapsed/10000 if elapsed<10000 else (100000-elapsed)/10000 if elapsed>=90000 else 1.0
-        m.write("model_current_b_a",-0.012-b,"f");m.write("model_current_c_a",-0.001-c,"f")
-        m.write("model_position_turns",(0.98+phase/7)%1,"f");m.tick()
-        pending.append(struct.unpack("<3f",m.cpu.mem_read(symbols["model_last_duty"],12)))
-        if 30000<=elapsed<40000 or 60000<=elapsed<70000:
-            moving_error=max(moving_error,math.hypot(ia-0.06*math.cos(math.tau*phase),ibeta-0.06*math.sin(math.tau*phase)))
-    r=m.hold();sr=m.survey(current=True)
-    assert r["result"]==1 and r["samples"]==50002 and r["enabled_samples"]==50001 and r["window_samples"]==7500,r
-    assert abs(r["mean_alpha"]-0.06)<0.001 and abs(r["mean_beta"])<0.001 and r["peak_error"]<0.005,r
-    assert moving_error<0.005 and r["max_voltage"]<=0.40001,(moving_error,r)
-    assert sr["result"]==1 and sr["stable_mask"]==7 and [w["count"] for w in sr["windows"]]==[250]*3,sr
-    assert abs(((sr["windows"][1]["mean"]-sr["windows"][0]["mean"]+0.5)%1)-0.5-1/7)<1e-5,sr
-    assert m.word("model_stage_calls")==50001 and m.word("model_enable_calls")==1 and not m.moe()
-    assert m.capture()==capture
-    m.tick(20);assert m.survey(current=True)==sr and m.hold()==r
-    passed("current survey drives independent delayed RL plant through full stator-frame rotation and three unique SSI windows")
+    for amplitude in [0.06,0.4]:
+        m=current_survey_powered(current=amplitude);ia=ibeta=0.0
+        decay=math.exp(-3.1*0.0001/0.002);pending=[(0.5,0.5,0.5)]*2
+        capture=m.capture();moving_error=0.0
+        for i in range(1,50001):
+            applied=pending.pop(0);va,vb,vc=[12.0*(v-sum(applied)/3) for v in applied]
+            ia=decay*ia+(1-decay)*((2*va-vb-vc)/3)/3.1
+            ibeta=decay*ibeta+(1-decay)*(vb-vc)/math.sqrt(3)/3.1
+            b=(-ia+math.sqrt(3)*ibeta)/2;c=(-ia-math.sqrt(3)*ibeta)/2
+            elapsed=2*i
+            phase=(elapsed-30000)/10000 if 30000<=elapsed<40000 else (70000-elapsed)/10000 if 60000<=elapsed<70000 else 1.0 if 40000<=elapsed<60000 else 0.0
+            scale=elapsed/10000 if elapsed<10000 else (100000-elapsed)/10000 if elapsed>=90000 else 1.0
+            m.write("model_current_b_a",-0.012-b,"f");m.write("model_current_c_a",-0.001-c,"f")
+            m.write("model_position_turns",(0.98+phase/7)%1,"f");m.tick()
+            pending.append(struct.unpack("<3f",m.cpu.mem_read(symbols["model_last_duty"],12)))
+            if 30000<=elapsed<40000 or 60000<=elapsed<70000:
+                moving_error=max(moving_error,math.hypot(ia-amplitude*math.cos(math.tau*phase),ibeta-amplitude*math.sin(math.tau*phase)))
+        r=m.hold();sr=m.survey(current=True)
+        assert r["result"]==1 and r["samples"]==50002 and r["enabled_samples"]==50001 and r["window_samples"]==7500,r
+        assert abs(r["mean_alpha"]-amplitude)<0.01 and abs(r["mean_beta"])<0.001 and r["peak_error"]<0.03,r
+        assert moving_error<amplitude/12 and r["max_voltage"]<=1.80001 and r["limited_samples"]==0,(moving_error,r)
+        assert sr["result"]==1 and sr["stable_mask"]==7 and [w["count"] for w in sr["windows"]]==[250]*3,sr
+        assert abs(((sr["windows"][1]["mean"]-sr["windows"][0]["mean"]+0.5)%1)-0.5-1/7)<1e-5,sr
+        assert m.word("model_stage_calls")==50001 and m.word("model_enable_calls")==1 and not m.moe()
+        assert m.capture()==capture
+        m.tick(20);assert m.survey(current=True)==sr and m.hold()==r
+        passed("current survey drives independent delayed RL plant through full stator-frame rotation and three unique SSI windows: "+str(amplitude))
+        print("MODEL_METRICS",amplitude,r["mean_alpha"],r["mean_beta"],r["peak_error"],moving_error,r["max_voltage"])
 
-    for field,value,fmt,reason in [("model_position_valid",0,"I",20),("model_current_b_a",0.3,"f",22),
+    for field,value,fmt,reason in [("model_position_valid",0,"I",20),("model_current_b_a",0.7,"f",22),
         ("model_bus_voltage",9.0,"f",7),("model_step_ticks",3,"I",6),("model_stage_ok",0,"I",8)]:
         m=current_survey_powered();m.write(field,value,fmt);m.tick()
         assert not m.moe() and m.survey(current=True)["result"]==reason and m.survey(current=True)["stable_mask"]==0
@@ -964,6 +966,18 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     assert not m.moe() and m.word("g_target_validation_stop_reason")==18
     m.tick();assert m.survey(current=True)["stable_mask"]==0
     passed("current survey independent total deadline is failure")
+
+    for bus in [10.0,14.0]:
+        m=current_survey_powered(current=0.5);m.write("model_bus_voltage",bus,"f");m.tick(10000)
+        m.submit(1);m.tick();r=m.hold()
+        assert not m.moe() and r["result"]==2 and 1.2<r["max_voltage"]<=1.8*bus/14+0.00001,r
+        assert r["limited_samples"]>0 if bus==10.0 else r["max_voltage"]>1.7,r
+        passed("current-survey voltage/integral saturation remains bounded and Stop withdraws output: "+str(bus))
+    m=current_survey_powered(current=0.4);m.write("model_current_b_a",0.6,"f");m.tick()
+    assert m.moe() and m.word("g_target_validation_stop_reason")==0
+    m.write("model_current_b_a",0.7,"f");m.tick()
+    assert not m.moe() and m.survey(current=True)["result"]==22
+    passed("current survey uses its 0.65A threshold while old hold retains 0.25A")
 
 print(f"PASS: {len(cases)} ARM-executed G431 validation cases.")
 print("Fake HCC/time only; does not prove electrical behavior, interrupt latency or hardware L1/L2.")

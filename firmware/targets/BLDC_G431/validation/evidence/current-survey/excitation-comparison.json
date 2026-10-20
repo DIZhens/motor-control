@@ -1,0 +1,272 @@
+{
+  "schema_version": 1,
+  "result": "EXCITATION_COMPARISON_CURRENT_AND_MAPPING_SCREEN_PASSED_OUTPUT_OFF",
+  "parent_commit": "a551a8e96dfc15a5c4b01e8884414065d3af996e",
+  "target": "BLDC_control V1",
+  "hex_sha256": "e76759044f79aefcd66bf54ce59fa7431a668cfa4c5a5d8077d1ad5cf9eba660",
+  "artifact_sha256": {
+    "BLDC_control V1.hex": "e76759044f79aefcd66bf54ce59fa7431a668cfa4c5a5d8077d1ad5cf9eba660",
+    "BLDC_control V1.axf": "54d33dcb6c3d972b07c5e803b010fc5d87504da069d42e549fb49e5fbc006982",
+    "BLDC_control V1.map": "16713736319bf9a2f58b03bf95aaf64128e3278cdf1e65efb2a1ff6775364da3"
+  },
+  "loaded_flash_bytes": 49076,
+  "change_scope": "\u4ec5\u547d\u4ee418\u6269\u5927\u5b9a\u5411\u7535\u6d41\u3001\u79ef\u5206\u3001\u7535\u538b\u53ca\u8f85\u52a9\u64a4\u9500\u5305\u7edc\uff1b\u4fdd\u7559\u65e2\u6709PI\u589e\u76ca\u548c\u4e94\u79d2\u8f68\u8ff9\uff0c\u547d\u4ee415/16/17\u3001\u65f6\u5e8f\u53ca\u786c\u4ef6\u4fdd\u62a4\u914d\u7f6e\u4e0d\u53d8\u3002",
+  "verification": {
+    "bench_full_rebuild_errors": 0,
+    "bench_full_rebuild_warnings": 0,
+    "actual_bench_arm_cases": 248,
+    "host_tests": {
+      "current_survey": 8,
+      "current_hold": 7,
+      "angle_survey": 14,
+      "open_loop": 19
+    },
+    "independent_delayed_rl_plant": true,
+    "model_current_reference_a": 0.4,
+    "model_mean_alpha_a": 0.3943490982055664,
+    "model_hold_peak_error_a": 0.02309545874595642,
+    "model_moving_peak_error_a": 0.011928215006931588,
+    "model_max_voltage_v": 1.2398751974105835,
+    "model_position_is_prescribed_not_mechanical_plant": true,
+    "log_sha256": {
+      "keil-legacy.log": "e8f548079368601b32134295b69adad7c9595e1624877032ab16519c6cfc37b6",
+      "arm-bench-final.log": "8839e3e09c244c8aa9b8801c48aa12660ee703e893925ef69282b526cc36dbcf",
+      "verify_current_survey_tool-passed.log": "6009f5bd5379ff577fa68a128c0da9e5f87c069a41e18231dd7b24a5dce579a2",
+      "verify_current_hold_tool-passed.log": "7e6f6f70a34ddabae041206cb4e35b0a1b403c75072dd6c1e5f3b3b1453fea03",
+      "verify_angle_survey_tool-passed.log": "31e7bf076ac3ddd030d4a06ab1c9156e541f648950c6567f97c73c5e3d6d885d",
+      "verify_open_loop_tool-passed.log": "53288a459ff1e0cc96c1d448dd8584ef01c525df41aec1b33e8cf36663955bb3"
+    }
+  },
+  "installation": {
+    "operator_logic_confirmed": true,
+    "previous_image_readback_match": true,
+    "native_download_verified": true,
+    "independent_new_flash_match": true,
+    "default_six_low_moe_zero": true,
+    "logic_callback_per_ms": 10.012875536480687,
+    "logic_command_count": 0,
+    "logic_enable_count": 0
+  },
+  "operator": {
+    "before": "\u6309\u6b64\u53c2\u6570\u4f9b\u7535\u6b63\u5e38",
+    "after": "\u65e0\u5f02\u5e38",
+    "supply_v": 12.0,
+    "supply_current_limit_a": 0.2,
+    "new_numeric_measurements_reported": false,
+    "vbus_dmm_reference_v": 12.12,
+    "vbus_dmm_reference_origin": "\u6cbf\u7528\u6b64\u524d\u5df2\u62a5\u544a\u503c\uff0c\u4e0d\u662f\u672c\u8f6e\u65b0\u589e\u4eba\u5de5\u8bfb\u6570\u3002",
+    "supply_mode_separately_reported_after_trial": false,
+    "preparation_s": 0,
+    "no_fixed_countdown": true
+  },
+  "trial": {
+    "zero_request_sequence": 1,
+    "zero_sample_count": 4096,
+    "power_request_sequence": 2,
+    "command": 18,
+    "trajectory_s": 5,
+    "independent_deadline_s": 5.5,
+    "current_reference_nominal_a": 0.4,
+    "limits": {
+      "reference_current_max_a": 0.5,
+      "voltage_request_upper_bound_v": 1.8,
+      "nominal_phase_trip_a": 0.65,
+      "integral_limit_v": 1.5
+    },
+    "supply_current_limit_a": 0.2,
+    "current_hold": {
+      "coherent": true,
+      "stop_reason": 1,
+      "moe": false,
+      "halted": false,
+      "sequence": 4,
+      "request_sequence": 2,
+      "active": 0,
+      "result": 1,
+      "sample_count": 50002,
+      "enabled_samples": 50001,
+      "window_samples": 7500,
+      "voltage_limited_samples": 0,
+      "alpha_reference_a": 0.4000000059604645,
+      "beta_reference_a": 0.0,
+      "offset_b_a": -0.012258630245923996,
+      "offset_c_a": -0.000277851358987391,
+      "mean_alpha_a": 0.39376237988471985,
+      "mean_beta_a": -0.00010900133929681033,
+      "peak_abs_current_a": 0.42073607444763184,
+      "max_voltage_v": 1.2719930410385132,
+      "min_duty": 0.4080771207809448,
+      "max_duty": 0.5919228792190552,
+      "mean_voltage_alpha_v": 1.2358465194702148,
+      "mean_voltage_beta_v": -0.004529767204076052,
+      "peak_tracking_error_a": 0.049068402498960495
+    },
+    "tracking": {
+      "mean_vector_error_nominal_a": 0.006238578391971831,
+      "tracking_screen_passed": true,
+      "mean_error_limit_nominal_a": 0.020000000298023225,
+      "peak_error_limit_nominal_a": 0.05000000074505806,
+      "current_gain_accuracy_confirmed": false,
+      "rotor_foc_qualified": false
+    },
+    "survey": {
+      "sequence": 4,
+      "request_sequence": 2,
+      "result": 1,
+      "stable_window_mask": 7,
+      "current_reference_a": 0.4000000059604645,
+      "excursion_turns": 1.0,
+      "windows": [
+        {
+          "sample_count": 250,
+          "first_position_time": 1641020,
+          "last_position_time": 1646000,
+          "mean_position_turns": 0.8601586818695068,
+          "span_turns": 6.103515625e-05,
+          "first_position_turns": 0.860107421875,
+          "last_position_turns": 0.86016845703125,
+          "mean_nominal_b_a": 0.19019562005996704,
+          "mean_nominal_c_a": 0.19226735830307007
+        },
+        {
+          "sample_count": 250,
+          "first_position_time": 1671020,
+          "last_position_time": 1676000,
+          "mean_position_turns": 0.002969482447952032,
+          "span_turns": 6.103515625e-05,
+          "first_position_turns": 0.00299072265625,
+          "last_position_turns": 0.0029296875,
+          "mean_nominal_b_a": 0.19930945336818695,
+          "mean_nominal_c_a": 0.20127606391906738
+        },
+        {
+          "sample_count": 250,
+          "first_position_time": 1701020,
+          "last_position_time": 1706000,
+          "mean_position_turns": 0.86163330078125,
+          "span_turns": 0.0,
+          "first_position_turns": 0.86163330078125,
+          "last_position_turns": 0.86163330078125,
+          "mean_nominal_b_a": 0.20115239918231964,
+          "mean_nominal_c_a": 0.2008141577243805
+        }
+      ]
+    },
+    "mapping": {
+      "nominal_pole_pairs": 7,
+      "encoder_direction_candidate": 1,
+      "direction_source": "observed_outward_delta",
+      "outward_mechanical_turns": 0.1428108005784452,
+      "backward_mechanical_turns": -0.14133618166670203,
+      "return_error_mechanical_turns": 0.001474618911743164,
+      "offset_samples_electrical_turns": [
+        0.02111077308654785,
+        0.020786377135664225,
+        0.03143310546875
+      ],
+      "offset_candidate_electrical_turns": 0.024443418563654024,
+      "max_offset_residual_electrical_turns": 0.006989686905095938,
+      "mapping_candidate_consistent": true,
+      "pole_pairs_confirmed": true,
+      "full_electrical_turn_requested": true,
+      "pole_pairs_estimates_out_and_back": [
+        7.002271508524353,
+        7.075329106867998
+      ],
+      "pole_pairs_tolerance": 0.25,
+      "electrical_calibration_confirmed": false,
+      "calibration_applied": false,
+      "limits": "\u6781\u5bf9\u6570\u7ed3\u8bba\u4ec5\u6765\u81ea\u5b8c\u6574\u7535\u89d2\u5708\u5f80\u8fd4\u6bd4\u4f8b\uff1b\u96f6\u4f4d\u4ecd\u4e3a\u5019\u9009\uff0c\u7cbe\u5ea6\u3001\u9759\u6469\u64e6\u53ca\u8df3\u6781\u5f71\u54cd\u672a\u4f5c\u5168\u533a\u95f4\u9a8c\u6536\u3002"
+    },
+    "combined_screen_passed": true,
+    "derived_window_current_vectors": [
+      {
+        "alpha_nominal_a": 0.3824629783630371,
+        "beta_nominal_a": 0.0011961186323459752,
+        "magnitude_nominal_a": 0.3824648487352892,
+        "stator_angle_electrical_degrees": 0.17918682297835836
+      },
+      {
+        "alpha_nominal_a": 0.40058551728725433,
+        "beta_nominal_a": 0.0011354231309419758,
+        "magnitude_nominal_a": 0.4005871264107016,
+        "stator_angle_electrical_degrees": 0.1623992289872869
+      },
+      {
+        "alpha_nominal_a": 0.40196655690670013,
+        "beta_nominal_a": -0.00019528379679225856,
+        "magnitude_nominal_a": 0.4019666043431826,
+        "stator_angle_electrical_degrees": -0.02783549101525217
+      }
+    ]
+  },
+  "final": {
+    "stage_attempts": 50001,
+    "stage_successes": 50001,
+    "enable_attempts": 1,
+    "enable_successes": 1,
+    "moe": false,
+    "high_inputs": 0,
+    "low_inputs": 0,
+    "guard_running": false,
+    "trip.causes": 0,
+    "invalid_current_count": 0,
+    "bus_v": 11.933971405029297,
+    "position_valid": true,
+    "callback_max_cycles": 6707
+  },
+  "consumer_max_observed_us": 39.45294117647059,
+  "consumer_is_full_adc_irq": false,
+  "consumer_is_wcet_qualified": false,
+  "comparison": {
+    "prior_60ma_hex_sha256": "c23c612dd7a5629e4f742b2b3bb861b29bb7c5addda69a5c05cf8c4914fc98aa",
+    "prior_60ma_return_mechanical_deg": 7.145061492919922,
+    "this_return_mechanical_deg": 0.5308628082275391,
+    "this_outward_mechanical_deg": 51.41188820824027,
+    "this_backward_mechanical_deg": -50.88102540001273,
+    "this_offset_max_residual_electrical_deg": 2.5162872858345375,
+    "this_offset_candidate_electrical_deg": 8.79963068291545,
+    "mapping_gates_unchanged": true,
+    "tracking_gates_selected_before_trial": true,
+    "interpretation": "\u63d0\u9ad8\u52b1\u78c1\u540e\uff0c\u539f\u4f4d\u7f6e\u3001\u56de\u7a0b\u3001offset\u53ca\u53cc\u5411\u6781\u5bf9\u6570\u7b5b\u9009\u5747\u901a\u8fc7\uff1b\u652f\u6301\u6b64\u524d\u52b1\u78c1\u4e0d\u8db3\u662f\u91cd\u8981\u5f71\u54cd\u56e0\u7d20\uff0c\u4e0d\u80fd\u552f\u4e00\u786e\u5b9a\u9759\u6469\u64e6\u6216\u9f7f\u69fd\u7b49\u673a\u68b0\u6839\u56e0\u3002"
+  },
+  "electrical_calibration_confirmed": false,
+  "current_gain_accuracy_confirmed": false,
+  "calibration_applied": false,
+  "foc_qualified": false,
+  "automatic_retry": false,
+  "limits": [
+    "\u7535\u6d41\u4e0e\u64a4\u9500\u95e8\u9650\u4f7f\u7528\u540d\u4e49\u589e\u76ca\uff1b\u95ed\u73af\u81ea\u6d3d\u4e0d\u80fd\u66ff\u4ee3\u72ec\u7acb\u7edd\u5bf9\u7535\u6d41\u7cbe\u5ea6\u3002",
+    "0.4A\u4fdd\u6301\u7a97\u53e3\u8bef\u5dee\u5cf0\u503c49.068mA\u63a5\u8fd1\u9884\u8bbe50mA\u529f\u80fd\u521d\u7b5b\uff0c\u4e0d\u80fd\u636e\u6b64\u5ba3\u79f0\u52a8\u6001\u5e26\u5bbd\u6216\u9ad8\u7cbe\u5ea6\u7535\u6d41\u63a7\u5236\u5df2\u9a8c\u6536\u3002",
+    "\u4e09\u4e2aSSI\u7a97\u53e3\u7a33\u5b9a\u4e14\u672c\u8f6e\u5b8c\u6574\u7535\u89d2\u5708\u6620\u5c04\u521d\u7b5b\u901a\u8fc7\uff1b\u96f6\u4f4d\u4ecd\u4e3a\u5019\u9009\uff0c\u672a\u4f5c\u673a\u68b0\u5168\u5708\u7cbe\u5ea6\u6216\u6301\u4e45\u6807\u5b9a\u9a8c\u6536\u3002",
+    "\u672a\u8bb0\u5f55\u5b9e\u7269\u79fb\u52a8\u6bb5\u9010\u62cd\u8ddf\u8e2a\u8bef\u5dee\uff0cR/L\u66ff\u8eab\u4f4d\u7f6e\u662f\u9884\u8bbe\u8f68\u8ff9\uff0c\u4e0d\u80fd\u4ee3\u66ff\u673a\u68b0\u6a21\u578b\u3002",
+    "\u4ec5\u4e00\u6b21\u4e94\u79d2\u5b9a\u5411\u5305\u7edc\uff0c\u4e0d\u4ee3\u8868\u8fde\u7eed\u989d\u5b9a\u3001\u8f6c\u5b50FOC\u3001\u901f\u5ea6\u95ed\u73af\u6216\u5b8c\u6574IRQ/WCET\u9a8c\u6536\u3002"
+  ],
+  "next_step": "\u590d\u7528\u5df2\u9a8c\u8bc1\u76f8\u7535\u6d41\u65b9\u5411\u548c7\u6781\u5bf9/\u6b63\u65b9\u5411/\u96f6\u4f4d\u5019\u9009\uff0c\u8f6c\u5165\u6709\u9650\u8f6c\u5b50DQ\u7535\u6d41\u73af\u53ca\u5c0f\u8f6c\u77e9\u53cc\u5411\u9a8c\u8bc1\uff1b\u4e0d\u91cd\u590d\u65e7\u5e95\u5c42\u6ce2\u5f62\uff0c\u4e0d\u81ea\u52a8\u5f00\u653e\u6b63\u5f0fRUN\u6216\u6269\u5927\u529f\u7387\u5305\u7edc\u3002",
+  "local_evidence": "validation/local-evidence/20261021-alignment-excitation-01",
+  "raw_sha256": {
+    "trial-plan.json": "063c5f938d599514e3e2db3b262824f8b63ec5b5bce0ed160b500d63bf03dc36",
+    "candidate/prepared.json": "309863bf86b6fef1eab06cf69ad815bc292b715eabd0b7e1b35389f06769fbdf",
+    "operator-logic.json": "01e05cf85013b55876faf4a1b3181c51b18c32cbe94a94a64c228cc9ecd446f8",
+    "logic-before/summary.json": "7380925ac982d02fbdb19d08566fffb2472d98f93e581f37cd498c1d4b7f9c01",
+    "install-request.json": "36bfd51cfd2239c10cf4a58f3ffe2bb40d92463f6038cef34709b3aea228db3b",
+    "install.log": "6402f38cd54addfc0db11c9ab0d2e01986797642cce63411b989e4c0e317bda3",
+    "logic-installed/identity.json": "4aa33cd97c8ed395ce161ae54e39cf4133a2f25eb92af79a4e6fe4c35c149692",
+    "logic-installed/summary.json": "ddec0f4f2ae532085d2ff03394195d54bc70b36bf0793446e828644cfeff8aae",
+    "operator-power.json": "f582cde3c5ee64ec3ac5eb3fdae190d2ff3a674d63f70219726d057646b86c8f",
+    "zero-01/summary.json": "8af8bef46c2f1de69ff425534cc1d3aa10e2c791a0c9cb1534f124b156b90782",
+    "survey-01/summary.json": "e80b73a4c31c176e9f354d11999c9771a91fbeb6452df50d02162d77629ca9fc",
+    "operator-after.json": "9c45ad2a0f95bb66e7f22b80d7e0402baa3adfe826ab586814b41b1babc60511",
+    "source-manifest.json": "c7abd73f17f2cd260d77e858a8f350809533d6ba63f540440056f8cca59b94a0"
+  },
+  "changed_source_sha256": {
+    "validation/current_hold.c": "78809de45a4c5a9cf06fdad290477234a772de8d7acdb1e21fd5239b257b58b7",
+    "validation/current_hold.h": "736dbf795a17c7e580529798073e05ed2b619dda25d50ae2b4e20006429eb2de",
+    "validation/target_validation.c": "18c2d223f9fb67c075e2575fbdc2ca841cb0409c31d9ff1f0c8b330b0394c9a1",
+    "validation/tools/current_hold_once.py": "b486968ffadddfe32c63a90121658fb62b0838b377ece8fcd8edf005e0433dde",
+    "validation/tools/current_survey_once.py": "3ee31fe12cdda3a88089890200b4c0bfc38b2693487d3444ede36eb3cb482a0f",
+    "validation/tests/verify_current_survey_tool.py": "33b03eb7da0b737b42962bc33f359e20344ff2909c91756ca8e4c9f581c4e619",
+    "validation/tests/verify_model.py": "9c4ffc0bfb59666477c9310dff2b8fd2f2c4d53e5c2b29bc2205dce9d14034cb",
+    "validation/CURRENT_HOLD.md": "c36f3d2f051ae5ab54fef0d7bb273766abe0a14ceca17d5b2d5352badfad20a6"
+  }
+}

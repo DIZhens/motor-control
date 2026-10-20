@@ -8,6 +8,11 @@
 
 #define CURRENT_HOLD_DURATION_US 3500000U
 #define CURRENT_SURVEY_DURATION_US 5500000U
+/* 命令18的定向包络；命令17仍沿用原低幅值限制。 */
+#define CURRENT_SURVEY_MAX_CURRENT_A 0.5f
+#define CURRENT_SURVEY_MAX_VOLTAGE_V 1.8f
+#define CURRENT_SURVEY_NOMINAL_TRIP_A 0.65f
+#define CURRENT_SURVEY_INTEGRAL_LIMIT_V 1.5f
 
 /* 仅验证入口的完整αβ目标；不安装电机标定，也不授予正式Motor RUN。 */
 typedef struct {
@@ -54,7 +59,7 @@ typedef struct {
 
 bool current_hold_init(CurrentHold *hold, const CurrentHoldConfig *config);
 
-/* 只供命令18：0.01～0.08名义A，完整一电角圈，五秒有限轨迹。 */
+/* 只供命令18：0.01～0.5名义A，完整一电角圈，五秒有限轨迹。 */
 bool current_hold_survey_init(CurrentHold *hold, float current_reference_a);
 
 /* elapsed为实际enable之后的ControlTime，固定20 kHz单位、相邻调用2 tick。

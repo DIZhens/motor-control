@@ -9,12 +9,15 @@
 #include <stddef.h>
 #include <string.h>
 
-bool current_hold_init(CurrentHold *hold, const CurrentHoldConfig *config)
+static bool initialize(CurrentHold *hold, const CurrentHoldConfig *config, bool survey)
 {
-    /* 保守低带宽试验参数，不由尚未辨识的电机L反推整定。
-     * 允许母线上限14 V，因此ratio固定0.4/14，整个范围内请求电压不超过0.4 V。 */
+    /* PI增益保持；命令18只扩大足够用于定向的目标、积分与电压包络。
+     * ratio按允许母线上限14V换算，整个10～14V范围不超过各命令的电压上限。 */
     const CurrentControllerConfig controller = {
-        0.5f, 0.5f, 10.0f, 10.0f, 50.0f, 0.3f, 0.08f, 0.4f / 14.0f, 0.000125f
+        0.5f, 0.5f, 10.0f, 10.0f, 50.0f,
+        survey ? CURRENT_SURVEY_INTEGRAL_LIMIT_V : 0.3f,
+        survey ? CURRENT_SURVEY_MAX_CURRENT_A : 0.08f,
+        (survey ? CURRENT_SURVEY_MAX_VOLTAGE_V : 0.4f) / 14.0f, 0.000125f
     };
     CurrentHoldConfig requested = {0};
     float norm;
@@ -28,23 +31,28 @@ bool current_hold_init(CurrentHold *hold, const CurrentHoldConfig *config)
     memset(hold, 0, sizeof(*hold));
     norm = requested.alpha_reference_a * requested.alpha_reference_a
         + requested.beta_reference_a * requested.beta_reference_a;
-    if (!isfinite(norm) || norm < 0.0001f || norm > 0.08f * 0.08f
+    if (!isfinite(norm) || norm < 0.0001f || norm > controller.reference_current_limit_a * controller.reference_current_limit_a
         || !current_controller_init(&hold->controller, &controller)) {
         return false;
     }
     hold->config = requested;
     hold->configured = true;
+    hold->survey = survey;
     return true;
+}
+
+bool current_hold_init(CurrentHold *hold, const CurrentHoldConfig *config)
+{
+    return initialize(hold, config, false);
 }
 
 bool current_hold_survey_init(CurrentHold *hold, float current_reference_a)
 {
     CurrentHoldConfig config = {current_reference_a, 0.0f};
-    if (!current_hold_init(hold, &config) || current_reference_a <= 0.0f) {
+    if (!initialize(hold, &config, true) || current_reference_a <= 0.0f) {
         if (hold != NULL) { hold->configured = false; }
         return false;
     }
-    hold->survey = true;
     return true;
 }
 

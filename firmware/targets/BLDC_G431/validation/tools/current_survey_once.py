@@ -4,6 +4,7 @@ import json
 import math
 from pathlib import Path
 import re
+import struct
 import subprocess
 import time
 
@@ -11,12 +12,20 @@ import current_hold_once as hold
 import angle_survey_once as angle
 
 loop, require = hold.loop, hold.require
+LIMITS = {"reference_current_max_a":0.5,"voltage_request_upper_bound_v":1.8,
+    "nominal_phase_trip_a":0.65,"integral_limit_v":1.5}
 
 
 def parameters(current):
-    value, _ = hold.parameters(current, 0.0)
-    require(value > 0, "励磁电流须为0.01～0.08名义A的正数")
-    return value, 1.0
+    require(math.isfinite(current) and 0.01 <= current <= LIMITS["reference_current_max_a"],
+        "励磁电流须为0.01～0.5名义A的正数")
+    return struct.unpack("<f",struct.pack("<f",current))[0], 1.0
+
+
+def tracking_limits(current):
+    # 小电流沿用原噪声容限；提高励磁后按5%均值、12.5%峰值给出初步功能筛选。
+    # 不改变相电流撤销阈值，也不是绝对电流精度或带宽指标。
+    return max(0.01, 0.05 * current), max(0.03, 0.125 * current)
 
 
 def prepare(build, output, gdb, expected=None):
@@ -48,25 +57,30 @@ def prepare(build, output, gdb, expected=None):
     for name, size in [("survey_config", 8), ("angle_survey", 168)]:
         require(0x20000000 <= actual[name] < actual[name] + size <= 0x20008000, "电流往返地址越界")
         layout[name] = actual[name]
-    report.update(current_survey_schema=1, current_survey_layout=layout,
+    report.update(current_survey_schema=2, current_survey_limits=LIMITS, current_survey_layout=layout,
         current_survey_tool_sha256=loop.candidate.digest(Path(__file__)),
         angle_survey_tool_sha256=loop.candidate.digest(Path(angle.__file__)))
     loop.common.save(output / "prepared.json", report)
     return report
 
 
-class Session(hold.Session):
+class Session(loop.Session):
     power_command, power_duration_us = 18, 5_500_000
 
     def __init__(self, output, prepared, cli, action, current):
         payload = parameters(current)
         frozen, _ = loop.load_prepared(prepared)
-        require(frozen.get("current_survey_schema") == 1 and "current_survey_layout" in frozen,
-            "旧候选没有有限电流往返，拒绝连接")
+        require(frozen.get("current_survey_schema") == 2 and "current_survey_layout" in frozen,
+            "旧候选没有本版定向包络，拒绝连接")
         require(frozen["current_survey_tool_sha256"] == loop.candidate.digest(Path(__file__))
             and frozen["angle_survey_tool_sha256"] == loop.candidate.digest(Path(angle.__file__)),
             "电流往返工具已改变，请重新离线冻结")
-        super().__init__(output, prepared, cli, action, payload[0], 0.0)
+        require(frozen.get("current_survey_limits") == LIMITS
+            and frozen["current_hold_tool_sha256"] == loop.candidate.digest(Path(hold.__file__))
+            and frozen["open_loop_tool_sha256"] == loop.candidate.digest(Path(loop.__file__)),
+            "定向包络或依赖工具已改变，请重新冻结")
+        super().__init__(output, prepared, cli, action, 0.3, 1.0)
+        self.hold_layout = frozen["current_hold_layout"]
         self.survey_layout = frozen["current_survey_layout"]
         self.layout = dict(self.layout, config=self.survey_layout["survey_config"])
         self.payload_parameters = payload
@@ -89,7 +103,8 @@ def execute_once(session, anchor, vbus_dmm, clock=time.monotonic):
         raise RuntimeError("主机8秒期限到，只允许一次关断")
     session.call_timeout_s, session.deadline = 15.0, None
     tracking = hold.validate_result(observed, session, stats, counts=(50002, 50001, 7500),
-        references=(session.payload_parameters[0], 0.0))
+        references=(session.payload_parameters[0], 0.0), voltage_limit_v=LIMITS["voltage_request_upper_bound_v"],
+        current_limit_a=LIMITS["nominal_phase_trip_a"], tracking_limits=tracking_limits(session.payload_parameters[0]))
     survey = angle.read_survey(session, request, excitation_field="current_reference_a")
     mapping = angle.analyze(survey)
     _, final, updated = loop.preflight(session, "current-survey-final", vbus_dmm, stationary=False)
@@ -114,7 +129,7 @@ def main(argv=None):
     parser.add_argument("--gdb", type=Path, default=loop.common.DEFAULT_GDB)
     parser.add_argument("--cli", type=Path, default=loop.common.DEFAULT_CLI)
     parser.add_argument("--expected-hex-sha256")
-    parser.add_argument("--current-reference-a", type=float, default=0.06)
+    parser.add_argument("--current-reference-a", type=float, default=0.4)
     parser.add_argument("--vbus-dmm-v", type=float)
     parser.add_argument("--bench-confirmed", action="store_true", help=loop.BENCH_TEXT)
     args = parser.parse_args(argv)
