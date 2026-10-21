@@ -8,6 +8,7 @@
 #include "realtime_motor_io.h"
 #include "position_observation.h"
 #include "bus_observation.h"
+#include "../platform/bus_observation_internal.h"
 #include "timing_probe.h"
 #include "current_hold.h"
 
@@ -239,6 +240,26 @@ typedef struct {
     BusObservation bus;
 } TargetValidationSnapshot;
 
+/* 本启动首个功率母线失败；先关断再发布，SAFE_OFF及后续请求不覆盖。旧结果ABI保持。 */
+typedef struct {
+    uint32_t sequence, request_sequence, failure_mask, publication_available;
+    ControlTime sample_time, observation_time;
+    float voltage_v;
+    uint32_t acquisition_valid, diagnostic_available, reserved;
+    G431BusAcquisitionDiagnostic acquisition;
+} TargetValidationBusFailure;
+
+enum {
+    TARGET_BUS_FAILURE_UNAVAILABLE = 1U,
+    TARGET_BUS_FAILURE_INVALID = 2U,
+    TARGET_BUS_FAILURE_NONFINITE = 4U,
+    TARGET_BUS_FAILURE_UNDERVOLTAGE = 8U,
+    TARGET_BUS_FAILURE_OVERVOLTAGE = 16U,
+    TARGET_BUS_FAILURE_FUTURE = 32U,
+    TARGET_BUS_FAILURE_STALE = 64U
+};
+
+extern volatile TargetValidationBusFailure g_target_validation_bus_failure;
 extern volatile TargetValidationMailbox g_target_validation_request;
 extern volatile TargetValidationSnapshot g_target_validation;
 extern volatile TargetValidationCurrentCapture g_target_validation_capture;

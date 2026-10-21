@@ -17,6 +17,9 @@ uint32_t model_current_mask = PHASE_MASK_B | PHASE_MASK_C;
 float model_current_b_a;
 float model_current_c_a;
 uint32_t model_bus_valid = 1U;
+uint32_t model_bus_available = 1U;
+uint32_t model_bus_diagnostic_calls;
+uint32_t model_bus_diagnostic_while_powered;
 uint32_t model_position_valid = 1U;
 uint32_t model_position_referenced = 1U;
 uint32_t model_position_age_ticks;
@@ -223,9 +226,22 @@ bool position_observation_get_latest(PositionObservation *out)
 }
 bool bus_observation_get_latest(BusObservation *out)
 {
+    if (!model_bus_available) { return false; }
     out->observation_time = model_time - model_bus_age_ticks + model_bus_future_ticks;
     out->voltage_v = model_bus_voltage;
     out->acquisition_valid = model_bus_valid != 0U;
+    return true;
+}
+bool g431_bus_acquisition_get_diagnostic(G431BusAcquisitionDiagnostic *out)
+{
+    G431BusAcquisitionDiagnostic diagnostic = {0};
+    model_bus_diagnostic_calls++;
+    if ((TIM1->BDTR & TIM_BDTR_MOE) != 0U) { model_bus_diagnostic_while_powered++; }
+    if (!model_bus_available) { return false; }
+    diagnostic.observation_time = model_time - model_bus_age_ticks + model_bus_future_ticks;
+    diagnostic.cause = model_bus_valid ? G431_BUS_ACQUISITION_OK : G431_BUS_ACQUISITION_ADC_ERROR;
+    diagnostic.adc_error = model_bus_valid ? 0U : 2U;
+    *out = diagnostic;
     return true;
 }
 uint32_t HAL_GetTick(void) { return DWT->CYCCNT / 170000U; }

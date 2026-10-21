@@ -248,6 +248,10 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
                 "peak_current", "max_voltage", "min_duty", "max_duty", "mean_valpha", "mean_vbeta", "peak_error"]
             return dict(zip(keys, struct.unpack("<8I13f", self.cpu.mem_read(symbols["g_target_validation_current_hold"], 84))))
 
+        def bus_failure(self):
+            raw=self.cpu.mem_read(symbols['g_target_validation_bus_failure'],96)
+            return struct.unpack('<4I2Qf3IQ10I',raw)
+
         def survey(self, current=False):
             raw = self.cpu.mem_read(symbols["g_target_validation_current_survey" if current else "g_target_validation_angle_survey"], 168)
             header = dict(zip(["sequence", "request", "result", "stable_mask", "excursion", "voltage"],
@@ -1169,6 +1173,22 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     assert not m.moe() and r['result']==2 and r['speed_limited']>0 and abs(r['last_iq_ref'])<=0.100001,r
     assert r['max_voltage']<=1.80001 and r['integral_limited']>0,r
     passed('stalled-feedback fixture keeps speed Iq, current voltage and integral bounded; Stop withdraws')
+
+    for field,value,fmt,mask in [('model_bus_available',0,'I',1),('model_bus_valid',0,'I',2),
+        ('model_bus_voltage',math.nan,'f',4),('model_bus_voltage',9.9,'f',8),
+        ('model_bus_voltage',14.1,'f',16),('model_bus_future_ticks',1,'I',32),('model_bus_age_ticks',101,'I',64)]:
+        m=speed_powered();m.write(field,value,fmt);m.tick();failure=m.bus_failure()
+        assert not m.moe() and m.speed()['result']==7 and failure[0:4]==(2,2,mask,int(field!='model_bus_available')),failure
+        assert m.word('model_bus_diagnostic_calls')==1 and m.word('model_bus_diagnostic_while_powered')==0
+        saved=bytes(m.cpu.mem_read(symbols['g_target_validation_bus_failure'],96))
+        m.write(field,12.0 if field=='model_bus_voltage' else (1 if field in ['model_bus_valid','model_bus_available'] else 0),fmt)
+        m.submit(1);m.tick(20)
+        assert bytes(m.cpu.mem_read(symbols['g_target_validation_bus_failure'],96))==saved
+        passed('first bus failure is latched only after safe-off and survives later publications/Stop: '+field+str(mask))
+
+    m=speed_powered();m.submit(20);m.tick();assert m.status('result')==5
+    m.write('model_bus_voltage',14.1,'f');m.tick();assert m.bus_failure()[1]==2
+    passed('bus failure belongs to active request despite a newer busy mailbox request')
 
 print(f"PASS: {len(cases)} ARM-executed G431 validation cases.")
 print("Fake HCC/time only; does not prove electrical behavior, interrupt latency or hardware L1/L2.")

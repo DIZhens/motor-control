@@ -180,6 +180,19 @@ Kp=0.001 A/rpm、Ki=0.004 A/(rpm·s)、回算20/s，速度估计低通时间常�
 stop_reason可能变为2，不能覆盖或重新解释原始失败。既有冻结候选绑定执行工具哈希，
 报告修正不回写旧候选；后续新执行须重新冻结，原硬件记录仍归属原镜像和工具。
 
+结果7的母线诊断使用独立96字节`TargetValidationBusFailure`：本次启动首次失败时先关断，
+再以偶数sequence锁存请求号、失败条件位、sample/母线时间和电压。SAFE_OFF、后续采样与
+新请求均不清除此记录；重新启动后归零，读取时须核对是否属于本次失败请求。
+条件位1/2/4/8/16/32/64分别表示无publication、采集无效、非有限电压、低于10 V、
+高于14 V、未来时间和超过5 ms年龄。无效publication中的0 V是失败占位值，不能当作
+实际欠压；应结合采集原因判断。电压策略、采样分频与拒绝条件均未放宽。
+
+配套48字节Target私有采集记录与母线publication使用同一个双缓冲index：原因0/1/2/3/4
+分别为成功、HAL起动失败、EOS转换数量不符、VREFINT为零和ADC错误，另存HAL状态、
+已读rank数、VBUS/VREFINT原始码和ADC错误/状态/ISR/IER/CR。两次独立读取须核对时戳；
+只在已读rank≥1/≥2时解释本序列的VBUS/VREFINT原始码，未采到的字段可能残留上一序列。
+健康采样不执行故障记录复制，私有诊断不扩充公共BusObservation合同。
+
 ```powershell
 .\.venv\Scripts\python.exe -B -X utf8 firmware/targets/BLDC_G431/validation/tools/rotor_speed_once.py --output <新的候选目录>
 .\.venv\Scripts\python.exe -B -X utf8 firmware/targets/BLDC_G431/validation/tests/verify_rotor_speed_tool.py

@@ -25,8 +25,14 @@ class FakeSession(current.FakeSession):
     def __init__(self,output,rpm=60):
         super().__init__(output)
         self.payload_parameters=speed.parameters(rpm,0.125)
-        self.rotor_layout={'result':0x20000700,**{'field_'+n:4*i for i,n in enumerate(speed.FIELDS)}}
+        self.rotor_layout={'result':0x20000700,'bus_failure':0x20000800,**{'field_'+n:4*i for i,n in enumerate(speed.FIELDS)}}
         self.raw_result=bytes(speed.SIZE)
+        self.raw_bus=bytes(speed.BUS_SIZE)
+
+    def upload(self,tag,blocks):
+        if blocks[0][0]=='bus_sequence':return {'bus_sequence':self.raw_bus[:4]}
+        if blocks[0][0]=='bus_failure':return {'bus_failure':self.raw_bus}
+        return super().upload(tag,blocks)
 
     def execute(self,tag,args):
         result=super().execute(tag,args)
@@ -117,6 +123,9 @@ class Tests(unittest.TestCase):
                 if len(args)==3 and 20 in s.writes:
                     raw=bytearray(s.raw_result);struct.pack_into('<I',raw,12,7);s.raw_result=bytes(raw)
                     s.state.update(result=7,stop_reason=7)
+                    raw=bytearray(speed.BUS_SIZE);struct.pack_into('<4I2Qf3IQ10I',raw,0,
+                        2,2,2,1,1000,980,0,0,1,0,980,4,1,1,1400,1500,2,0,16,0,0)
+                    s.raw_bus=bytes(raw)
                 return result
             s.execute=bad_bus
             def connect(output,*args):
@@ -129,8 +138,23 @@ class Tests(unittest.TestCase):
             report=json.loads((p/'new/summary.json').read_text(encoding='utf-8'))
             self.assertEqual(report['rotor_speed']['result'],7)
             self.assertEqual(report['rotor_speed']['stop_reason'],7)
+            self.assertEqual(report['bus_failure']['failed_conditions'],['invalid'])
+            self.assertEqual(report['bus_failure']['acquisition_cause'],'adc_error')
+            self.assertTrue(report['bus_failure']['diagnostic_matches_publication'])
+            self.assertTrue(report['bus_failure']['matches_terminal_request'])
+            self.assertTrue(report['bus_failure']['vbus_raw_captured'])
+            self.assertFalse(report['bus_failure']['vrefint_raw_captured'])
             self.assertEqual(report['cleanup']['stop_reason'],2)
             self.assertEqual(s.writes,[4,20,1]);self.assertFalse(s.state['moe'])
+
+    def test_bus_nonfinite_voltage_keeps_raw_bits_and_unrecorded_is_explicit(self):
+        with TemporaryDirectory() as tmp:
+            s=FakeSession(tmp);self.assertFalse(speed.read_bus_failure(s,'empty')['recorded'])
+            raw=bytearray(speed.BUS_SIZE);struct.pack_into('<4I',raw,0,2,2,4,1)
+            struct.pack_into('<I',raw,32,0x7fc00000);s.raw_bus=bytes(raw)
+            result=speed.read_bus_failure(s,'nonfinite')
+            self.assertIsNone(result['voltage_v']);self.assertEqual(result['voltage_bits'],0x7fc00000)
+            self.assertEqual(result['failed_conditions'],['nonfinite'])
 
 
 if __name__=='__main__':unittest.main(verbosity=1)

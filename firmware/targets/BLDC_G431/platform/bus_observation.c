@@ -20,6 +20,7 @@
 #define ADC1_VREFINT_RANK_INDEX (1U)
 
 static BusObservation s_publications[2];
+static G431BusAcquisitionDiagnostic s_diagnostics[2];
 
 static volatile uint32_t s_active_publication_index;
 static volatile bool s_publication_available;
@@ -56,18 +57,32 @@ static bool convert_vbus(float *out_voltage_v)
  * ADC IRQ 只写 inactive slot，最后用单个 index 切换 publication。
  * fast ISR 与 regular ADC callback 共用 ADC1_2 IRQ，不会并发写同一个 slot。
  */
-static void publish_observation(const BusObservation *observation)
+static void publish_observation(const BusObservation *observation,
+    G431BusAcquisitionCause cause, HAL_StatusTypeDef status)
 {
     uint32_t next_index = s_active_publication_index ^ 1U;
+    G431BusAcquisitionDiagnostic *diagnostic = &s_diagnostics[next_index];
 
     s_publications[next_index] = *observation;
+    diagnostic->observation_time = observation->observation_time;
+    diagnostic->cause = (uint32_t)cause;
+    diagnostic->hal_status = (uint32_t)status;
+    diagnostic->rank_count = s_regular_rank_index;
+    diagnostic->vbus_raw = s_vbus_raw;
+    diagnostic->vrefint_raw = s_vrefint_raw;
+    diagnostic->adc_error = hadc1.ErrorCode;
+    diagnostic->adc_state = hadc1.State;
+    diagnostic->adc_isr = hadc1.Instance->ISR;
+    diagnostic->adc_ier = hadc1.Instance->IER;
+    diagnostic->adc_cr = hadc1.Instance->CR;
     __DMB();
 
     s_active_publication_index = next_index;
     s_publication_available = true;
 }
 
-static void publish_invalid_observation(ControlTime observation_time)
+static void publish_invalid_observation(ControlTime observation_time,
+    G431BusAcquisitionCause cause, HAL_StatusTypeDef status)
 {
     BusObservation observation;
 
@@ -75,7 +90,7 @@ static void publish_invalid_observation(ControlTime observation_time)
     observation.observation_time = observation_time;
     observation.acquisition_valid = false;
 
-    publish_observation(&observation);
+    publish_observation(&observation, cause, status);
 }
 
 bool bus_observation_arm(void)
@@ -130,6 +145,19 @@ bool bus_observation_get_latest(BusObservation *out_observation)
     return true;
 }
 
+bool g431_bus_acquisition_get_diagnostic(G431BusAcquisitionDiagnostic *diagnostic)
+{
+    uint32_t primask;
+    bool available;
+    if (diagnostic == NULL) { return false; }
+    primask = __get_PRIMASK();
+    __disable_irq();
+    available = s_publication_available;
+    if (available) { *diagnostic = s_diagnostics[s_active_publication_index]; }
+    if (primask == 0U) { __enable_irq(); }
+    return available;
+}
+
 void bus_observation_fast_tick(ControlTime fast_tick_time)
 {
     HAL_StatusTypeDef status;
@@ -155,7 +183,7 @@ void bus_observation_fast_tick(ControlTime fast_tick_time)
     status = HAL_ADC_Start_IT(&hadc1);
     if (status != HAL_OK) {
         s_sequence_active = false;
-        publish_invalid_observation(fast_tick_time);
+        publish_invalid_observation(fast_tick_time, G431_BUS_ACQUISITION_START_FAILED, status);
     }
 }
 
@@ -185,7 +213,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 
     if (s_regular_rank_index != ADC1_REGULAR_SEQUENCE_LENGTH) {
         s_sequence_active = false;
-        publish_invalid_observation(s_sequence_observation_time);
+        publish_invalid_observation(s_sequence_observation_time, G431_BUS_ACQUISITION_RANK_MISMATCH, HAL_OK);
         return;
     }
 
@@ -193,7 +221,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
     observation.acquisition_valid = convert_vbus(&observation.voltage_v);
 
     s_sequence_active = false;
-    publish_observation(&observation);
+    publish_observation(&observation, observation.acquisition_valid ? G431_BUS_ACQUISITION_OK
+        : G431_BUS_ACQUISITION_VREF_ZERO, HAL_OK);
 }
 
 void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
@@ -207,5 +236,5 @@ void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
     observation_time = s_sequence_observation_time;
     s_sequence_active = false;
 
-    publish_invalid_observation(observation_time);
+    publish_invalid_observation(observation_time, G431_BUS_ACQUISITION_ADC_ERROR, HAL_ERROR);
 }

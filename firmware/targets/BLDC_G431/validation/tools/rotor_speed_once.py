@@ -18,6 +18,12 @@ FIELDS.update(dict.fromkeys(['target_velocity_rpm','electrical_offset_turns','me
     'mean_speed_error_rpm','peak_speed_error_rpm','last_iq_reference_a'],'f'))
 FIELDS.update(dict.fromkeys(['speed_update_count','speed_current_limited_updates','speed_window_updates','current_integral_limited_samples'],'I'))
 SIZE=128
+BUS_FIELDS={'sequence':('I',0),'request_sequence':('I',4),'failure_mask':('I',8),'publication_available':('I',12),
+    'sample_time':('Q',16),'observation_time':('Q',24),'voltage_v':('f',32),'acquisition_valid':('I',36),
+    'diagnostic_available':('I',40),'reserved':('I',44),'acquisition.observation_time':('Q',48)}
+BUS_FIELDS.update({'acquisition.'+name:('I',56+4*i) for i,name in enumerate(
+    ['cause','hal_status','rank_count','vbus_raw','vrefint_raw','adc_error','adc_state','adc_isr','adc_ier','adc_cr'])})
+BUS_SIZE=96
 LIMITS={'target_max_rpm':80.0,'iq_limit_nominal_a':0.1,'speed_kp_a_per_rpm':0.001,'speed_ki_a_per_rpm_s':0.004,
     'speed_tracking_per_s':20.0,'velocity_filter_s':0.005,'speed_loop_hz':1000,'current_loop_hz':10000,
     'trajectory_s':1.5,'independent_deadline_s':2.0,'voltage_request_max_v':1.8,'phase_trip_nominal_a':0.65,
@@ -38,6 +44,8 @@ def prepare(build,output,gdb,mapping):
         'size':'sizeof(RotorSpeedSnapshot)','config_size':'sizeof(RotorSpeedConfig)','command':'TARGET_VALIDATION_COMMAND_ROTOR_SPEED',
         'config_target':'&((RotorSpeedConfig*)0)->target_velocity_rpm','config_offset':'&((RotorSpeedConfig*)0)->electrical_offset_turns'}
     specs.update({'field_'+n:'&((RotorSpeedSnapshot*)0)->'+n for n in FIELDS})
+    specs.update(bus_failure='&g_target_validation_bus_failure',bus_failure_size='sizeof(TargetValidationBusFailure)')
+    specs.update({'bus_field_'+n:'&((TargetValidationBusFailure*)0)->'+n for n in BUS_FIELDS})
     command=[str(gdb),'-batch','-ex','file "'+(output/'artifacts'/loop.candidate.ARTIFACTS[1]).as_posix()+'"']
     for value in specs.values():command+=['-ex','p/x (unsigned int)'+value]
     proc=subprocess.run(command,capture_output=True,text=True,timeout=20)
@@ -49,8 +57,10 @@ def prepare(build,output,gdb,mapping):
         and layout['config_target']==0 and layout['config_offset']==4
         and [layout['field_'+n] for n in FIELDS]==list(range(0,SIZE,4)),'有限速度的ABI改变')
     for name,size in [('config',8),('result',SIZE)]:require(0x20000000<=layout[name]<layout[name]+size<=0x20008000,'有限速度地址越界')
+    require(layout['bus_failure_size']==BUS_SIZE and all(layout['bus_field_'+n]==offset for n,(_,offset) in BUS_FIELDS.items())
+        and 0x20000000<=layout['bus_failure']<layout['bus_failure']+BUS_SIZE<=0x20008000,'母线失败锁存ABI改变')
     report.update(rotor_speed_schema=1,rotor_speed_layout=layout,rotor_speed_limits=LIMITS,
-        rotor_speed_tool_sha256=loop.candidate.digest(Path(__file__)))
+        bus_failure_schema=1,rotor_speed_tool_sha256=loop.candidate.digest(Path(__file__)))
     report['source_files']['validation/tools/rotor_speed_once.py']=loop.candidate.digest(Path(__file__))
     loop.common.save(output/'prepared.json',report)
     return report
@@ -63,12 +73,36 @@ class Session(rotor.Session):
     def __init__(self,output,prepared,cli,action,rpm):
         frozen,_=loop.load_prepared(prepared)
         require(frozen.get('rotor_speed_schema')==1 and frozen.get('rotor_speed_limits')==LIMITS
+            and frozen.get('bus_failure_schema')==1
             and frozen.get('rotor_speed_tool_sha256')==loop.candidate.digest(Path(__file__)),
             '不是本版有限速度候选，或工具/包络已改变')
         payload=parameters(rpm,frozen['mapping_candidate']['electrical_offset_turns'])
         super().__init__(output,prepared,cli,action,0.1)
         self.rotor_layout=frozen['rotor_speed_layout'];self.layout=dict(self.layout,config=self.rotor_layout['config'])
         self.payload_parameters=payload
+
+
+def read_bus_failure(session,tag,request=None):
+    address=session.rotor_layout['bus_failure']
+    before=session.upload(tag+'-before',[('bus_sequence',address,4)])['bus_sequence']
+    raw=session.upload(tag,[('bus_failure',address,BUS_SIZE)])['bus_failure']
+    after=session.upload(tag+'-after',[('bus_sequence',address,4)])['bus_sequence']
+    sequence=struct.unpack_from('<I',raw)[0]
+    require(sequence%2==0 and before==after==raw[:4],'母线首故障读回不一致，不重复执行功率命令')
+    result={name:struct.unpack_from('<'+fmt,raw,offset)[0] for name,(fmt,offset) in BUS_FIELDS.items()}
+    result['recorded']=sequence!=0
+    result['matches_terminal_request']=bool(result['recorded'] and request is not None and result['request_sequence']==request)
+    result['voltage_bits']=struct.unpack_from('<I',raw,32)[0]
+    if not math.isfinite(result['voltage_v']):result['voltage_v']=None
+    result['failed_conditions']=[name for bit,name in [(1,'unavailable'),(2,'invalid'),(4,'nonfinite'),(8,'undervoltage'),
+        (16,'overvoltage'),(32,'future_timestamp'),(64,'stale')] if result['failure_mask']&bit]
+    result['acquisition_cause']={0:'ok',1:'start_failed',2:'rank_mismatch',3:'vref_zero',4:'adc_error'}.get(result['acquisition.cause'],'unknown')
+    result['diagnostic_matches_publication']=bool(result['publication_available'] and result['diagnostic_available']
+        and result['observation_time']==result['acquisition.observation_time'])
+    result['vbus_raw_captured']=bool(result['diagnostic_available'] and result['acquisition.rank_count']>=1)
+    result['vrefint_raw_captured']=bool(result['diagnostic_available'] and result['acquisition.rank_count']>=2)
+    loop.common.save(session.out/(tag+'.json'),result)
+    return result
 
 
 def analyze(o,payload):
@@ -110,6 +144,8 @@ def execute_once(session,anchor,vbus,clock=time.monotonic):
             break
     else:raise RuntimeError('有限速度主机4秒期限到，只允许一次关断')
     session.call_timeout_s,session.deadline=15.0,None
+    if result['result']==7 and not result['moe'] and not result['halted']:
+        session.bus_failure=read_bus_failure(session,'bus-first-failure',request)
     analysis=analyze(result,session.payload_parameters)
     _,final,updated=loop.preflight(session,'speed-final',vbus,stationary=False)
     require(final['command_sequence']==final['active_request_sequence']==request
@@ -152,6 +188,7 @@ def main(argv=None):
     except Exception as error:
         report={'result':'FAILED_NO_RETRY','error':str(error),'action':args.action,'write_attempted':bool(session and session.write_attempted),'automatic_retry':False}
         if session and hasattr(session,'terminal_result'):report['rotor_speed']=session.terminal_result
+        if session and hasattr(session,'bus_failure'):report['bus_failure']=session.bus_failure
         if session and session.write_attempted and 1 not in session.writes:
             try:
                 session.call_timeout_s,session.deadline=5.0,None

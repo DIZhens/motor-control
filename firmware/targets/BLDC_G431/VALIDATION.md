@@ -8,6 +8,36 @@
 本页汇总 Keil 台架、默认关断观察与专用无功率计时入口；后两者的构建及执行边界见
 [runtime/README.md](runtime/README.md)。各入口的镜像与验收证据不互相替代。
 
+## 母线早停已定位：regular ADC 的序列结束判断存在竞态
+
+针对下述结果7早停，新增独立96字节首故障记录和48字节Target私有ADC采集记录；
+先关断再锁存失败条件、电压、时间、raw/rank及HAL/ADC状态，SAFE_OFF和后续采样不覆盖。
+详情见[有限速度流程](validation/CURRENT_HOLD.md#有限速度闭环)。公共BusObservation、旧结果ABI、
+电压/新鲜度边界、速度/电流增益和有限试转参数均保持，不把占位0 V误判为实际母线读数。
+
+台架、Observe和Timing三个Keil入口全量构建均零错误警告；309项台架ARM模型、12项
+实际母线源码ARM测试和68项主机检查通过。覆盖首次故障先关断、后续采样/SAFE_OFF保持、
+BUSY请求不能改变故障归属、HAL起动失败、rank数量错误、VREFINT为零和ADC错误。
+寄存器事件与HCC替身不证明实物IRQ时延、采样抗干扰或电流绝对精度。
+
+候选HEX `6ec2aef01d7f94fb5f16e9c7b13a47ca18a7baac82e7691614807fb5408928e1`
+已安装并独立读回54880加载字节；默认六LOW/MOE=0，无请求、stage或enable，回调约
+9.965/ms，首故障记录为空。操作者恢复12 V／0.20 A并确认正常，4096点零点完成后直接
+执行唯一请求2：+60 rpm。约0.801秒后返回7关断，净位移+0.555圈、最大接受估速73.789 rpm；
+只取得9/4000个窗口样本，速度/电流完整跟踪及减速仍未验收，反向未计划或执行。
+
+首故障属于请求2，sample/母线时间952482/952480（相差100 µs），publication已交付但采集
+无效；原因rank_mismatch，已读rank=2，VBUS/VREFINT raw=1453/1498，HAL错误0、ISR=0x0F，
+未记录OVR。failure_mask=10中的“欠压”来自无效publication的0 V占位，不是实测欠压。
+实际采集代码先读DR，再读实时EOS；实测ISR同时保留新EOC/EOS，配套实际ARM源码模型
+在“第2次DR读完后第3次转换完成”这一交错下复现相同rank=2拒绝。因此定位到结束标志
+跨转换读取的竞态，下一步修复整组采集交付，不能仅放宽电压门限或调整速度PI。
+
+固件先撤销输出，主机只补一次SAFE_OFF请求3；最终六LOW/MOE=0、guard停、Trip/invalid=0，
+stage8010/8010、enable1/1，consumer最大51.924 µs（非完整IRQ/WCET）。操作者报告无异常。
+此镜像只增加诊断，尚未修复竞态；未自动重试、反向或重跑旧波形。
+构建、测试与候选身份见[母线诊断证据](validation/evidence/rotor-speed/bus-diagnostic.json)。
+
 ## 有限速度闭环：首轮因母线检查早停，尚未完成验收
 
 命令20在已有转子DQ链上复用SpeedController，以10 kHz电流环的整数10分频执行1 kHz速度环；

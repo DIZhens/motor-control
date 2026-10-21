@@ -23,6 +23,7 @@
 
 volatile PlatformBringupDebug g_platform_bringup;
 volatile TargetValidationMailbox g_target_validation_request;
+volatile TargetValidationBusFailure g_target_validation_bus_failure;
 volatile TargetValidationSnapshot g_target_validation;
 volatile TargetValidationCurrentCapture g_target_validation_capture;
 volatile TargetValidationOpenLoopConfig g_target_validation_open_loop_config;
@@ -382,13 +383,52 @@ static bool trip_healthy(void)
     return valid && !trip.condition_active && (trip.causes == HARDWARE_TRIP_CAUSE_NONE);
 }
 
+static bool read_power_bus(ControlTime now, BusObservation *bus)
+{
+    bool available = bus_observation_get_latest(bus);
+    uint32_t mask = 0U;
+
+    if (!available) { mask = TARGET_BUS_FAILURE_UNAVAILABLE; }
+    else {
+        if (!bus->acquisition_valid) { mask |= TARGET_BUS_FAILURE_INVALID; }
+        if (!isfinite(bus->voltage_v)) { mask |= TARGET_BUS_FAILURE_NONFINITE; }
+        else if (bus->voltage_v < 10.0f) { mask |= TARGET_BUS_FAILURE_UNDERVOLTAGE; }
+        else if (bus->voltage_v > 14.0f) { mask |= TARGET_BUS_FAILURE_OVERVOLTAGE; }
+        if (bus->observation_time > now) { mask |= TARGET_BUS_FAILURE_FUTURE; }
+        else if (now - bus->observation_time > BUS_MAX_AGE_TICKS) { mask |= TARGET_BUS_FAILURE_STALE; }
+    }
+    if (mask != 0U) {
+        /* 诊断复制不占用关断前的时间；同一ADC写者只锁存启动后的首次失败。 */
+        stop_operation(TARGET_VALIDATION_RESULT_BAD_BUS);
+        if (g_target_validation_bus_failure.sequence == 0U) {
+            TargetValidationBusFailure failure = {0};
+            failure.request_sequence = s_operation_active ? g_target_validation.active_request_sequence
+                : g_target_validation.command_sequence;
+            failure.failure_mask = mask;
+            failure.publication_available = available ? 1U : 0U;
+            failure.sample_time = now;
+            if (available) {
+                failure.observation_time = bus->observation_time;
+                failure.voltage_v = bus->voltage_v;
+                failure.acquisition_valid = bus->acquisition_valid ? 1U : 0U;
+            }
+            failure.diagnostic_available = g431_bus_acquisition_get_diagnostic(&failure.acquisition) ? 1U : 0U;
+            g_target_validation_bus_failure.sequence = 1U;
+            __DMB();
+            failure.sequence = 1U;
+            g_target_validation_bus_failure = failure;
+            __DMB();
+            g_target_validation_bus_failure.sequence = 2U;
+        }
+        return false;
+    }
+    return true;
+}
+
 static bool burst_bus_valid(ControlTime now)
 {
     BusObservation bus;
-
-    return bus_observation_get_latest(&bus) && bus.acquisition_valid
-        && (bus.observation_time <= now) && ((now - bus.observation_time) <= BUS_MAX_AGE_TICKS)
-        && (bus.voltage_v >= 10.0f) && (bus.voltage_v <= 14.0f);
+    return read_power_bus(now, &bus);
 }
 
 __STATIC_FORCEINLINE bool timing_bus_valid(ControlTime now)
@@ -1226,10 +1266,7 @@ static void run_current_hold(const PhaseCurrentObservation *current, uint32_t in
             fabsf(s_current_hold.velocity.velocity_rpm));
         if (!s_current_hold.feedback_ready) { return; }
     }
-    if (!bus_observation_get_latest(&bus) || !bus.acquisition_valid || !isfinite(bus.voltage_v)
-        || bus.voltage_v < 10.0f || bus.voltage_v > 14.0f
-        || bus.observation_time > current->observation_time
-        || current->observation_time - bus.observation_time > BUS_MAX_AGE_TICKS) {
+    if (!read_power_bus(current->observation_time, &bus)) {
         stop_operation(TARGET_VALIDATION_RESULT_BAD_BUS);
         return;
     }
