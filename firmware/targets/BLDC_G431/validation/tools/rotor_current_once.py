@@ -106,11 +106,11 @@ def submit_power_once(session):
     session.last_sequence=request
     iq,offset=session.payload_parameters
     session.execute('rotor-payload',['-w32',hex(session.layout['config']),hex(loop.float_bits(iq)),
-        hex(loop.float_bits(offset)),'-w32',hex(session.layout['request']+4),hex(19),hex(loop.KEY),
+        hex(loop.float_bits(offset)),'-w32',hex(session.layout['request']+4),hex(session.power_command),hex(loop.KEY),
         hex(session.power_duration_us),hex(loop.float_bits(0.5))])
     raw=session.upload('rotor-payload-readback',[('config',session.layout['config'],8),('request',session.layout['request'],20)])
     require(raw['config']==struct.pack('<2f',iq,offset)
-        and raw['request']==struct.pack('<IIIIf',previous,19,loop.KEY,session.power_duration_us,0.5),
+        and raw['request']==struct.pack('<IIIIf',previous,session.power_command,loop.KEY,session.power_duration_us,0.5),
         '转子DQ参数读回不符，禁止提交sequence')
     session.power_commit_ready=True
     session.execute('rotor-sequence',['-w32',hex(session.layout['request']),hex(request)])
@@ -118,9 +118,11 @@ def submit_power_once(session):
 
 
 def read_result(session, tag):
+    size=getattr(session,'snapshot_size',SIZE)
+    fields=getattr(session,'result_fields',FIELDS)
     address=session.rotor_layout['result']
     first=session.upload(tag+'-before',[('sequence',address,4)])['sequence']
-    blocks=session.upload(tag,[('rotor',address,SIZE),('stop',session.layout['stop'],4),
+    blocks=session.upload(tag,[('rotor',address,size),('stop',session.layout['stop'],4),
         ('bdtr',0x40012c44,4),('dhcsr',0xe000edf0,4)])
     last=session.upload(tag+'-after',[('sequence',address,4)])['sequence']
     seq=loop.common.word(first);raw=blocks['rotor']
@@ -128,7 +130,7 @@ def read_result(session, tag):
         'stop_reason':loop.common.word(blocks['stop']),'moe':bool(loop.common.word(blocks['bdtr'])&0x8000),
         'halted':bool(loop.common.word(blocks['dhcsr'])&((1<<17)|(1<<19)))}
     if result['coherent']:
-        result.update({name:struct.unpack_from('<'+fmt,raw,session.rotor_layout['field_'+name])[0] for name,fmt in FIELDS.items()})
+        result.update({name:struct.unpack_from('<'+fmt,raw,session.rotor_layout['field_'+name])[0] for name,fmt in fields.items()})
     loop.common.save(session.out/(tag+'.json'),result)
     return result
 

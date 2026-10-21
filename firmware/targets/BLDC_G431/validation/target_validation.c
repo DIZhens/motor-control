@@ -35,6 +35,8 @@ volatile CurrentHoldConfig g_target_validation_current_hold_config;
 volatile CurrentHoldSnapshot g_target_validation_current_hold;
 volatile RotorCurrentConfig g_target_validation_rotor_current_config;
 volatile RotorCurrentSnapshot g_target_validation_rotor_current;
+volatile RotorSpeedConfig g_target_validation_rotor_speed_config;
+volatile RotorSpeedSnapshot g_target_validation_rotor_speed;
 volatile uint32_t g_target_validation_stop_reason;
 volatile uint32_t g_target_validation_timing_recovery_ticks;
 
@@ -69,6 +71,8 @@ static bool s_angle_survey_active;
 static bool s_current_survey_active;
 static bool s_rotor_current_active;
 static RotorCurrentSnapshot s_rotor_current_report;
+static bool s_rotor_speed_active;
+static RotorSpeedSnapshot s_rotor_speed_report;
 static TargetValidationAngleSurveySnapshot s_angle_survey_report;
 static float s_angle_window_anchor[3];
 static float s_angle_window_min[3];
@@ -156,6 +160,7 @@ static void finish_operation(void)
         uint32_t sequence = g_target_validation_current_hold.sequence;
 
         current_controller_reset(&s_current_hold.controller);
+        if (s_current_hold.speed_mode) { speed_controller_reset(&s_current_hold.speed_controller); }
         s_current_hold_report.active = 0U;
         s_current_hold_report.result = g_target_validation_stop_reason;
         if (s_rotor_current_active) {
@@ -170,12 +175,39 @@ static void finish_operation(void)
             r->peak_abs_current_a = h->peak_abs_current_a; r->min_duty = h->min_duty; r->max_duty = h->max_duty;
             r->displacement_turns = s_current_hold.rotor_displacement;
             r->max_position_age_s = s_current_hold.rotor_max_age_s;
-            g_target_validation_rotor_current.sequence = sequence + 1U;
-            __DMB();
-            r->sequence = sequence + 1U;
-            g_target_validation_rotor_current = *r;
-            __DMB();
-            g_target_validation_rotor_current.sequence = sequence + 2U;
+            if (s_rotor_speed_active) {
+                RotorSpeedSnapshot *v = &s_rotor_speed_report;
+                sequence = g_target_validation_rotor_speed.sequence;
+                v->request_sequence = r->request_sequence; v->active = r->active; v->result = r->result;
+                v->sample_count = r->sample_count; v->enabled_samples = r->enabled_samples;
+                v->window_samples = r->window_samples; v->voltage_limited_samples = r->voltage_limited_samples;
+                v->mean_id_a = r->mean_id_a; v->mean_iq_a = r->mean_iq_a;
+                v->peak_current_tracking_error_a = r->peak_tracking_error_a;
+                v->max_voltage_v = r->max_voltage_v; v->peak_abs_current_a = r->peak_abs_current_a;
+                v->min_duty = r->min_duty; v->max_duty = r->max_duty;
+                v->start_position_turns = r->start_position_turns; v->end_position_turns = r->end_position_turns;
+                v->displacement_turns = r->displacement_turns; v->max_abs_velocity_rpm = r->max_abs_velocity_rpm;
+                v->last_velocity_rpm = r->last_velocity_rpm; v->mean_velocity_rpm = r->mean_velocity_rpm;
+                v->max_position_age_s = r->max_position_age_s;
+                v->last_iq_reference_a = s_current_hold.active_iq_reference_a;
+                v->speed_update_count = s_current_hold.speed_update_count;
+                v->speed_current_limited_updates = s_current_hold.speed_current_limited_updates;
+                v->current_integral_limited_samples = s_current_hold.current_integral_limited_samples;
+                g_target_validation_rotor_speed.sequence = sequence + 1U;
+                __DMB();
+                v->sequence = sequence + 1U;
+                g_target_validation_rotor_speed = *v;
+                __DMB();
+                g_target_validation_rotor_speed.sequence = sequence + 2U;
+                s_rotor_speed_active = false;
+            } else {
+                g_target_validation_rotor_current.sequence = sequence + 1U;
+                __DMB();
+                r->sequence = sequence + 1U;
+                g_target_validation_rotor_current = *r;
+                __DMB();
+                g_target_validation_rotor_current.sequence = sequence + 2U;
+            }
             s_rotor_current_active = false;
         } else {
             g_target_validation_current_hold.sequence = sequence + 1U;
@@ -556,7 +588,7 @@ static bool prepare_open_loop(const TargetValidationMailbox *request,
 
 static void prepare_current_hold(const TargetValidationMailbox *request,
     const CurrentHoldConfig *config, const PhaseCurrentObservation *current, uint32_t now_cycles,
-    bool survey, float excursion, const RotorCurrentConfig *rotor)
+    bool survey, float excursion, const RotorCurrentConfig *rotor, const RotorSpeedConfig *speed)
 {
     CurrentHoldSnapshot empty = {0};
     PositionObservation position;
@@ -564,12 +596,12 @@ static void prepare_current_hold(const TargetValidationMailbox *request,
 
     if (request->power_key != TARGET_VALIDATION_POWER_KEY) {
         failure = TARGET_VALIDATION_RESULT_LOCKED;
-    } else if (request->duration_us != (rotor != NULL ? ROTOR_CURRENT_DURATION_US : (survey ? CURRENT_SURVEY_DURATION_US : CURRENT_HOLD_DURATION_US)) || request->common_duty != 0.5f
+    } else if (request->duration_us != (speed != NULL ? ROTOR_SPEED_DURATION_US : (rotor != NULL ? ROTOR_CURRENT_DURATION_US : (survey ? CURRENT_SURVEY_DURATION_US : CURRENT_HOLD_DURATION_US))) || request->common_duty != 0.5f
         || s_facts.control_time_ticks_per_second != 20000U || s_facts.fast_tick_period_ticks != 2U
         || (survey && excursion != 1.0f)
-        || !(rotor != NULL ? current_hold_rotor_init(&s_current_hold, rotor)
+        || !(speed != NULL ? current_hold_speed_init(&s_current_hold, speed) : (rotor != NULL ? current_hold_rotor_init(&s_current_hold, rotor)
             : (survey ? current_hold_survey_init(&s_current_hold, config->alpha_reference_a)
-            : current_hold_init(&s_current_hold, config)))) {
+            : current_hold_init(&s_current_hold, config))))) {
         failure = TARGET_VALIDATION_RESULT_BAD_REQUEST;
     } else if (!open_loop_zero_valid()) {
         failure = TARGET_VALIDATION_RESULT_BAD_ZERO;
@@ -588,6 +620,7 @@ static void prepare_current_hold(const TargetValidationMailbox *request,
     s_current_hold_report.offset_c_a = s_statistics.phase_c.mean_a;
     s_current_hold_active = true;
     s_rotor_current_active = rotor != NULL;
+    s_rotor_speed_active = speed != NULL;
     s_current_survey_active = survey;
     s_angle_survey_active = survey;
     if (rotor != NULL) {
@@ -600,13 +633,27 @@ static void prepare_current_hold(const TargetValidationMailbox *request,
             s_rotor_current_report.start_position_turns = position.mechanical_position_turns;
             s_rotor_current_report.end_position_turns = position.mechanical_position_turns;
         }
-        g_target_validation_rotor_current.sequence++;
-        __DMB();
-        g_target_validation_rotor_current.request_sequence = request->sequence;
-        g_target_validation_rotor_current.active = 1U;
-        g_target_validation_rotor_current.result = TARGET_VALIDATION_RESULT_NONE;
-        __DMB();
-        g_target_validation_rotor_current.sequence++;
+        if (speed != NULL) {
+            RotorSpeedSnapshot empty_speed = {0};
+            s_rotor_speed_report = empty_speed;
+            s_rotor_speed_report.target_velocity_rpm = speed->target_velocity_rpm;
+            s_rotor_speed_report.electrical_offset_turns = speed->electrical_offset_turns;
+            g_target_validation_rotor_speed.sequence++;
+            __DMB();
+            g_target_validation_rotor_speed.request_sequence = request->sequence;
+            g_target_validation_rotor_speed.active = 1U;
+            g_target_validation_rotor_speed.result = TARGET_VALIDATION_RESULT_NONE;
+            __DMB();
+            g_target_validation_rotor_speed.sequence++;
+        } else {
+            g_target_validation_rotor_current.sequence++;
+            __DMB();
+            g_target_validation_rotor_current.request_sequence = request->sequence;
+            g_target_validation_rotor_current.active = 1U;
+            g_target_validation_rotor_current.result = TARGET_VALIDATION_RESULT_NONE;
+            __DMB();
+            g_target_validation_rotor_current.sequence++;
+        }
     }
     if (survey) {
         TargetValidationAngleSurveySnapshot empty_survey = {0};
@@ -660,6 +707,7 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
     CurrentHoldConfig current_hold_config;
     TargetValidationCurrentSurveyConfig current_survey_config;
     RotorCurrentConfig rotor_current_config;
+    RotorSpeedConfig rotor_speed_config;
     ProtectionProbeSource probe_source = PROTECTION_PROBE_NONE;
     uint32_t primask = __get_PRIMASK();
     uint32_t sequence;
@@ -675,6 +723,7 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
     current_hold_config = g_target_validation_current_hold_config;
     current_survey_config = g_target_validation_current_survey_config;
     rotor_current_config = g_target_validation_rotor_current_config;
+    rotor_speed_config = g_target_validation_rotor_speed_config;
     if (request.command == TARGET_VALIDATION_COMMAND_ANGLE_SURVEY) {
         open_loop_config.voltage_v = g_target_validation_angle_survey_config.voltage_v;
         open_loop_config.electrical_frequency_hz = g_target_validation_angle_survey_config.excursion_turns;
@@ -711,6 +760,7 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
         && (request.command != TARGET_VALIDATION_COMMAND_CURRENT_HOLD)
         && (request.command != TARGET_VALIDATION_COMMAND_CURRENT_SURVEY)
         && (request.command != TARGET_VALIDATION_COMMAND_ROTOR_CURRENT)
+        && (request.command != TARGET_VALIDATION_COMMAND_ROTOR_SPEED)
         && !is_timing_command(request.command)) {
         g_target_validation.result = TARGET_VALIDATION_RESULT_BAD_REQUEST;
         return;
@@ -755,16 +805,22 @@ static void consume_command(const PhaseCurrentObservation *current, uint32_t now
     }
     if (request.command == TARGET_VALIDATION_COMMAND_CURRENT_SURVEY) {
         CurrentHoldConfig config = {current_survey_config.current_reference_a, 0.0f};
-        prepare_current_hold(&request, &config, current, now_cycles, true, current_survey_config.excursion_turns, NULL);
+        prepare_current_hold(&request, &config, current, now_cycles, true, current_survey_config.excursion_turns, NULL, NULL);
         return;
     }
     if (request.command == TARGET_VALIDATION_COMMAND_CURRENT_HOLD) {
-        prepare_current_hold(&request, &current_hold_config, current, now_cycles, false, 0.0f, NULL);
+        prepare_current_hold(&request, &current_hold_config, current, now_cycles, false, 0.0f, NULL, NULL);
         return;
     }
     if (request.command == TARGET_VALIDATION_COMMAND_ROTOR_CURRENT) {
         CurrentHoldConfig config = {0.0f, rotor_current_config.iq_reference_a};
-        prepare_current_hold(&request, &config, current, now_cycles, false, 0.0f, &rotor_current_config);
+        prepare_current_hold(&request, &config, current, now_cycles, false, 0.0f, &rotor_current_config, NULL);
+        return;
+    }
+    if (request.command == TARGET_VALIDATION_COMMAND_ROTOR_SPEED) {
+        CurrentHoldConfig envelope = {0.0f, ROTOR_SPEED_MAX_IQ_A};
+        RotorCurrentConfig rotor = {ROTOR_SPEED_MAX_IQ_A, rotor_speed_config.electrical_offset_turns};
+        prepare_current_hold(&request, &envelope, current, now_cycles, false, 0.0f, &rotor, &rotor_speed_config);
         return;
     }
     if (request.command == TARGET_VALIDATION_COMMAND_OPEN_LOOP || request.command == TARGET_VALIDATION_COMMAND_ANGLE_SURVEY) {
@@ -1233,22 +1289,31 @@ static void run_current_hold(const PhaseCurrentObservation *current, uint32_t in
     report->max_duty = fmaxf(report->max_duty, fmaxf(output.duty_a, fmaxf(output.duty_b, output.duty_c)));
     report->max_voltage_v = fmaxf(report->max_voltage_v, voltage);
     report->voltage_limited_samples += output.voltage_limited ? 1U : 0U;
-    window = s_rotor_current_active ? (elapsed >= 12000U && elapsed < 16000U)
+    window = s_rotor_speed_active ? (elapsed >= 16000U && elapsed < 24000U)
+        : (s_rotor_current_active ? (elapsed >= 12000U && elapsed < 16000U)
         : (s_current_survey_active ? ((elapsed >= 25000U && elapsed < 30000U)
         || (elapsed >= 55000U && elapsed < 60000U) || (elapsed >= 85000U && elapsed < 90000U))
-        : (elapsed >= 40000U && elapsed < 50000U));
+        : (elapsed >= 40000U && elapsed < 50000U)));
     if (window) {
         float count = (float)++report->window_samples;
         float measured_d = s_rotor_current_active ? output.id_a : alpha;
         float measured_q = s_rotor_current_active ? output.iq_a : beta;
         float ea = measured_d - report->alpha_reference_a;
-        float eb = measured_q - report->beta_reference_a;
+        float eb = measured_q - (s_rotor_speed_active ? s_current_hold.active_iq_reference_a : report->beta_reference_a);
 
         report->mean_alpha_a += (measured_d - report->mean_alpha_a) / count;
         report->mean_beta_a += (measured_q - report->mean_beta_a) / count;
         if (s_rotor_current_active) {
             s_rotor_current_report.mean_velocity_rpm += (s_current_hold.velocity.velocity_rpm
                 - s_rotor_current_report.mean_velocity_rpm) / count;
+        }
+        if (s_rotor_speed_active) {
+            float speed_error = s_current_hold.target_velocity_rpm - s_current_hold.velocity.velocity_rpm;
+            s_rotor_speed_report.mean_iq_reference_a += (s_current_hold.active_iq_reference_a
+                - s_rotor_speed_report.mean_iq_reference_a) / count;
+            s_rotor_speed_report.mean_speed_error_rpm += (speed_error - s_rotor_speed_report.mean_speed_error_rpm) / count;
+            s_rotor_speed_report.peak_speed_error_rpm = fmaxf(s_rotor_speed_report.peak_speed_error_rpm, fabsf(speed_error));
+            if (s_current_hold.last_speed_elapsed == elapsed) { s_rotor_speed_report.speed_window_updates++; }
         }
         report->mean_voltage_alpha_v += (valpha - report->mean_voltage_alpha_v) / count;
         report->mean_voltage_beta_v += (vbeta - report->mean_voltage_beta_v) / count;

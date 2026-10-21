@@ -92,10 +92,34 @@ static bool reject_rotor_feedback(CurrentHold *hold)
         hold->configured = false;
         hold->feedback_ready = false;
         current_controller_reset(&hold->controller);
+        if (hold->speed_mode) { speed_controller_reset(&hold->speed_controller); }
         electrical_angle_reset(&hold->measurement_angle);
         electrical_angle_reset(&hold->actuation_angle);
     }
     return false;
+}
+
+bool current_hold_speed_init(CurrentHold *hold, const RotorSpeedConfig *config)
+{
+    RotorCurrentConfig rotor = {ROTOR_SPEED_MAX_IQ_A, 0.0f};
+    const SpeedControllerConfig speed = {0.001f, 0.004f, 20.0f,
+        ROTOR_SPEED_MAX_IQ_A, ROTOR_SPEED_MAX_IQ_A, ROTOR_SPEED_MAX_RPM, 0.00125f};
+    const PositionEstimatorConfig velocity = {ROTOR_CURRENT_MAX_RPM, 0.005f};
+    if (hold == NULL) { return false; }
+    memset(hold, 0, sizeof(*hold));
+    if (config == NULL || !isfinite(config->target_velocity_rpm)
+        || fabsf(config->target_velocity_rpm) < 10.0f || fabsf(config->target_velocity_rpm) > ROTOR_SPEED_MAX_RPM) {
+        return false;
+    }
+    rotor.electrical_offset_turns = config->electrical_offset_turns;
+    if (!current_hold_rotor_init(hold, &rotor) || !speed_controller_init(&hold->speed_controller, &speed)
+        || !position_estimator_init(&hold->velocity, &velocity)) {
+        hold->configured = false;
+        return false;
+    }
+    hold->speed_mode = true;
+    hold->target_velocity_rpm = config->target_velocity_rpm;
+    return true;
 }
 
 bool current_hold_rotor_feedback(CurrentHold *hold, const PositionObservation *position,
@@ -171,10 +195,11 @@ bool current_hold_step(CurrentHold *hold, ControlTime elapsed,
         return false;
     }
     hold->last_elapsed = elapsed;
-    end = hold->rotor ? 20000U : (hold->survey ? 100000U : 60000U);
+    end = hold->speed_mode ? 30000U : (hold->rotor ? 20000U : (hold->survey ? 100000U : 60000U));
     if (elapsed >= end) {
         hold->complete = true;
         current_controller_reset(&hold->controller);
+        if (hold->speed_mode) { speed_controller_reset(&hold->speed_controller); }
         return false;
     }
     if (!isfinite(bus_v) || bus_v < 10.0f || bus_v > 14.0f) {
@@ -226,6 +251,31 @@ bool current_hold_step(CurrentHold *hold, ControlTime elapsed,
     input.bus_voltage_v = bus_v;
     input.id_reference_a = scale * hold->config.alpha_reference_a;
     input.iq_reference_a = scale * hold->config.beta_reference_a;
+    if (hold->speed_mode) {
+        if (hold->last_speed_elapsed == 0U || elapsed - hold->last_speed_elapsed >= 20U) {
+            SpeedControllerInput speed_input = {0};
+            SpeedControllerOutput speed_output;
+            float reference_scale = elapsed < 6000U ? (float)elapsed / 6000.0f
+                : (elapsed >= 24000U ? (float)(30000U - elapsed) / 6000.0f : 1.0f);
+            if (hold->last_speed_elapsed != 0U && elapsed - hold->last_speed_elapsed != 20U) {
+                return reject_rotor_feedback(hold);
+            }
+            speed_input.target_velocity_rpm = hold->target_velocity_rpm * reference_scale;
+            speed_input.measured_velocity_rpm = hold->velocity.velocity_rpm;
+            speed_input.interval_s = 0.001f;
+            speed_input.velocity_valid = hold->feedback_ready;
+            speed_input.reference_valid = true;
+            if (!speed_controller_update(&hold->speed_controller, &speed_input, &speed_output)) {
+                return reject_rotor_feedback(hold);
+            }
+            hold->active_iq_reference_a = speed_output.iq_reference_a;
+            hold->last_speed_elapsed = elapsed;
+            hold->speed_update_count++;
+            hold->speed_current_limited_updates += speed_output.current_limited ? 1U : 0U;
+        }
+        input.id_reference_a = 0.0f;
+        input.iq_reference_a = hold->active_iq_reference_a;
+    }
     input.interval_s = 0.0001f;
     input.current_valid = true;
     input.angle_valid = true;
@@ -235,5 +285,6 @@ bool current_hold_step(CurrentHold *hold, ControlTime elapsed,
         hold->configured = false;
         return false;
     }
+    if (hold->speed_mode && output->integral_limited) { hold->current_integral_limited_samples++; }
     return true;
 }

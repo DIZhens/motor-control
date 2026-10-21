@@ -59,6 +59,7 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
                    root.parents[2] / "control/current_controller.c",
                    root.parents[2] / "control/electrical_angle.c",
                    root.parents[2] / "control/position_estimator.c",
+                   root.parents[2] / "control/speed_controller.c",
                    root.parents[2] / "control/foc_math.c"]:
         obj = temp / (source.stem + ".o")
         options = ["-Otime"] if source.parent.name == "control" else []
@@ -228,6 +229,18 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
                 "iq_ref","offset","mean_id","mean_iq","peak_error","max_voltage","peak_current","min_duty","max_duty",
                 "start_position","end_position","displacement","max_rpm","last_rpm","mean_rpm","max_age"]
             return dict(zip(keys,struct.unpack("<8I16f",self.cpu.mem_read(symbols["g_target_validation_rotor_current"],96))))
+
+        def speed_submit(self, rpm=60.0, offset=0.125, key=KEY, duration=2000000, duty=0.5):
+            self.cpu.mem_write(symbols["g_target_validation_rotor_speed_config"],struct.pack("<2f",rpm,offset))
+            self.submit(20,key=key,duration=duration,duty=duty)
+
+        def speed(self):
+            keys=['sequence','request','active','result','samples','enabled','window_samples','voltage_limited',
+                'target_rpm','offset','mean_id','mean_iq','peak_current_error','max_voltage','peak_current','min_duty','max_duty',
+                'start_position','end_position','displacement','max_rpm','last_rpm','mean_rpm','max_age',
+                'mean_iq_ref','mean_speed_error','peak_speed_error','last_iq_ref',
+                'speed_updates','speed_limited','speed_window_updates','integral_limited']
+            return dict(zip(keys,struct.unpack('<8I20f4I',self.cpu.mem_read(symbols['g_target_validation_rotor_speed'],128))))
 
         def hold(self):
             keys = ["sequence", "request", "active", "result", "samples", "enabled_samples", "window_samples",
@@ -1078,6 +1091,84 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
         if not m.moe():break
     assert m.rotor()["result"]==23 and 2.0<=abs(m.rotor()["displacement"])<2.01,m.rotor()
     passed("rotor DQ accumulated displacement bound spans encoder wrap and terminates")
+
+    def speed_powered(rpm=60.0):
+        m=zero_ready();m.write('model_position_period_ticks',20);m.speed_submit(rpm=rpm)
+        for _ in range(30):
+            m.tick()
+            if m.moe():break
+        assert m.moe() and m.word('model_enable_calls')==1,m.speed()
+        return m
+
+    for payload,reason in [({'rpm':0},4),({'rpm':9.9},4),({'rpm':80.1},4),({'rpm':-80.1},4),
+        ({'rpm':math.nan},4),({'offset':1.0},4),({'offset':math.nan},4),({'key':0},3),
+        ({'duration':1500000},4),({'duty':0.4},4)]:
+        m=zero_ready();m.speed_submit(**payload);m.tick(30)
+        assert not m.moe() and m.speed()['result']==reason,m.speed()
+        assert m.word('model_stage_calls')==m.word('model_enable_calls')==0
+        passed('speed request rejected before any stage: '+str(payload))
+    m=Model();m.speed_submit();m.tick(30)
+    assert not m.moe() and m.speed()['result']==19
+    passed('speed mode requires captured same-boot zero')
+
+    for target,inertia,inductance,friction in [(60.0,1e-5,0.002,0.0008),(-60.0,1e-5,0.002,0.0008),
+        (80.0,2e-5,0.00086,0.0012)]:
+        m=speed_powered(target);position=0.25;omega=ia=ibeta=0.0
+        pending=[(0.5,0.5,0.5)]*2;ke=0.04/1.5;decay=math.exp(-3.1*0.0001/inductance)
+        for i in range(1,15001):
+            t=m.word('model_time')+2;theta=math.tau*((7*position-0.125)%1)
+            applied=pending.pop(0);va,vb,vc=[12*(d-sum(applied)/3) for d in applied]
+            ea=-ke*omega*math.sin(theta);eb=ke*omega*math.cos(theta)
+            ia=decay*ia+(1-decay)*((2*va-vb-vc)/3-ea)/3.1
+            ibeta=decay*ibeta+(1-decay)*((vb-vc)/math.sqrt(3)-eb)/3.1
+            iq=-ia*math.sin(theta)+ibeta*math.cos(theta)
+            torque=1.5*ke*iq;load=0.0002*(1 if target>0 else -1) if i>=7000 else 0.0
+            drive=torque-load
+            if abs(omega)<0.01 and abs(drive)<=friction:omega=0.0
+            else:
+                sign=1 if (omega if abs(omega)>=0.01 else drive)>0 else -1
+                omega+=0.0001*(drive-0.00002*omega-friction*sign)/inertia
+            position=(position+omega/math.tau*0.0001)%1
+            b=(-ia+math.sqrt(3)*ibeta)/2;c=(-ia-math.sqrt(3)*ibeta)/2
+            m.write('model_current_b_a',-0.012-b,'f');m.write('model_current_c_a',-0.001-c,'f')
+            if t%20==0:m.write('model_position_turns',(round(position*16384)%16384)/16384,'f')
+            m.tick();pending.append(struct.unpack('<3f',m.cpu.mem_read(symbols['model_last_duty'],12)))
+            if not m.moe() and i<15000:raise AssertionError(m.speed())
+        r=m.speed();print('SPEED_MODEL_METRICS',target,inertia,inductance,r,flush=True)
+        assert not m.moe() and r['result']==1 and (r['samples'],r['enabled'],r['window_samples'])==(15002,15001,4000),r
+        assert r['speed_updates']==1500 and r['speed_window_updates']==400,r
+        assert abs(r['mean_speed_error'])<=max(3,abs(target)*0.1) and r['peak_speed_error']<=max(12,abs(target)*0.25),r
+        assert math.hypot(r['mean_id'],r['mean_iq']-r['mean_iq_ref'])<0.01 and r['peak_current_error']<0.04,r
+        assert abs(r['last_rpm'])<15 and r['max_rpm']<300 and abs(r['displacement'])<2,r
+        assert abs(r['mean_iq_ref'])<=0.100001 and abs(r['last_iq_ref'])<=0.100001 and r['max_voltage']<=1.80001,r
+        assert m.word('model_stage_calls')==15001 and m.word('model_enable_calls')==1
+        passed('cascaded speed/current with independent delayed electrical/mechanical plant and load step: '+str((target,inertia,inductance)))
+
+    for field,value,fmt,reason in [('model_position_valid',0,'I',20),('model_position_age_ticks',31,'I',20),
+        ('model_current_b_a',0.7,'f',22),('model_bus_voltage',9.0,'f',7),('model_stage_ok',0,'I',8),('model_step_ticks',3,'I',6)]:
+        m=speed_powered();m.write(field,value,fmt);m.tick()
+        assert not m.moe() and m.speed()['result']==reason,m.speed()
+        m.tick(5);assert m.word('model_enable_calls')==1
+        passed('speed mode withdraws without restart: '+field)
+    m=speed_powered();m.submit(1);m.tick();assert not m.moe() and m.speed()['result']==2
+    passed('speed mode Stop terminates')
+    m=speed_powered();m.call('model_trip_event');m.tick();assert not m.moe() and m.speed()['result']==11
+    passed('speed mode Trip terminates')
+    m=speed_powered();m.advance_guard(150);m.tick();assert not m.moe() and m.speed()['result']==6
+    passed('speed mode independent sample heartbeat withdraws')
+    m=speed_powered();deadline=m.word('s_deadline_cycles')
+    m.memory_write(DWT_CYCCNT,deadline);m.write('s_last_sample_cycles',deadline);m.call('model_guard');m.tick()
+    assert not m.moe() and m.speed()['result']==18
+    passed('speed mode independent finite deadline withdraws')
+    m=speed_powered()
+    while (m.word('model_time')+2)%20:m.tick()
+    m.write('model_position_turns',0.27,'f');m.tick()
+    assert not m.moe() and m.speed()['result']==23
+    passed('speed mode raw velocity bound is enforced before low-pass filtering')
+    m=speed_powered(80);m.tick(10000);m.submit(1);m.tick();r=m.speed()
+    assert not m.moe() and r['result']==2 and r['speed_limited']>0 and abs(r['last_iq_ref'])<=0.100001,r
+    assert r['max_voltage']<=1.80001 and r['integral_limited']>0,r
+    passed('stalled-feedback fixture keeps speed Iq, current voltage and integral bounded; Stop withdraws')
 
 print(f"PASS: {len(cases)} ARM-executed G431 validation cases.")
 print("Fake HCC/time only; does not prove electrical behavior, interrupt latency or hardware L1/L2.")

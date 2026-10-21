@@ -8,6 +8,7 @@
 #include "position_observation.h"
 #include "position_estimator.h"
 #include "electrical_angle.h"
+#include "speed_controller.h"
 
 #define CURRENT_HOLD_DURATION_US 3500000U
 #define CURRENT_SURVEY_DURATION_US 5500000U
@@ -20,6 +21,25 @@
 #define ROTOR_CURRENT_MAX_A 0.2f
 #define ROTOR_CURRENT_MAX_RPM 300.0f
 #define ROTOR_CURRENT_MAX_DISPLACEMENT 2.0f
+#define ROTOR_SPEED_DURATION_US 2000000U
+#define ROTOR_SPEED_MAX_RPM 80.0f
+#define ROTOR_SPEED_MAX_IQ_A 0.1f
+
+typedef struct {
+    float target_velocity_rpm; /* 命令20：正负10～80rpm，1.5秒有限轨迹。 */
+    float electrical_offset_turns;
+} RotorSpeedConfig;
+
+typedef struct {
+    uint32_t sequence, request_sequence, active, result;
+    uint32_t sample_count, enabled_samples, window_samples, voltage_limited_samples;
+    float target_velocity_rpm, electrical_offset_turns, mean_id_a, mean_iq_a;
+    float peak_current_tracking_error_a, max_voltage_v, peak_abs_current_a, min_duty, max_duty;
+    float start_position_turns, end_position_turns, displacement_turns;
+    float max_abs_velocity_rpm, last_velocity_rpm, mean_velocity_rpm, max_position_age_s;
+    float mean_iq_reference_a, mean_speed_error_rpm, peak_speed_error_rpm, last_iq_reference_a;
+    uint32_t speed_update_count, speed_current_limited_updates, speed_window_updates, current_integral_limited_samples;
+} RotorSpeedSnapshot;
 
 /* 命令19仅接收已审查的7极对、正方向候选；不修改正式Motor配置。 */
 typedef struct {
@@ -87,6 +107,14 @@ typedef struct {
     float rotor_position;
     float rotor_displacement;
     float rotor_max_age_s;
+    bool speed_mode;
+    SpeedController speed_controller;
+    float target_velocity_rpm;
+    float active_iq_reference_a;
+    ControlTime last_speed_elapsed;
+    uint32_t speed_update_count;
+    uint32_t speed_current_limited_updates;
+    uint32_t current_integral_limited_samples;
 } CurrentHold;
 
 bool current_hold_init(CurrentHold *hold, const CurrentHoldConfig *config);
@@ -95,6 +123,7 @@ bool current_hold_init(CurrentHold *hold, const CurrentHoldConfig *config);
 bool current_hold_survey_init(CurrentHold *hold, float current_reference_a);
 
 bool current_hold_rotor_init(CurrentHold *hold, const RotorCurrentConfig *config);
+bool current_hold_speed_init(CurrentHold *hold, const RotorSpeedConfig *config);
 /* 同一ADC单写者消费SSI；两份新观测建立速度后才允许上层stage/enable。
  * 测量角预测到sample，施加角显式预测至下一保持区间中点（sample后125us）。 */
 bool current_hold_rotor_feedback(CurrentHold *hold, const PositionObservation *position,
