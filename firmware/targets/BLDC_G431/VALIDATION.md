@@ -8,6 +8,35 @@
 本页汇总 Keil 台架、默认关断观察、有限正式 Run 与专用无功率计时入口；构建及执行边界见
 [runtime/README.md](runtime/README.md)。各入口的镜像与验收证据不互相替代。
 
+## 正式 Run 补验：反向调速及独立时限通过
+
+沿用下节的同一 Run 镜像，没有改源码、重建或烧录。操作者确认原12 V／0.20 A、
+ST-Link 3V3断开、原三相与编码器固定空载、无外部注入，VOFA串口由单次采集独占。
+首次前检发现本启动零偏在161点后锁定FAILED，原因是静止/位置有效条件丢失，
+没有发送运动命令。该记录不能区分轴曾移动还是位置反馈短暂异常；不据此修改门限。
+操作者保持静止并按一次RST后，4096点零偏READY；只读核对58688加载字节与原镜像相同，
+IDLE、六LOW/MOE=0、guard0、时序首因空，随后直接执行已确认的一次试验。
+
+UART仅发送 `start:-60` 与约0.39993秒后的 `speed:-40`，没有正常或兜底Stop、Clear、
+反向重试或自动复位。收到203帧，其中目标−60为40帧、−40为110帧，全部有效位511、
+故障0。两段速度均值−45.955 / −38.658 rpm、平均Iq约−23.137 / −25.397名义mA，
+均包含过渡，不作为稳态性能或电流精度验收。
+
+首个RUN至首个IDLE的控制时间差约1.4999秒；从主机Start尝试到首个IDLE约1.512秒，
+后者含串口传输和观测延迟。停机记录明确为 `limit_reason=1`（TIM6时限到期）、
+`active=0`、接受启动1次、净位移−1.025513圈。Motor命令数3，分别对应两条UART请求
+及守卫交接的Stop；目标0、流程OFF、IDLE，冻结零偏保留。调速没有重新计时，
+正常路径没有依赖主机Stop。最终六LOW/MOE=0、guard0、88 B时序首因全零，镜像再次匹配，
+操作者报告无异常。
+
+[反向与时限曲线](validation/evidence/runtime/uart-negative-limit.svg)和
+[完整203帧证据](validation/evidence/runtime/uart-negative-limit.json)保留命令时刻、
+前检失败、人工复位及停机原因。与下节正向试验合并，已覆盖正式UART正反低速启动、
+目标更新、显式Stop、MCU独立时限及一致性观测；手工操作入口见
+[VOFA说明](../../../host/vofa/README.md#有限-run-操作)。
+本次未触发2圈边界或注入正式RUN故障，不扩展为全部保护实机验收、长期运行或WCET证明。
+独立电流精度、持久标定、故障恢复及速度纹波仍未完成，自研UART协议和FreeRTOS尚未接入。
+
 ## 正式 Run：UART 正向启动、调速与 Stop 已打通
 
 新增独立 `BLDC_G431_Run`，装配公共 Motor / ControlRuntime、原 Platform 及既有 UART / VOFA，
@@ -46,7 +75,7 @@ Stop 后IDLE、目标0、流程OFF，正常冻结零偏保留；净位移记录+
 
 [UART曲线](validation/evidence/runtime/uart-run.svg)和
 [实测证据](validation/evidence/runtime/uart-run.json)保存完整140帧、命令时刻、镜像身份及限制。
-下一步补正式UART的反向及有限时长行为，再冻结可复现控制基线；独立电流精度、持久标定、
+反向及有限时长补验见本页上节；独立电流精度、持久标定、
 故障恢复和速度纹波优化仍未完成。自研UART协议与FreeRTOS继续按后续增量接入。
 
 ## 统计精简复测：正向完整运行，速度峰值仍待改善
