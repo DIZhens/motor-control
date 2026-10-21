@@ -55,7 +55,7 @@ B/C 电流在本启动零偏校正后取反、重构 A 相。静态记录的约 
 | 异步观测 | SSI / 母线实际采集 1 kHz；每个 fast tick 读取完整缓存，仅新时间戳更新估计 |
 | 启动校零 | 健康 IDLE、MOE 关闭、编码器静止连续 100 拍，再采 4096 点；无外部电流注入 |
 | 速度目标 | 绝对值不超过 80 rpm；估计运动排歧上限 300 rpm |
-| 速度 PI | Kp=0.001，Ki=0.004，Iq 限幅 ±0.10 名义 A，Id=0 |
+| 速度 PI | 默认Kp=0.001、Ki=0.004；内部健康IDLE可整组暂存，Start锁存Active；Iq限幅±0.10名义A、Id=0 |
 | 电压 / 母线 | 调制利用系数为 1.8/14，母线允许 10..14 V；电压矢量请求不超过 1.8 V |
 | 软件相电流撤销 | 任一校正相绝对值超过 0.65 名义 A |
 | 独立有限时长 | 从 Start 被接受起最多 1.5 秒，调速不会续期；TIM6 先 safe-off，再交接 Stop |
@@ -85,6 +85,22 @@ VOFA连接、Run单次命令、校零失败后的现场复位及Observe区别见
 ```powershell
 .venv\Scripts\python.exe -B -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run
 .venv\Scripts\python.exe -B -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py
+```
+
+## 内部事务交接与参数
+
+Run已装配[SystemRuntime交接](../../../app/system_runtime/README.md)：非零ticket、独立Stop槽、
+深度4静态Completion、参数写的ADC权威结果及Staged/Active生命周期。后台不能直接修改PI实例。
+速度调参publication只复制已有状态，RUN按真实速度更新边界发布；观测读取不推进样本序号。
+内部可信性丢失立即safe-off并撤销Session逻辑资格，下一ADC把bit7合入Motor；
+首因与计数单独保存，不改变Clear或现有有限保护。API边界见`target_runtime.h`。
+
+当前这些新增入口仅由ARM模型消费，旧VOFA串口不能写参数或取得逐ticket结果；没有调度器、
+新协议Server或UART DMA。原VOFA邮箱保留在验证入口及过渡Run中，不能启动第二个后台所有者。
+模型和构建不改写既有HEX实物记录；新镜像的实物验收按后续阶段单独说明。
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run --exchange
 ```
 
 ## 实时频率与作用时刻

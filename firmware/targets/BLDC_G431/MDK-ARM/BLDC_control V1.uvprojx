@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G431xx,BLDC_G431_RUNTIME_ENTRY,BLDC_G431_FINITE_RUN</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../runtime;../../../app/motor;../../../app/communication;../../../../control</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../runtime;../../../app/motor;../../../app/communication;../../../app/system_runtime;../../../../control</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -762,6 +762,21 @@
               <FileName>target_uart.c</FileName>
               <FileType>1</FileType>
               <FilePath>../runtime/target_uart.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Application/User/SystemRuntime</GroupName>
+          <Files>
+            <File>
+              <FileName>runtime_exchange.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../../../app/system_runtime/runtime_exchange.c</FilePath>
+            </File>
+            <File>
+              <FileName>runtime_parameters.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../../../app/system_runtime/runtime_parameters.c</FilePath>
             </File>
           </Files>
         </Group>

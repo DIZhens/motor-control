@@ -248,8 +248,11 @@ valid_flags：bit0时间、1位置时间及机械坐标、2目标、3速度、4 
 6 Id feedback、7母线、8状态/故障、9两个generation；其余0。未有效整数字段填0，浮点填
 规定NaN；generation0可表示尚未接受Start。limit_flags bit0速度PI输出限幅、1 d轴电流限幅、
 2 q轴电流限幅、3电压矢量/调制限幅；其余0，控制无效时为0，不能据0推断测量有效。
+当前电流PI的bit1/2分别观察既有d/q轴积分限幅；共同电压矢量限幅只置bit3。
+机械位置为编码器原点的单圈坐标，正向与速度一致，跨圈允许跳变，不是累计圈数或定位零点。
 
-实时侧仅在1 kHz速度更新边界复制已有状态并推进sample_sequence（自然u32回绕），不计算
+实时侧在RUN的1 kHz速度更新边界复制已有状态；OFF/启动期间按相同1 kHz节拍发布。
+sample_sequence自然u32回绕，不因后台读取或发送才推进；实时侧不计算
 协议、统计或调用RTOS。Telemetry Task按50/250/500 Hz读取最新完整publication并以
 xQueueOverwrite写深度1 Mailbox。线上Telemetry sequence在生成Mailbox值时分配，
 覆盖旧值计telemetry_overwrites，故Host序号缺口可与覆盖数量对应；不在成功TX后才编号。

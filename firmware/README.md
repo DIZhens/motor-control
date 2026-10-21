@@ -16,6 +16,8 @@ G431 的正式工程只有 `BLDC_G431_Run`，装配公共 Motor / ControlRuntime
 公共应用使用 HCC，不直接依赖某一 Target 的 HAL、调试邮箱或保护注入命令。
 两板验证结果互不替代；模型、静态检查、目标编译和实物验证分别记录。
 Motor 内部有限静态定向核心及其尚未装配的执行边界见 [Motor 说明](app/motor/README.md)。
+协议无关ticket/Completion、参数生命周期和观测发布的当前边界见
+[SystemRuntime说明](app/system_runtime/README.md)。
 
 展示目标还包含自研 UART 协议与 FreeRTOS 后台任务；两者尚未接入，按合同、纯Codec、实时交接、RTOS启动、UART DMA及事务逐项集成。调度与中断适配属于Target，编解码不依赖RTOS，FOC保持硬件同步执行。长期边界见[总体架构](../ARCHITECTURE.md)，唯一Wire Contract见[Core Protocol V1](../interface/CORE_PROTOCOL_V1.md)。
 

@@ -682,7 +682,9 @@ UART、USB CDC、TCP 可以自然复用字节流 framing；CAN 是帧式链路�
 
 自研协议沿用上述边界，区分 Object、Command、Telemetry 和 Event。对象写入也要经过 Device / Motor 的权限、范围与状态判断；可写目标最终形成完整业务请求，不直接改 Runtime 目标、PI 状态或功率寄存器。请求关联与会话内重复检测属于通信事务语义，不改变 Motor 状态所有权，也不承诺跨复位恰好执行一次。
 
-协议设计中的字段、对象编号、缓存与 UART / CAN 映射在 [设计草案](interface/PROTOCOL_DESIGN.md)中讨论；草案不替代已生效的 Device Contract 或 VOFA 线格式。
+Core Protocol的字段、编号、对象与事务规则以[Wire Contract](interface/CORE_PROTOCOL_V1.md)为准；
+[设计说明](interface/PROTOCOL_DESIGN.md)解释边界，不重复维护线格式。协议实现和实物范围分别验收，
+不能由合同冻结推断已接入串口或完成调度验证；Device Contract继续拥有设备业务语义。
 
 ## 7. Host
 

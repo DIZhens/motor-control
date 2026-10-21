@@ -32,6 +32,9 @@ typedef struct {
     MotorSnapshot snapshot; /* 与协议无关的完整业务快照及其有效性。 */
     uint32_t incorporated_guard_faults; /* 已纳入 Motor 快照的故障位，用于识别尚未合并的监视原因。 */
     bool has_sample; /* 是否已有真实采样；启动阶段的初始快照为 false。 */
+#if defined(BLDC_G431_FINITE_RUN)
+    RuntimeParameters parameters; /* 与状态同一ADC边界发布，不暴露实时私有对象。 */
+#endif
 #if defined(BLDC_G431_DIAGNOSTICS)
     bool compute_probe_permitted; /* ADC 同拍确认 IDLE/OFF、控制配置关闭且无故障；后台仍须复核心跳和 MOE。 */
     bool stage_probe_permitted; /* 当拍只允许隔离试具的无功率计时，不授予真实控制许可。 */
@@ -55,6 +58,58 @@ volatile TargetRuntimeRunStatus g_target_runtime_run_status;
 static Motor s_motor;
 static ControlRuntime s_control_runtime;
 static G431CordicMath s_cordic_math;
+#if defined(BLDC_G431_FINITE_RUN)
+static RuntimeExchange s_exchange;
+static RuntimeParameters s_parameters;
+static volatile RuntimeInternalFaultStatus s_internal_fault;
+static volatile SpeedCommissioningSample s_commissioning;
+static volatile uint32_t s_commissioning_version;
+static volatile bool s_commissioning_available;
+static uint32_t s_commissioning_count, s_commissioning_divider;
+
+void runtime_exchange_barrier(void) { __DMB(); }
+
+void target_runtime_fail_closed(RuntimeInternalFaultReason reason)
+{
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    realtime_motor_io_safe_off();
+    if (reason <= RUNTIME_INTERNAL_NONE || reason > RUNTIME_INTERNAL_TIMEOUT) {
+        reason = RUNTIME_INTERNAL_TRANSACTION_CORRUPT;
+    }
+    if (s_internal_fault.first_reason == RUNTIME_INTERNAL_NONE) { s_internal_fault.first_reason = reason; }
+    s_internal_fault.count++;
+    g_target_runtime_guard_faults |= TARGET_RUNTIME_FAULT_INTERNAL;
+    __DMB();
+    if (primask == 0U) { __enable_irq(); }
+}
+
+bool target_runtime_session_permitted(void)
+{
+    return s_internal_fault.first_reason == RUNTIME_INTERNAL_NONE;
+}
+
+bool target_runtime_read_internal_fault(RuntimeInternalFaultStatus *status)
+{
+    uint32_t primask;
+    RuntimeInternalFaultStatus next;
+    if (status == NULL) { return false; }
+    primask = __get_PRIMASK(); __disable_irq(); next = s_internal_fault;
+    if (primask == 0U) { __enable_irq(); }
+    *status = next;
+    return true;
+}
+
+uint32_t target_runtime_completion_high_water(void) { return s_exchange.completion_high_water; }
+
+bool target_runtime_pop_completion(RuntimeCommandCompletion *completion)
+{
+    if ((uint32_t)(s_exchange.head - s_exchange.tail) > RUNTIME_COMPLETION_CAPACITY) {
+        target_runtime_fail_closed(RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return false;
+    }
+    return runtime_exchange_pop(&s_exchange, completion);
+}
+#endif
 #if defined(BLDC_G431_FINITE_RUN)
 #if !defined(BLDC_G431_RUNTIME_ENTRY)
 #error BLDC_G431_FINITE_RUN requires the runtime Core entry
@@ -202,6 +257,9 @@ static void publish(ControlTime now, bool has_sample)
     control_runtime_snapshot(&s_control_runtime, now, has_sample, &next.snapshot);
     next.incorporated_guard_faults = s_motor.faults;
     next.has_sample = has_sample;
+#if defined(BLDC_G431_FINITE_RUN)
+    next.parameters = s_parameters;
+#endif
 #if defined(BLDC_G431_DIAGNOSTICS)
     next.compute_probe_permitted = compute_probe_adc_permitted(has_sample);
     next.stage_probe_permitted = stage_budget_adc_permitted(has_sample);
@@ -245,6 +303,9 @@ bool target_runtime_read_snapshot(MotorSnapshot *snapshot)
         return false;
     }
     faults = g_target_runtime_guard_faults;
+#if defined(BLDC_G431_FINITE_RUN)
+    if (!target_runtime_session_permitted()) { faults |= TARGET_RUNTIME_FAULT_INTERNAL; }
+#endif
     last_sample_cycles = s_last_sample_cycles;
     now_cycles = DWT->CYCCNT;
     /* 完整旧快照不等于当前健康；统一在交接边界收紧所有后台消费者的资格。 */
@@ -257,6 +318,95 @@ bool target_runtime_read_snapshot(MotorSnapshot *snapshot)
     *snapshot = publication.snapshot;
     return true;
 }
+
+#if defined(BLDC_G431_FINITE_RUN)
+bool target_runtime_read_parameters(RuntimeParameters *parameters)
+{
+    RuntimePublication publication;
+    if (parameters == NULL || !read_publication(&publication)) { return false; }
+    if (!target_runtime_session_permitted()
+        || g_target_runtime_guard_faults != 0U
+        || (uint32_t)(DWT->CYCCNT - s_last_sample_cycles) > SAMPLE_MAX_US * CYCLES_PER_US) {
+        publication.parameters.speed_active.in_use = false;
+    }
+    *parameters = publication.parameters;
+    return true;
+}
+
+bool target_runtime_read_commissioning(SpeedCommissioningSample *sample)
+{
+    SpeedCommissioningSample next;
+    uint32_t attempt, version;
+    if (sample == NULL || !s_commissioning_available) { return false; }
+    for (attempt = 0U; attempt < 3U; ++attempt) {
+        version = s_commissioning_version;
+        if ((version & 1U) != 0U) { continue; }
+        __DMB(); next = s_commissioning; __DMB();
+        if (version != s_commissioning_version) { continue; }
+        if (!target_runtime_session_permitted() || g_target_runtime_guard_faults != 0U
+            || (uint32_t)(DWT->CYCCNT - s_last_sample_cycles) > SAMPLE_MAX_US * CYCLES_PER_US) {
+            next.valid_flags = 0U;
+            next.limit_flags = 0U;
+        }
+        *sample = next; return true;
+    }
+    return false;
+}
+
+/* 仅复制已有状态，不调用控制计算、格式编码或内核。RUN按实际速度更新边界发布，
+ * OFF/启动过程按10个fast tick发布；序号在此推进，不取决于后台是否读取或发送。
+ */
+static void publish_commissioning(ControlTime now)
+{
+    MotorSnapshot snapshot;
+    SpeedCommissioningSample next;
+    uint32_t valid = 0U;
+    bool control_valid = s_motor.state == MOTOR_STATE_RUN && s_motor.faults == 0U
+        && s_control_runtime.phase == CONTROL_RUNTIME_RUNNING && target_runtime_session_permitted();
+    memset(&next, 0, sizeof(next));
+    control_runtime_snapshot(&s_control_runtime, now, true, &snapshot);
+    next.sample_sequence = ++s_commissioning_count;
+    next.control_time_ticks = now;
+    if (snapshot.control_time_valid) { valid |= 1U; }
+    if (s_control_runtime.position_time_available && now >= s_control_runtime.last_position_time
+        && now - s_control_runtime.last_position_time <= s_control_config.position_max_age_ticks) {
+        next.position_observation_time = s_control_runtime.last_position_time;
+        next.mechanical_position_turns = s_control_runtime.mechanical_position_turns
+            * (float)s_control_config.electrical_angle.encoder_direction;
+        valid |= 2U;
+    }
+    next.target_velocity_rpm = snapshot.target_velocity_rpm; next.velocity_rpm = snapshot.velocity_rpm;
+    next.iq_feedback_a = snapshot.iq_a; next.id_feedback_a = snapshot.id_a;
+    next.bus_voltage_v = snapshot.bus_voltage_v;
+    next.motor_state = snapshot.state; next.fault_flags = snapshot.faults;
+    if (snapshot.status_valid) { valid |= 4U | 256U; }
+    if (snapshot.velocity_valid) { valid |= 8U; }
+    if (snapshot.iq_valid) { valid |= 32U; }
+    if (snapshot.id_valid) { valid |= 64U; }
+    if (snapshot.bus_voltage_valid) { valid |= 128U; }
+    if (control_valid && s_control_runtime.speed_output.valid) {
+        next.iq_reference_a = s_control_runtime.speed_output.iq_reference_a; valid |= 16U;
+        if (s_control_runtime.speed_output.current_limited) { next.limit_flags |= 1U; }
+    }
+    if (control_valid && s_control_runtime.current_output.valid) {
+        if (s_control_runtime.current_output.d_integral_limited) { next.limit_flags |= 2U; }
+        if (s_control_runtime.current_output.q_integral_limited) { next.limit_flags |= 4U; }
+        if (s_control_runtime.current_output.voltage_limited) { next.limit_flags |= 8U; }
+    }
+    next.active_profile_generation = s_parameters.speed_active.generation;
+    next.telemetry_config_generation = s_parameters.telemetry.generation;
+    next.valid_flags = valid | 512U;
+    s_commissioning_version++; __DMB(); s_commissioning = next; __DMB(); s_commissioning_version++;
+    s_commissioning_available = true;
+}
+
+static void complete_request(const RuntimeCommandCompletion *completion)
+{
+    if (!runtime_exchange_complete(&s_exchange, completion)) {
+        target_runtime_fail_closed(RUNTIME_INTERNAL_COMPLETION_OVERFLOW);
+    }
+}
+#endif
 
 static bool take_command(MotorCommand *command, bool *rejected)
 {
@@ -399,6 +549,15 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     bool rejected;
     bool command_available;
     bool business_changed;
+#if defined(BLDC_G431_FINITE_RUN)
+    RuntimeCommandEnvelope envelope;
+    RuntimeCommandCompletion completion;
+    uint32_t cancelled_ticket = 0U;
+    bool has_envelope;
+    bool parameter_request = false;
+    ControlTime previous_speed_time = s_control_runtime.last_speed_time;
+    ControlRuntimePhase previous_control_phase = s_control_runtime.phase;
+#endif
 #if defined(BLDC_G431_DIAGNOSTICS)
     bool stage_prepared = false;
     uint32_t stage_request;
@@ -434,7 +593,52 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
         || s_motor.state != MOTOR_STATE_RUN || s_motor.faults != 0U)) {
         faults |= TARGET_RUNTIME_FAULT_UNEXPECTED_POWER;
     }
+#if defined(BLDC_G431_FINITE_RUN)
+    if (!target_runtime_session_permitted()) { faults |= TARGET_RUNTIME_FAULT_INTERNAL; }
+    /* 旧VOFA/独立守卫的Stop与新交接共享一个实时Stop边界；不丢新请求的取消身份。 */
+    if (s_stop_pending) {
+        runtime_exchange_request_internal_stop(&s_exchange);
+        s_stop_pending = false; s_command_pending = false; s_reject_pending = false;
+    }
+    has_envelope = runtime_exchange_take(&s_exchange, &envelope, &cancelled_ticket);
+    if (has_envelope && ((unsigned int)envelope.request.kind > RUNTIME_REQUEST_TELEMETRY
+        || (envelope.request.kind == RUNTIME_REQUEST_MOTOR
+            && (unsigned int)envelope.request.value.motor.type > MOTOR_COMMAND_CLEAR_FAULT)
+        || (envelope.ticket == 0U && (envelope.request.kind != RUNTIME_REQUEST_MOTOR
+            || envelope.request.value.motor.type != MOTOR_COMMAND_STOP)))) {
+        target_runtime_fail_closed(RUNTIME_INTERNAL_TRANSACTION_CORRUPT);
+        faults |= TARGET_RUNTIME_FAULT_INTERNAL; has_envelope = false;
+    }
+    rejected = false;
+    if (has_envelope) {
+        memset(&completion, 0, sizeof(completion));
+        completion.ticket = envelope.ticket; completion.kind = envelope.request.kind;
+        if (envelope.request.kind == RUNTIME_REQUEST_MOTOR) {
+            command = envelope.request.value.motor; command_available = true;
+            if (command.type == MOTOR_COMMAND_STOP) { s_command_pending = false; s_reject_pending = false; }
+            if (command.type == MOTOR_COMMAND_START_VELOCITY && s_parameters.telemetry.rate_hz == 500U) {
+                /* 参数为500Hz时不进入Motor；正常协议Server同样在提交前返回PRECONDITION_FAILED。 */
+                completion.outcome = RUNTIME_PRECONDITION_FAILED;
+                command_available = false;
+            }
+        } else {
+            bool idle = faults == 0U && power_disabled && s_motor.state == MOTOR_STATE_IDLE
+                && s_motor.faults == 0U && s_control_runtime.phase == CONTROL_RUNTIME_OFF;
+            parameter_request = true; command_available = false;
+            if (envelope.request.kind == RUNTIME_REQUEST_SPEED_PI) {
+                completion.parameter_result = runtime_parameters_write_pi(&s_parameters,
+                    &envelope.request.value.speed_pi, idle);
+                completion.value.speed_pi = s_parameters.speed_staged;
+            } else {
+                completion.parameter_result = runtime_parameters_write_telemetry(&s_parameters,
+                    envelope.request.value.telemetry.enabled, envelope.request.value.telemetry.rate_hz, idle);
+                completion.value.telemetry = s_parameters.telemetry;
+            }
+        }
+    } else { command_available = take_command(&command, &rejected); }
+#else
     command_available = take_command(&command, &rejected);
+#endif
 #if defined(BLDC_G431_DIAGNOSTICS)
     if (!s_control_config.control.enabled) {
         stage_request = g_target_runtime_stage_request;
@@ -469,7 +673,39 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     business_changed = control_runtime_step(&s_control_runtime, current->observation_time,
         current, power_disabled,
         faults, rejected ? NULL : &command, command_available);
+#if defined(BLDC_G431_FINITE_RUN)
+    if (command_available && !rejected && command.type == MOTOR_COMMAND_START_VELOCITY
+        && s_motor.command_result == MOTOR_COMMAND_RESULT_ACCEPTED
+        && s_control_runtime.phase == CONTROL_RUNTIME_START_QUIET) {
+        if (control_runtime_install_start_speed_pi(&s_control_runtime,
+            s_parameters.speed_staged.value.kp, s_parameters.speed_staged.value.ki)) {
+            runtime_parameters_activate(&s_parameters);
+        } else { target_runtime_fail_closed(RUNTIME_INTERNAL_TRANSACTION_CORRUPT); }
+    }
+#endif
     monitor_finite_run(rejected ? NULL : &command, command_available);
+#if defined(BLDC_G431_FINITE_RUN)
+    if (s_control_runtime.phase == CONTROL_RUNTIME_OFF || s_motor.faults != 0U
+        || !target_runtime_session_permitted()) { runtime_parameters_deactivate(&s_parameters); }
+    if (cancelled_ticket != 0U) {
+        RuntimeCommandCompletion cancelled;
+        memset(&cancelled, 0, sizeof(cancelled));
+        cancelled.ticket = cancelled_ticket; cancelled.outcome = RUNTIME_CANCELLED_BY_STOP;
+        complete_request(&cancelled);
+    }
+    if (has_envelope && envelope.ticket != 0U) {
+        if (!parameter_request && command_available) { completion.motor_result = s_motor.command_result; }
+        complete_request(&completion);
+        business_changed = true;
+    }
+    s_commissioning_divider++;
+    if ((s_control_runtime.phase == CONTROL_RUNTIME_RUNNING && previous_control_phase == CONTROL_RUNTIME_RUNNING
+            && s_control_runtime.last_speed_time != previous_speed_time)
+        || (s_control_runtime.phase != CONTROL_RUNTIME_RUNNING && s_commissioning_divider >= 10U)) {
+        s_commissioning_divider = 0U;
+        publish_commissioning(current->observation_time);
+    }
+#endif
 #if defined(BLDC_G431_DIAGNOSTICS)
     /* 同拍更新健康快照，主机复核完整窗口时不沿用此前的100Hz旧状态。 */
     if (!s_control_config.control.enabled) {
@@ -574,15 +810,29 @@ void target_runtime_start(void)
     }
 #endif
     motor_init(&s_motor);
+#if defined(BLDC_G431_FINITE_RUN)
+    runtime_exchange_init(&s_exchange);
+    runtime_parameters_init(&s_parameters, s_control_config.control.speed.kp_a_per_rpm,
+        s_control_config.control.speed.ki_a_per_rpm_s);
+#endif
     target_vofa_init();
     realtime_motor_io_safe_off();
     /* 先建立快照所需的实例，即使后端装配失败也能发布明确FAULT。 */
     if (!control_runtime_init(&s_control_runtime, &s_motor, &s_control_config)
         || (s_control_config.control.enabled && !s_cordic_ready)) {
         motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_STARTUP);
+#if defined(BLDC_G431_FINITE_RUN)
+        if (!target_runtime_session_permitted()) { motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_INTERNAL); }
+#endif
         publish(0U, false);
         return;
     }
+#if defined(BLDC_G431_FINITE_RUN)
+    if (!target_runtime_session_permitted()) {
+        realtime_motor_io_safe_off(); motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_INTERNAL);
+        publish(0U, false); return;
+    }
+#endif
     if ((SystemCoreClock != 170000000U) || (TIM6->PSC != 169U)) {
         motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_CLOCK);
         publish(0U, false);
@@ -759,6 +1009,19 @@ TargetRuntimeSubmitResult target_runtime_submit_command(const MotorCommand *comm
     stop = !rejected && command->type == MOTOR_COMMAND_STOP;
 
     __disable_irq();
+#if defined(BLDC_G431_FINITE_RUN)
+    if (!rejected && (command->type == MOTOR_COMMAND_START_VELOCITY
+        || command->type == MOTOR_COMMAND_UPDATE_VELOCITY) && !target_runtime_session_permitted()) {
+        restore_interrupts(primask); return TARGET_RUNTIME_SUBMIT_REJECTED;
+    }
+    if (!rejected && command->type == MOTOR_COMMAND_START_VELOCITY && s_parameters.telemetry.rate_hz == 500U) {
+        restore_interrupts(primask); return TARGET_RUNTIME_SUBMIT_REJECTED;
+    }
+    if (!stop && (s_exchange.ordinary_pending || s_exchange.stop_pending || s_exchange.internal_stop)) {
+        s_reject_pending = true; restore_interrupts(primask);
+        return rejected ? TARGET_RUNTIME_SUBMIT_REJECTED : TARGET_RUNTIME_SUBMIT_BUSY;
+    }
+#endif
     if (stop) {
 #if defined(BLDC_G431_DIAGNOSTICS)
         s_compute_stop_this_service = true;
@@ -786,6 +1049,41 @@ TargetRuntimeSubmitResult target_runtime_submit_command(const MotorCommand *comm
 #endif
     return result;
 }
+
+#if defined(BLDC_G431_FINITE_RUN)
+RuntimeExchangeResult target_runtime_submit_request(const RuntimeRequest *request,
+    uint32_t *ticket, uint32_t *cancelled_ticket)
+{
+    uint32_t primask;
+    RuntimeExchangeResult result;
+    bool stop;
+    if (request == NULL || ticket == NULL || cancelled_ticket == NULL) { return RUNTIME_EXCHANGE_BAD_REQUEST; }
+    stop = request->kind == RUNTIME_REQUEST_MOTOR && request->value.motor.type == MOTOR_COMMAND_STOP;
+    primask = __get_PRIMASK(); __disable_irq();
+    if (!target_runtime_session_permitted() && (request->kind != RUNTIME_REQUEST_MOTOR
+        || request->value.motor.type == MOTOR_COMMAND_START_VELOCITY
+        || request->value.motor.type == MOTOR_COMMAND_UPDATE_VELOCITY)) {
+        restore_interrupts(primask); return RUNTIME_EXCHANGE_FAILED;
+    }
+    if (!s_attempted) { restore_interrupts(primask); return RUNTIME_EXCHANGE_FAILED; }
+    if (request->kind == RUNTIME_REQUEST_MOTOR && request->value.motor.type == MOTOR_COMMAND_START_VELOCITY
+        && s_parameters.telemetry.rate_hz == 500U) {
+        restore_interrupts(primask); return RUNTIME_EXCHANGE_PRECONDITION_FAILED;
+    }
+    if (s_stop_pending || (!stop && (s_command_pending || s_reject_pending))) {
+        restore_interrupts(primask); return RUNTIME_EXCHANGE_BUSY;
+    }
+    result = runtime_exchange_submit(&s_exchange, request, ticket, cancelled_ticket);
+    if (result == RUNTIME_EXCHANGE_QUEUED && stop) {
+        s_command_pending = false; s_reject_pending = false;
+    }
+    if (result == RUNTIME_EXCHANGE_TICKET_EXHAUSTED) {
+        target_runtime_fail_closed(RUNTIME_INTERNAL_TRANSACTION_CORRUPT);
+    }
+    restore_interrupts(primask);
+    return result;
+}
+#endif
 
 void target_runtime_service(void)
 {

@@ -46,6 +46,8 @@ static void current_controller_clear_output(CurrentControllerOutput *output)
     output->duty_c = 0.5f;
     output->voltage_limited = false;
     output->integral_limited = false;
+    output->d_integral_limited = false;
+    output->q_integral_limited = false;
     output->valid = false;
 }
 
@@ -147,7 +149,7 @@ bool current_controller_update(CurrentController *controller,
     float error_d, error_q, proportional_d, proportional_q;
     float requested_d, requested_q, next_integral_d, next_integral_q;
     float sine, cosine, actuation_sine, actuation_cosine;
-    bool integral_limited = false;
+    bool d_limited = false, q_limited = false;
     CURRENT_PROFILE_MARK(0U);
     current_controller_clear_output(output);
     if (controller == NULL) {
@@ -211,11 +213,11 @@ bool current_controller_update(CurrentController *controller,
         !current_controller_next_integral(controller->integral_d_v, error_d,
             controller->config.ki_d_v_per_a_s, controller->config.tracking_gain_per_s,
             requested_d, applied.d, input->interval_s, controller->config.integral_limit_v,
-            &next_integral_d, &integral_limited) ||
+            &next_integral_d, &d_limited) ||
         !current_controller_next_integral(controller->integral_q_v, error_q,
             controller->config.ki_q_v_per_a_s, controller->config.tracking_gain_per_s,
             requested_q, applied.q, input->interval_s, controller->config.integral_limit_v,
-            &next_integral_q, &integral_limited)) {
+            &next_integral_q, &q_limited)) {
         current_controller_reset(controller);
         return false;
     }
@@ -230,7 +232,9 @@ bool current_controller_update(CurrentController *controller,
     candidate.duty_b = modulation.duty_b;
     candidate.duty_c = modulation.duty_c;
     candidate.voltage_limited = modulation.limited;
-    candidate.integral_limited = integral_limited;
+    candidate.integral_limited = d_limited || q_limited;
+    candidate.d_integral_limited = d_limited;
+    candidate.q_integral_limited = q_limited;
     candidate.valid = true;
     controller->integral_d_v = next_integral_d;
     controller->integral_q_v = next_integral_q;

@@ -47,7 +47,8 @@ Start 必须分开；当前没有可用恢复流程，需要复位后重新装�
 
 ### 本阶段速度调参合同
 
-以下为本阶段新增、尚待实现验证的最小参数生命周期。只开放速度PI的kp/ki，不修改PI数学、
+以下最小参数生命周期已接入正式Run的内部交接并完成ARM模型验证，尚未提供线上参数写入。
+只开放速度PI的kp/ki，不修改PI数学、
 电流环配置、功率包络或Motor公共生命周期；Wire布局以[Core Protocol V1](CORE_PROTOCOL_V1.md)为准。
 
 - Default固定0.001/0.004；复位Staged取Default、generation1，Active取Default、generation0且不在使用。
@@ -60,8 +61,8 @@ Start 必须分开；当前没有可用恢复流程，需要复位后重新装�
 内部ticket/Completion、协议结果、Motor业务结果及RUN状态分别表示，不能用最近一次命令结果
 推断某个请求已完成。内部Fail-closed保持现有safe-off和下一实时边界合入故障的所有权，不改变
 HCC；普通外部坏帧不派生新的运动命令、自动Stop或故障恢复。
-本阶段为该内部锁存来源预留Target fault bit7，详细首因由COMMUNICATION_STATUS提供；
-此来源尚未接入当前裸机固件，不表示Clear获得新的恢复能力。
+该内部锁存来源使用Target fault bit7，详细首因由后续COMMUNICATION_STATUS提供；
+此来源已接入Run的内部关断与ARM模型，尚未完成新镜像实物验证，不表示Clear获得新的恢复能力。
 
 ### 其他剩余边界
 

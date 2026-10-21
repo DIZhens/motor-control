@@ -22,6 +22,7 @@
 | 保护与时序 | 原 Platform 保护实测、故障模型、独立守卫和正式 Run 停机读回 | 正式 Run 故障注入、2 圈触界及完整 ISR WCET 尚无实物验收 |
 | 性能与长期能力 | 既有台架速度曲线和电阻量级交叉检查 | 原 15 rpm 峰值初筛失败保留；持续运行、带载、独立电流精度、持久标定和故障恢复未完成 |
 | 自研协议编解码 | [协议合同](../../../interface/CORE_PROTOCOL_V1.md)、[P1 离线证据](validation/evidence/protocol/p1.json)；真实 ARM C 与 Python、30 个黄金帧对照 | 独立库，尚未接入 Run；会话事务、UART DMA 和 FreeRTOS 后续实现，离线库通过不等于实物通过 |
+| 内部命令与参数交接 | [P2构建和ARM证据](validation/evidence/protocol/p2.json)；ticket、Stop取消、Completion4、PI Staged/Active、1kHz观测和内部关断 | Run内部接口及模型已接入；尚无线上参数入口、会话去重或RTOS；新镜像尚未烧录，旧实物证据不改写 |
 
 以上两次正式 Run 实物记录属于 HEX
 `0e73f54e03ceaa9b21f3ae7cfc305c1ca50ecc9577613cc47f974d54fd2eee76`。
