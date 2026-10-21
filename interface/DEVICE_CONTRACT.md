@@ -45,4 +45,24 @@ Start 必须分开；当前没有可用恢复流程，需要复位后重新装�
 
 ## 后续补齐边界
 
+### 本阶段速度调参合同
+
+以下为本阶段新增、尚待实现验证的最小参数生命周期。只开放速度PI的kp/ki，不修改PI数学、
+电流环配置、功率包络或Motor公共生命周期；Wire布局以[Core Protocol V1](CORE_PROTOCOL_V1.md)为准。
+
+- Default固定0.001/0.004；复位Staged取Default、generation1，Active取Default、generation0且不在使用。
+- 只在无故障、功率关闭且Runtime OFF的健康IDLE，整组写Staged；kp范围0.0005..0.005、ki为0..0.02，均有限。
+- 每次新的合法写generation按u32加1，协议重复请求不产生新修订；它不是跨复位唯一身份。
+- 合法Start被接受时由实时所有者复制当时Staged到Active并标记使用；拒绝Start不改变Active。
+- Stop/Fault保留最后Active及generation，但标记不在使用；Communication不能直接写PI实例或积分。
+- 不提供RUN在线修改、Flash持久化或故障自动恢复。500 Hz遥测配置只作IDLE压力，不能启动运动。
+
+内部ticket/Completion、协议结果、Motor业务结果及RUN状态分别表示，不能用最近一次命令结果
+推断某个请求已完成。内部Fail-closed保持现有safe-off和下一实时边界合入故障的所有权，不改变
+HCC；普通外部坏帧不派生新的运动命令、自动Stop或故障恢复。
+本阶段为该内部锁存来源预留Target fault bit7，详细首因由COMMUNICATION_STATUS提供；
+此来源尚未接入当前裸机固件，不表示Clear获得新的恢复能力。
+
+### 其他剩余边界
+
 G431 Run 承接原板相序、电流符号、编码器方向/极对数/偏置的有限台架证据；正式 Motor / UART 已完成正反启停、调速及独立时长边界，2圈边界、正式RUN故障注入及长期稳定性仍需分别验收。独立电流幅值精度、持久标定及故障恢复另行补齐，数值模型不替代实物条件。参数只开放真实调试需要的最小集合，不预建对象字典或多协议框架。

@@ -123,6 +123,9 @@ Platform 的 SSI / 母线实际采集为 1 kHz。Run 每个 100 µs fast tick �
 
 ## 后续 FreeRTOS 的接入边界
 
+本阶段已固定[RTOS集成合同](RTOS_INTEGRATION.md)及[Core Protocol V1](../../../../interface/CORE_PROTOCOL_V1.md)，
+按纯Codec、实时交接、RTOS启动、UART DMA、事务和压力逐项接通。当前固件行为仍以下述裸机基线为准。
+
 当前为裸机后台轮询，尚无 RTOS 内核或任务。后续只迁移后台通信、遥测与维护；
 电流环、速度环仍在硬件同步 ADC 边界执行，保持 Motor / ControlRuntime 单写者，不改成独立任务。
 控制 ISR 不等待任务、队列或互斥锁，不调用内核 API。

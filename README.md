@@ -27,7 +27,7 @@ hardware/     板级硬件事实与电机、编码器参考资料
 
 交付按控制基线、自研 UART 协议、FreeRTOS 集成依次验收。控制基线先沿用现有 UART 命令和 VOFA，提供可重复的有限范围启停、设速、观测及故障关断；协议与调度迁移分别形成后续增量。具体活动分支的范围、完成条件和下一步由本地 Git 检查点正文保存，恢复方法见 [开发规则](DEVELOPMENT.md)。
 
-CAN 实物联调、Qt Host、位置环、标准 Modbus / CANopen 栈及 F405 同功能验收在后续范围。自研协议统一设备语义，UART / CAN 可分别定义线上表示；[协议设计草案](interface/PROTOCOL_DESIGN.md)尚未冻结字段、编号或兼容承诺。
+CAN 实物联调、Qt Host、位置环、标准 Modbus / CANopen 栈及 F405 同功能验收在后续范围。自研协议统一设备语义，UART / CAN 分别映射；本阶段字段与编号见[Core Protocol V1](interface/CORE_PROTOCOL_V1.md)，冻结合同不表示已经实现或实机通过。
 
 ## 实现与验证入口
 
