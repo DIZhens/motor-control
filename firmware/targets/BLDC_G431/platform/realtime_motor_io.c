@@ -14,9 +14,7 @@
 #if defined(BLDC_G431_OBSERVE_ENTRY)
 #include "irq_timing.h"
 #endif
-#if defined(BLDC_G431_OBSERVE_ENTRY) || defined(BLDC_G431_TIMING_ENTRY)
 #include "realtime_motor_io_diagnostic.h"
-#endif
 
 #define CURRENT_ADC_FULL_SCALE_COUNTS (4095.0f)
 #define CURRENT_ADC_VREF_NOMINAL_V (3.3f)
@@ -55,6 +53,11 @@ static volatile bool s_sample_taken;
 static volatile bool s_timing_faulted;
 static uint32_t s_callback_start_cycles;
 static uint32_t s_callback_entry_count;
+static uint32_t s_irq_entry_cycles;
+static uint32_t s_consumer_entry_cycles;
+static uint32_t s_consumer_exit_cycles;
+static uint32_t s_auxiliary_exit_cycles;
+volatile G431TimingFailure g_g431_timing_failure;
 
 void realtime_motor_io_stage_anchor(uint32_t *cycles, uint32_t *entry_count)
 {
@@ -190,6 +193,55 @@ static void safe_off_locked(void)
     s_stage_pending_boundary = false;
     s_stage_committed = false;
     s_power_enabled = false;
+}
+
+/* 调用者持有PRIMASK。健康路径不复制大结构；只在原失败分支采集首因。
+ * 保存清理会改变的少量上下文后，立即走既有safe-off，再写诊断publication。 */
+static void fail_timing_locked(G431TimingFailureReason reason)
+{
+    uint32_t now = DWT->CYCCNT;
+    uint32_t count = htim1.Instance->CNT;
+    uint32_t status = htim1.Instance->SR;
+    uint32_t control = htim1.Instance->CR1;
+    uint32_t epoch = s_actuation_epoch;
+    uint32_t state = (s_power_enabled ? 1U : 0U) | (s_adc_busy ? 2U : 0U)
+        | (s_adc_eligible ? 4U : 0U) | (s_slot_valid ? 8U : 0U)
+        | (s_sample_taken ? 16U : 0U) | (s_staged_this_tick ? 32U : 0U)
+        | (s_stage_pending_boundary ? 64U : 0U) | (s_stage_committed ? 128U : 0U)
+        | ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) != 0U ? 256U : 0U)
+        | ((CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) != 0U ? 512U : 0U)
+        | (s_callback_epoch == s_actuation_epoch ? 1024U : 0U)
+        | (s_adc_slot == s_slot_sequence ? 2048U : 0U);
+
+    s_timing_faulted = true;
+    safe_off_locked();
+    if (g_g431_timing_failure.sequence != 0U) {
+        return;
+    }
+    g_g431_timing_failure.sequence = 1U;
+    __DMB();
+    g_g431_timing_failure.reason = (uint32_t)reason;
+    g_g431_timing_failure.slot_sequence = s_slot_sequence;
+    g_g431_timing_failure.callback_slot = s_callback_slot;
+    g_g431_timing_failure.observed_cycles = now;
+    g_g431_timing_failure.slot_start_cycles = s_slot_start_cycles;
+    g_g431_timing_failure.irq_entry_cycles = s_irq_entry_cycles;
+    g_g431_timing_failure.callback_start_cycles = s_callback_start_cycles;
+    g_g431_timing_failure.consumer_entry_cycles = s_consumer_entry_cycles;
+    g_g431_timing_failure.consumer_exit_cycles = s_consumer_exit_cycles;
+    g_g431_timing_failure.auxiliary_exit_cycles = s_auxiliary_exit_cycles;
+    g_g431_timing_failure.reserved = 0U;
+    g_g431_timing_failure.tim_count = count;
+    g_g431_timing_failure.tim_status = status;
+    g_g431_timing_failure.tim_control = control;
+    g_g431_timing_failure.state_bits = state;
+    g_g431_timing_failure.adc1_status = hadc1.Instance->ISR;
+    g_g431_timing_failure.adc2_status = hadc2.Instance->ISR;
+    g_g431_timing_failure.actuation_epoch = epoch;
+    g_g431_timing_failure.callback_epoch = s_callback_epoch;
+    g_g431_timing_failure.observation_time = s_slot_time;
+    __DMB();
+    g_g431_timing_failure.sequence = 2U;
 }
 
 bool realtime_motor_io_get_facts(RealtimeMotorIoFacts *out_facts)
@@ -365,6 +417,7 @@ void realtime_motor_io_update_irq(void)
     uint32_t cr1;
     bool valid;
     bool delivery_valid;
+    G431TimingFailureReason failure = (G431TimingFailureReason)0;
 
     __disable_irq();
     if ((htim1.Instance->SR & TIM_FLAG_UPDATE) == 0U) {
@@ -385,8 +438,7 @@ void realtime_motor_io_update_irq(void)
     late = now - s_expected_update_cycles;
     /* 在 cycle 上还未到期的 UIF 也不能制造新 slot。差值以有界半回绕解释。 */
     if (late >= 0x80000000U) {
-        s_timing_faulted = true;
-        safe_off_locked();
+        fail_timing_locked(G431_TIMING_FAILURE_EARLY_UPDATE);
         s_slot_valid = false;
         restore_interrupts(primask);
         return;
@@ -419,13 +471,17 @@ void realtime_motor_io_update_irq(void)
         delivery_valid = false;
     }
     if (!valid || !delivery_valid) {
-        s_timing_faulted = true;
+        failure = !valid ? G431_TIMING_FAILURE_UPDATE_STATE : G431_TIMING_FAILURE_DELIVERY;
     }
     valid = valid && delivery_valid
         && ((htim1.Instance->SR & (TIM_FLAG_BREAK | TIM_FLAG_BREAK2)) == 0U);
     s_stage_committed = false;
     if (!valid) {
-        safe_off_locked();
+        if (failure != (G431TimingFailureReason)0) {
+            fail_timing_locked(failure);
+        } else {
+            safe_off_locked();
+        }
         s_slot_valid = false;
         s_adc_eligible = false;
     } else {
@@ -447,15 +503,14 @@ void realtime_motor_io_update_irq(void)
         }
         if (!valid) {
             sample_gate_close();
-            s_timing_faulted = true;
             s_slot_valid = false;
-            safe_off_locked();
+            fail_timing_locked(G431_TIMING_FAILURE_ARM_WINDOW);
         }
     }
     restore_interrupts(primask);
 }
 
-void realtime_motor_io_adc_irq_enter(void)
+__STATIC_FORCEINLINE void claim_adc_irq(void)
 {
     uint32_t primask = __get_PRIMASK();
     uint32_t elapsed;
@@ -484,10 +539,16 @@ void realtime_motor_io_adc_irq_enter(void)
         s_adc_slot = s_slot_sequence;
         s_adc_epoch = s_actuation_epoch;
     } else if (injected && s_timing_started) {
-        s_timing_faulted = true;
-        safe_off_locked();
+        fail_timing_locked(G431_TIMING_FAILURE_ADC_ENTRY);
     }
     restore_interrupts(primask);
+}
+
+void realtime_motor_io_adc_irq_enter(void)
+{
+    /* 仅vector入口更新锚点；regular IRQ中迟到的JEOS升级不能重置整段IRQ计时。 */
+    s_irq_entry_cycles = DWT->CYCCNT;
+    claim_adc_irq();
 }
 
 void realtime_motor_io_adc_irq_exit(void)
@@ -499,9 +560,10 @@ void realtime_motor_io_adc_irq_exit(void)
     if (s_adc_eligible && (!irq_time_available()
         || (s_callback_epoch != s_actuation_epoch))) {
         if (!irq_time_available()) {
-            s_timing_faulted = true;
+            fail_timing_locked(G431_TIMING_FAILURE_IRQ_EXIT);
+        } else {
+            safe_off_locked();
         }
-        safe_off_locked();
     }
     /* ADC2 不启用 injected IRQ；被拒绝的旧事务也须在 HAL 收尾后排空副 ADC flags。 */
     if (s_adc_injected_irq) {
@@ -644,7 +706,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
      * 规则升级 ownership，之后 busy 一直覆盖到整个 HAL/诊断尾部退出。 */
     if ((hadc == &hadc1) && !s_adc_injected_irq
         && ((hadc1.Instance->ISR & (ADC_FLAG_JEOS | ADC_FLAG_JEOC)) != 0U)) {
-        realtime_motor_io_adc_irq_enter();
+        claim_adc_irq();
     }
     if ((hadc != &hadc1) || !s_armed || !s_timing_started || !s_adc_eligible) {
         return;
@@ -713,7 +775,9 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         g431_irq_timing_consumer_enter(DWT->CYCCNT);
     }
 #endif
+    s_consumer_entry_cycles = DWT->CYCCNT;
     s_sample_ready_handler(s_sample_ready_context, &observation);
+    s_consumer_exit_cycles = DWT->CYCCNT;
 #if defined(BLDC_G431_OBSERVE_ENTRY)
     if (g_target_irq_timing_active != 0U) {
         g431_irq_timing_consumer_exit(DWT->CYCCNT);
@@ -725,13 +789,18 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     if ((s_power_enabled && !s_staged_this_tick)
         || !staging_time_available()) {
         if (!irq_time_available() || (s_power_enabled && !s_staged_this_tick)) {
-            s_timing_faulted = true;
+            primask = __get_PRIMASK();
+            __disable_irq();
+            fail_timing_locked(G431_TIMING_FAILURE_CONSUMER_RETURN);
+            restore_interrupts(primask);
+        } else {
+            realtime_motor_io_safe_off();
         }
-        realtime_motor_io_safe_off();
     }
 
     position_observation_fast_tick(observation_time);
     bus_observation_fast_tick(observation_time);
+    s_auxiliary_exit_cycles = DWT->CYCCNT;
 }
 
 #if defined(__CC_ARM)

@@ -207,6 +207,18 @@ stop_reason可能变为2，不能覆盖或重新解释原始失败。既有冻�
 SSI噪声捕获，位置差分对应约4 ms平均速度；原4000点窗口及峰值验收门限保持，
 不能用降采样曲线替代原速度/电流初筛。
 
+平台私有`g_g431_timing_failure`保存本次启动的首个时序故障（88字节），原因1～7为
+提前UEV、UEV状态不符、三相提交交付不符、采样开门超期、ADC入口不符、consumer返回
+失效和完整HAL收尾失效。先走原safe-off，再发布偶数版本；Stop、后续采样及新命令不
+清除首因，重新启动才清零。记录slot/epoch、检测/IRQ入口/采样callback/consumer/慢采集
+尾部的DWT锚点、TIM/ADC状态和ControlTime。不读取有清标志副作用的ADC DR。
+
+健康路径仅写少量DWT锚点，不复制故障结构；同一regular IRQ内迟到JEOS升级不重置
+vector入口锚点。主机在事务结束且输出关闭后立即读取首因，保留原始时间并按32位
+回绕计算差值，旧slot的callback锚点不用于本拍分段。记录的耗时到故障检测处为止，
+不含异常入口/返回和锁存复制，也不是未插桩固件的WCET证明。捕获期间不要重启电源，
+否则未上传的RAM首因会丢失。主机保存`timing-first-failure.json`；版本/布局随候选冻结。
+
 母线regular三rank改由DMA1_Channel1按normal模式一次搬运3个halfword。TC、剩余计数0及
 DMA ready同时成立才发布；不读DR、不按实时EOS推断rank，半传输中断关闭。每10次
 同步电流callback启动一次的1 kHz节奏保持。DMA与ADC均为抢占优先级1，避免publication

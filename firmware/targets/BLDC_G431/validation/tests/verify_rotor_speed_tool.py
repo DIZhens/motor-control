@@ -25,13 +25,16 @@ class FakeSession(current.FakeSession):
     def __init__(self,output,rpm=60,kp=0.001,ki=0.004):
         super().__init__(output)
         self.payload_parameters=speed.parameters(rpm,0.125,kp,ki)
-        self.rotor_layout={'result':0x20000700,'bus_failure':0x20000800,'trace':0x20001000,
+        self.rotor_layout={'result':0x20000700,'bus_failure':0x20000800,'timing_failure':0x20000900,'trace':0x20001000,
             **{'field_'+n:4*i for i,n in enumerate(speed.FIELDS)}}
         self.raw_result=bytes(speed.SIZE)
         self.raw_bus=bytes(speed.BUS_SIZE)
+        self.raw_timing=bytes(speed.TIMING_SIZE)
         self.raw_trace=bytes(speed.TRACE_SIZE)
 
     def upload(self,tag,blocks):
+        if blocks[0][0]=='timing_sequence':return {'timing_sequence':self.raw_timing[:4]}
+        if blocks[0][0]=='timing_failure':return {'timing_failure':self.raw_timing}
         if blocks[0][0]=='header':return {'header':self.raw_trace[:speed.TRACE_HEADER_SIZE]}
         if blocks[0][0]=='trace':return {'trace':self.raw_trace}
         if blocks[0][0]=='bus_sequence':return {'bus_sequence':self.raw_bus[:4]}
@@ -204,6 +207,59 @@ class Tests(unittest.TestCase):
                 raw=bytearray(good);struct.pack_into('<'+fmt,raw,offset,value);s.raw_trace=bytes(raw)
                 with self.assertRaises(RuntimeError):speed.read_speed_trace(s,terminal)
                 self.assertEqual(s.writes,writes)
+
+    def test_timing_latch_is_read_only_and_cycle_wrap_is_explicit(self):
+        with TemporaryDirectory() as tmp:
+            s=FakeSession(tmp)
+            self.assertFalse(speed.read_timing_failure(s)['recorded'])
+            fields={'sequence':2,'reason':7,'slot_sequence':10,'callback_slot':10,
+                'slot_start_cycles':0xffffc000,'irq_entry_cycles':0xffffd000,'callback_start_cycles':0xffffd100,
+                'consumer_entry_cycles':0xffffd200,'consumer_exit_cycles':0xfffff500,
+                'auxiliary_exit_cycles':0xfffffc00,'observed_cycles':0x100,'state_bits':0xfef,'observation_time':123456}
+            raw=bytearray(speed.TIMING_SIZE)
+            for n,v in fields.items():
+                fmt,offset=speed.TIMING_FIELDS[n];struct.pack_into('<'+fmt,raw,offset,v)
+            s.raw_timing=bytes(raw);r=speed.read_timing_failure(s)
+            self.assertTrue(r['callback_anchor_current']);self.assertTrue(r['irq_context_active'])
+            self.assertEqual(r['reason_name'],'irq_exit');self.assertEqual(r['slot_elapsed_cycles'],0x4100)
+            self.assertEqual(r['prefix_cycles'],0x200);self.assertEqual(r['consumer_cycles'],0x2300)
+            self.assertEqual(r['auxiliary_cycles'],0x700);self.assertEqual(r['hal_tail_to_detection_cycles'],0x500)
+            self.assertEqual(s.writes,[])
+            for offset,value in [(0,3),(4,8),(44,1)]:
+                bad=bytearray(raw);struct.pack_into('<I',bad,offset,value);s.raw_timing=bytes(bad)
+                with self.assertRaises(RuntimeError):speed.read_timing_failure(s)
+            self.assertEqual(s.writes,[])
+
+    def test_timing_fault_before_callback_does_not_report_stale_phase_durations(self):
+        with TemporaryDirectory() as tmp:
+            s=FakeSession(tmp);raw=bytearray(speed.TIMING_SIZE)
+            struct.pack_into('<4I',raw,0,2,2,99,98);s.raw_timing=bytes(raw)
+            r=speed.read_timing_failure(s)
+            self.assertFalse(r['callback_anchor_current']);self.assertIsNone(r['consumer_cycles'])
+            self.assertIsNone(r['irq_hook_to_detection_cycles']);self.assertEqual(s.writes,[])
+
+    def test_bad_current_keeps_timing_cause_before_single_safe_off(self):
+        with TemporaryDirectory() as tmp:
+            p=Path(tmp);s=FakeSession(p/'live');anchor=loop.zero(s,12);s.action='execute';loop.common.save(p/'zero.json',anchor)
+            original=s.execute
+            def bad_current(tag,args):
+                result=original(tag,args)
+                if len(args)==3 and 20 in s.writes:
+                    raw=bytearray(s.raw_result);struct.pack_into('<I',raw,12,6);s.raw_result=bytes(raw)
+                    trace=bytearray(s.raw_trace);struct.pack_into('<I',trace,12,6);s.raw_trace=bytes(trace)
+                    timing=bytearray(speed.TIMING_SIZE);struct.pack_into('<4I',timing,0,2,7,9,9);s.raw_timing=bytes(timing)
+                    s.state.update(result=6,stop_reason=6)
+                return result
+            s.execute=bad_current
+            def connect(output,*args):output.mkdir();return s
+            with patch.object(speed,'Session',side_effect=connect):
+                with self.assertRaisesRegex(RuntimeError,'结果码=6'):
+                    speed.main(['--output',str(p/'new'),'--action','execute','--prepared','x',
+                        '--zero-summary',str(p/'zero.json'),'--bench-confirmed','--vbus-dmm-v','12'])
+            report=json.loads((p/'new/summary.json').read_text(encoding='utf-8'))
+            self.assertEqual(report['rotor_speed']['result'],6)
+            self.assertEqual(report['timing_failure']['reason_name'],'irq_exit')
+            self.assertEqual(s.writes,[4,20,1]);self.assertFalse(s.state['moe'])
 
 
 if __name__=='__main__':unittest.main(verbosity=1)

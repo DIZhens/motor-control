@@ -30,6 +30,12 @@ TRACE_SAMPLE_FIELDS={'elapsed_ticks':'I','position_age_ticks':'I','position_turn
     'iq_reference_a':'f','iq_measured_a':'f'}
 TRACE_HEADER_SIZE,TRACE_SAMPLE_SIZE,TRACE_CAPACITY=40,24,375
 TRACE_SIZE=TRACE_HEADER_SIZE+TRACE_SAMPLE_SIZE*TRACE_CAPACITY
+TIMING_FIELDS={n:('I',4*i) for i,n in enumerate(['sequence','reason','slot_sequence','callback_slot',
+    'observed_cycles','slot_start_cycles','irq_entry_cycles','callback_start_cycles','consumer_entry_cycles',
+    'consumer_exit_cycles','auxiliary_exit_cycles','reserved','tim_count','tim_status','tim_control','state_bits',
+    'adc1_status','adc2_status','actuation_epoch','callback_epoch'])}
+TIMING_FIELDS['observation_time']=('Q',80)
+TIMING_SIZE=88
 LIMITS={'target_max_rpm':80.0,'iq_limit_nominal_a':0.1,'speed_kp_a_per_rpm':0.001,'speed_ki_a_per_rpm_s':0.004,
     'kp_min_a_per_rpm':0.0005,'kp_max_a_per_rpm':0.005,'ki_min_a_per_rpm_s':0.0,'ki_max_a_per_rpm_s':0.02,
     'speed_tracking_per_s':20.0,'velocity_filter_s':0.005,'speed_loop_hz':1000,'current_loop_hz':10000,
@@ -59,6 +65,8 @@ def prepare(build,output,gdb,mapping):
     specs.update({'field_'+n:'&((RotorSpeedSnapshot*)0)->'+n for n in FIELDS})
     specs.update(bus_failure='&g_target_validation_bus_failure',bus_failure_size='sizeof(TargetValidationBusFailure)')
     specs.update({'bus_field_'+n:'&((TargetValidationBusFailure*)0)->'+n for n in BUS_FIELDS})
+    specs.update(timing_failure='&g_g431_timing_failure',timing_failure_size='sizeof(G431TimingFailure)')
+    specs.update({'timing_field_'+n:'&((G431TimingFailure*)0)->'+n for n in TIMING_FIELDS})
     command=[str(gdb),'-batch','-ex','file "'+(output/'artifacts'/loop.candidate.ARTIFACTS[1]).as_posix()+'"']
     for value in specs.values():command+=['-ex','p/x (unsigned int)'+value]
     proc=subprocess.run(command,capture_output=True,text=True,timeout=20)
@@ -77,8 +85,11 @@ def prepare(build,output,gdb,mapping):
     for name,size in [('config',16),('result',SIZE),('trace',TRACE_SIZE)]:require(0x20000000<=layout[name]<layout[name]+size<=0x20008000,'有限速度地址越界')
     require(layout['bus_failure_size']==BUS_SIZE and all(layout['bus_field_'+n]==offset for n,(_,offset) in BUS_FIELDS.items())
         and 0x20000000<=layout['bus_failure']<layout['bus_failure']+BUS_SIZE<=0x20008000,'母线失败锁存ABI改变')
+    require(layout['timing_failure_size']==TIMING_SIZE
+        and all(layout['timing_field_'+n]==offset for n,(_,offset) in TIMING_FIELDS.items())
+        and 0x20000000<=layout['timing_failure']<layout['timing_failure']+TIMING_SIZE<=0x20008000,'时序首故障ABI改变')
     report.update(rotor_speed_schema=2,rotor_speed_layout=layout,rotor_speed_limits=LIMITS,
-        bus_failure_schema=1,rotor_speed_tool_sha256=loop.candidate.digest(Path(__file__)))
+        bus_failure_schema=1,timing_failure_schema=1,rotor_speed_tool_sha256=loop.candidate.digest(Path(__file__)))
     report['source_files']['validation/tools/rotor_speed_once.py']=loop.candidate.digest(Path(__file__))
     loop.common.save(output/'prepared.json',report)
     return report
@@ -92,12 +103,50 @@ class Session(rotor.Session):
         frozen,_=loop.load_prepared(prepared)
         require(frozen.get('rotor_speed_schema')==2 and frozen.get('rotor_speed_limits')==LIMITS
             and frozen.get('bus_failure_schema')==1
+            and frozen.get('timing_failure_schema')==1
             and frozen.get('rotor_speed_tool_sha256')==loop.candidate.digest(Path(__file__)),
             '不是本版有限速度候选，或工具/包络已改变')
         payload=parameters(rpm,frozen['mapping_candidate']['electrical_offset_turns'],kp,ki)
         super().__init__(output,prepared,cli,action,0.1)
         self.rotor_layout=frozen['rotor_speed_layout'];self.layout=dict(self.layout,config=self.rotor_layout['config'])
         self.payload_parameters=payload
+
+
+def read_timing_failure(session,tag='timing-first-failure'):
+    address=session.rotor_layout['timing_failure']
+    before=session.upload(tag+'-before',[('timing_sequence',address,4)])['timing_sequence']
+    raw=session.upload(tag,[('timing_failure',address,TIMING_SIZE)])['timing_failure']
+    after=session.upload(tag+'-after',[('timing_sequence',address,4)])['timing_sequence']
+    require(len(raw)==TIMING_SIZE and before==after==raw[:4] and loop.common.word(raw)%2==0,
+        '时序首故障读回不一致，不重复执行功率命令')
+    failure={n:struct.unpack_from('<'+f,raw,o)[0] for n,(f,o) in TIMING_FIELDS.items()}
+    failure['recorded']=failure['sequence']!=0
+    reason=failure['reason']
+    require(not failure['recorded'] or (1<=reason<=7 and failure['reserved']==0),'时序首故障原因或保留位不符')
+    failure['reason_name']={0:'none',1:'early_update',2:'update_state',3:'delivery',4:'arm_window',
+        5:'adc_entry',6:'consumer_return',7:'irq_exit'}.get(reason,'unknown')
+    def elapsed(end,start):
+        value=(failure[end]-failure[start])&0xffffffff
+        return value if value<0x80000000 else None
+    active_irq=failure['recorded'] and (reason in [5,6,7] or bool(failure['state_bits']&2))
+    callback_current=(failure['recorded'] and failure['callback_slot']!=0
+        and failure['callback_slot']==failure['slot_sequence']
+        and elapsed('callback_start_cycles','slot_start_cycles') is not None
+        and elapsed('callback_start_cycles','slot_start_cycles')<17000)
+    failure['irq_context_active']=active_irq
+    failure['callback_anchor_current']=callback_current
+    failure['slot_elapsed_cycles']=elapsed('observed_cycles','slot_start_cycles') if failure['recorded'] else None
+    failure['irq_hook_to_detection_cycles']=elapsed('observed_cycles','irq_entry_cycles') if active_irq else None
+    valid_phases=callback_current and reason in [6,7]
+    failure['prefix_cycles']=elapsed('consumer_entry_cycles','irq_entry_cycles') if valid_phases else None
+    failure['consumer_cycles']=elapsed('consumer_exit_cycles','consumer_entry_cycles') if valid_phases else None
+    failure['post_consumer_cycles']=elapsed('observed_cycles','consumer_exit_cycles') if valid_phases else None
+    failure['auxiliary_cycles']=elapsed('auxiliary_exit_cycles','consumer_exit_cycles') if valid_phases and reason==7 else None
+    failure['hal_tail_to_detection_cycles']=elapsed('observed_cycles','auxiliary_exit_cycles') if valid_phases and reason==7 else None
+    failure['unmodified_irq_wcet_proved']=False
+    failure['exception_entry_return_and_latch_copy_included']=False
+    loop.common.save(session.out/(tag+'.json'),failure)
+    return failure
 
 
 def read_speed_trace(session,terminal):
@@ -207,6 +256,8 @@ def execute_once(session,anchor,vbus,clock=time.monotonic):
     session.call_timeout_s,session.deadline=15.0,None
     if result['result']==7 and not result['moe'] and not result['halted']:
         session.bus_failure=read_bus_failure(session,'bus-first-failure',request)
+    if not result['moe'] and not result['halted']:
+        session.timing_failure=read_timing_failure(session)
     session.trace_summary=read_speed_trace(session,result)
     analysis=analyze(result,session.payload_parameters)
     _,final,updated=loop.preflight(session,'speed-final',vbus,stationary=False)
@@ -218,6 +269,7 @@ def execute_once(session,anchor,vbus,clock=time.monotonic):
         and (result['result']!=1 or stages==15001),'速度提交计数异常')
     return {'result':'ROTOR_SPEED_FINISHED_OUTPUT_OFF','request_sequence':request,'zero_request_sequence':anchor['request_sequence'],
         'before':before,'final':final,'rotor_speed':result,'analysis':analysis,'trace':session.trace_summary,
+        'timing_failure':session.timing_failure,
         'controller_gains':{'kp_a_per_rpm':session.payload_parameters[2],'ki_a_per_rpm_s':session.payload_parameters[3]}}
 
 
@@ -253,6 +305,7 @@ def main(argv=None):
         report={'result':'FAILED_NO_RETRY','error':str(error),'action':args.action,'write_attempted':bool(session and session.write_attempted),'automatic_retry':False}
         if session and hasattr(session,'terminal_result'):report['rotor_speed']=session.terminal_result
         if session and hasattr(session,'bus_failure'):report['bus_failure']=session.bus_failure
+        if session and hasattr(session,'timing_failure'):report['timing_failure']=session.timing_failure
         if session and hasattr(session,'trace_summary'):report['trace']=session.trace_summary
         if session and session.write_attempted and 1 not in session.writes:
             try:

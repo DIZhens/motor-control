@@ -304,6 +304,13 @@ class Model:
         assert self.word("model_enable_result") == 1 and self.moe()
         return self
 
+    def timing_failure(self):
+        names = ['sequence','reason','slot_sequence','callback_slot','observed_cycles','slot_start_cycles',
+            'irq_entry_cycles','callback_start_cycles','consumer_entry_cycles','consumer_exit_cycles',
+            'auxiliary_exit_cycles','reserved','tim_count','tim_status','tim_control','state_bits',
+            'adc1_status','adc2_status','actuation_epoch','callback_epoch','observation_time']
+        return dict(zip(names,struct.unpack('<20IQ',self.cpu.mem_read(self.symbols['g_g431_timing_failure'],88))))
+
 
 def run(image):
     cases = []
@@ -406,14 +413,45 @@ def run(image):
     passed("missing RUN submission fails off while timing continues")
     for marker in [3, 4]:
         m = Model(image).powered()
+        assert not m.timing_failure()['sequence']
+        stores=[]
+        def diagnostic_store(cpu, access, address, size, value, unused):
+            assert not m.moe(), 'diagnostic publication preceded safe-off'
+            stores.append(address)
+        address=m.symbols['g_g431_timing_failure']
+        m.cpu.hook_add(UC_HOOK_MEM_WRITE,diagnostic_store,begin=address,end=address+87)
         m.on_marker = lambda model, point, marker=marker: model.advance(10800) if point == marker else None
         m.tick(STAGE)
         assert not m.moe() and tuple(m.shadow) == NEUTRAL
+        failure=m.timing_failure()
+        assert stores and failure['sequence']==2 and failure['reason']==(6 if marker==3 else 7),failure
+        assert failure['slot_sequence']==failure['callback_slot'] and failure['reserved']==0
+        assert (failure['observed_cycles']-failure['irq_entry_cycles'])%2**32>=10800
+        assert failure['state_bits']&768==768
         m.on_marker = None
         m.tick(0); assert m.word("model_observation_valid") == 0
         m.tick(STAGE | ENABLE)
         assert m.word("model_stage_result") == m.word("model_enable_result") == 0 and not m.moe()
+        m.call('realtime_motor_io_safe_off');assert m.timing_failure()==failure
         passed(f"consumer/HAL tail overrun at marker {marker} stays observable even with MOE already off")
+        passed(f"first timing cause {failure['reason']} publishes after safe-off and survives Stop/next samples")
+    m=Model(image,cycle_counter=0xffff3cb0).powered()
+    m.on_marker=lambda model,point:model.advance(10800) if point==4 else None
+    m.tick(STAGE);failure=m.timing_failure()
+    assert failure['sequence']==2 and failure['reason']==7
+    assert (failure['observed_cycles']-failure['irq_entry_cycles'])%2**32==10800,failure
+    passed('first-failure timestamps retain unsigned elapsed across cycle-clock wrap')
+    m=Model(image);m.put(SR,1);m.call('platform_model_update_irq')
+    assert m.timing_failure()['reason']==1 and not m.moe()
+    passed('premature UEV retains early-update first cause')
+    m=Model(image).powered();m.next_sample();m.advance(1450)
+    m.tick(STAGE,advance=0,count=None)
+    assert m.timing_failure()['reason']==5 and not m.moe()
+    passed('late injected admission is distinguished from consumer or HAL tail')
+    m=Model(image).powered()
+    m.cpu.mem_write(m.symbols['s_stage_pending_boundary'],bytes(1));m.advance(12500)
+    assert m.timing_failure()['reason']==3 and not m.moe()
+    passed('missing committed preload has delivery first cause')
     m = Model(image).powered(); m.tick(STAGE | OFF | ENABLE | 64)
     assert not m.moe() and m.word("model_enable_result") == m.word("model_second_stage_result") == 0
     m.tick(STAGE | ENABLE); assert not m.moe()
@@ -504,11 +542,13 @@ def run(image):
 
     for same_irq in [True, False]:
         m = Model(image).powered(); m.advance(12500); m.advance(4200)
+        entered=m.get(DWT_CYCCNT)
         m.put(ADC1_ISR, 4); m.call("platform_model_adc_enter")
         m.advance(300)
         m.write("model_actions", STAGE | ENABLE)
         if same_irq:
             m.call("platform_model_adc_callback")
+            assert m.word('s_irq_entry_cycles')==entered
             m.call("platform_model_adc_exit")
         else:
             m.call("platform_model_regular_exit")
