@@ -59,6 +59,7 @@ typedef enum {
     TARGET_VALIDATION_COMMAND_ANGLE_SURVEY = 16, /* 单次有限静态电角往返，仅生成观测证据。 */
     TARGET_VALIDATION_COMMAND_CURRENT_SURVEY = 18, /* 5秒有限电流磁场往返；不授予转子FOC。 */
     TARGET_VALIDATION_COMMAND_CURRENT_HOLD = 17, /* 3秒静止αβ电流PI；不依赖转子电角标定。 */
+    TARGET_VALIDATION_COMMAND_ROTOR_CURRENT = 19, /* 1秒有限转子DQ，零位只在本次请求中使用。 */
     TARGET_VALIDATION_COMMAND_TIMING_IMMEDIATE = TIMING_PROBE_CASE_IMMEDIATE,
     TARGET_VALIDATION_COMMAND_TIMING_BEFORE = TIMING_PROBE_CASE_BEFORE,
     TARGET_VALIDATION_COMMAND_TIMING_AFTER = TIMING_PROBE_CASE_AFTER,
@@ -97,7 +98,8 @@ typedef enum {
     TARGET_VALIDATION_RESULT_BAD_ZERO = 19,
     TARGET_VALIDATION_RESULT_BAD_POSITION = 20,
     TARGET_VALIDATION_RESULT_OPEN_LOOP_REJECTED = 21,
-    TARGET_VALIDATION_RESULT_NOMINAL_CURRENT = 22
+    TARGET_VALIDATION_RESULT_NOMINAL_CURRENT = 22,
+    TARGET_VALIDATION_RESULT_ROTOR_MOTION_LIMIT = 23
 } TargetValidationResult;
 
 #define TARGET_VALIDATION_POWER_KEY (0x4310A11EU)
@@ -261,6 +263,8 @@ extern volatile TargetValidationCurrentSurveyConfig g_target_validation_current_
 extern volatile TargetValidationCurrentSurveySnapshot g_target_validation_current_survey;
 extern volatile CurrentHoldConfig g_target_validation_current_hold_config;
 extern volatile CurrentHoldSnapshot g_target_validation_current_hold;
+extern volatile RotorCurrentConfig g_target_validation_rotor_current_config;
+extern volatile RotorCurrentSnapshot g_target_validation_rotor_current;
 /* ADC 丢失时快照可能停在旧状态；此字独立记录关断原因。 */
 extern volatile uint32_t g_target_validation_stop_reason;
 /* 时序用例后的连续正常采样数，饱和至 2；不改变旧诊断结构的 ABI。 */

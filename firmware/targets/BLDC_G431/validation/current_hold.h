@@ -5,6 +5,9 @@
 #include <stdint.h>
 #include "current_controller.h"
 #include "realtime_motor_io.h"
+#include "position_observation.h"
+#include "position_estimator.h"
+#include "electrical_angle.h"
 
 #define CURRENT_HOLD_DURATION_US 3500000U
 #define CURRENT_SURVEY_DURATION_US 5500000U
@@ -13,6 +16,25 @@
 #define CURRENT_SURVEY_MAX_VOLTAGE_V 1.8f
 #define CURRENT_SURVEY_NOMINAL_TRIP_A 0.65f
 #define CURRENT_SURVEY_INTEGRAL_LIMIT_V 1.5f
+#define ROTOR_CURRENT_DURATION_US 1500000U
+#define ROTOR_CURRENT_MAX_A 0.2f
+#define ROTOR_CURRENT_MAX_RPM 300.0f
+#define ROTOR_CURRENT_MAX_DISPLACEMENT 2.0f
+
+/* 命令19仅接收已审查的7极对、正方向候选；不修改正式Motor配置。 */
+typedef struct {
+    float iq_reference_a; /* Id固定0；允许正负0.01～0.2名义A。 */
+    float electrical_offset_turns;
+} RotorCurrentConfig;
+
+typedef struct {
+    uint32_t sequence, request_sequence, active, result;
+    uint32_t sample_count, enabled_samples, window_samples, voltage_limited_samples;
+    float iq_reference_a, electrical_offset_turns, mean_id_a, mean_iq_a;
+    float peak_tracking_error_a, max_voltage_v, peak_abs_current_a, min_duty, max_duty;
+    float start_position_turns, end_position_turns, displacement_turns;
+    float max_abs_velocity_rpm, last_velocity_rpm, mean_velocity_rpm, max_position_age_s;
+} RotorCurrentSnapshot;
 
 /* 仅验证入口的完整αβ目标；不安装电机标定，也不授予正式Motor RUN。 */
 typedef struct {
@@ -55,12 +77,28 @@ typedef struct {
     bool survey; /* 完整一电角圈往返；不使用转子角标定。 */
     float stator_sine;
     float stator_cosine;
+    bool rotor;
+    bool feedback_ready;
+    bool motion_limit;
+    PositionEstimator velocity;
+    ElectricalAngle measurement_angle;
+    ElectricalAngle actuation_angle;
+    ControlTime rotor_position_time;
+    float rotor_position;
+    float rotor_displacement;
+    float rotor_max_age_s;
 } CurrentHold;
 
 bool current_hold_init(CurrentHold *hold, const CurrentHoldConfig *config);
 
 /* 只供命令18：0.01～0.5名义A，完整一电角圈，五秒有限轨迹。 */
 bool current_hold_survey_init(CurrentHold *hold, float current_reference_a);
+
+bool current_hold_rotor_init(CurrentHold *hold, const RotorCurrentConfig *config);
+/* 同一ADC单写者消费SSI；两份新观测建立速度后才允许上层stage/enable。
+ * 测量角预测到sample，施加角显式预测至下一保持区间中点（sample后125us）。 */
+bool current_hold_rotor_feedback(CurrentHold *hold, const PositionObservation *position,
+    ControlTime sample_time);
 
 /* elapsed为实际enable之后的ControlTime，固定20 kHz单位、相邻调用2 tick。
  * 上层先验证原始采样/母线/时序和零点；本函数再次限数值范围并执行有界PI。

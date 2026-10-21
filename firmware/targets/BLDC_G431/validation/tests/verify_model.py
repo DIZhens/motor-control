@@ -58,6 +58,7 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
                    root.parents[1] / "app/motor/voltage_open_loop.c",
                    root.parents[2] / "control/current_controller.c",
                    root.parents[2] / "control/electrical_angle.c",
+                   root.parents[2] / "control/position_estimator.c",
                    root.parents[2] / "control/foc_math.c"]:
         obj = temp / (source.stem + ".o")
         options = ["-Otime"] if source.parent.name == "control" else []
@@ -217,6 +218,16 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
         def hold_submit(self, alpha=0.06, beta=0.0, key=KEY, duration=3500000, duty=0.5):
             self.cpu.mem_write(symbols["g_target_validation_current_hold_config"], struct.pack("<2f", alpha, beta))
             self.submit(17, key=key, duration=duration, duty=duty)
+
+        def rotor_submit(self, iq=0.1, offset=0.125, key=KEY, duration=1500000, duty=0.5):
+            self.cpu.mem_write(symbols["g_target_validation_rotor_current_config"], struct.pack("<2f",iq,offset))
+            self.submit(19,key=key,duration=duration,duty=duty)
+
+        def rotor(self):
+            keys=["sequence","request","active","result","samples","enabled","window_samples","limited_samples",
+                "iq_ref","offset","mean_id","mean_iq","peak_error","max_voltage","peak_current","min_duty","max_duty",
+                "start_position","end_position","displacement","max_rpm","last_rpm","mean_rpm","max_age"]
+            return dict(zip(keys,struct.unpack("<8I16f",self.cpu.mem_read(symbols["g_target_validation_rotor_current"],96))))
 
         def hold(self):
             keys = ["sequence", "request", "active", "result", "samples", "enabled_samples", "window_samples",
@@ -978,6 +989,95 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     m.write("model_current_b_a",0.7,"f");m.tick()
     assert not m.moe() and m.survey(current=True)["result"]==22
     passed("current survey uses its 0.65A threshold while old hold retains 0.25A")
+
+    def rotor_powered(iq=0.1):
+        m=zero_ready();m.write("model_position_period_ticks",20)
+        m.rotor_submit(iq=iq)
+        for _ in range(30):
+            m.tick()
+            if m.moe():break
+        assert m.moe() and m.word("model_enable_calls")==1,m.rotor()
+        return m
+
+    for payload,reason in [({"iq":0},4),({"iq":0.201},4),({"iq":-0.201},4),({"iq":math.nan},4),
+        ({"offset":-0.1},4),({"offset":1.0},4),({"offset":math.nan},4),
+        ({"key":0},3),({"duration":3500000},4),({"duty":0.4},4)]:
+        m=zero_ready();m.rotor_submit(**payload);m.tick(30)
+        assert not m.moe() and m.rotor()["result"]==reason,m.rotor()
+        assert m.word("model_enable_calls")==m.word("model_stage_calls")==0
+        passed("rotor DQ rejects invalid request before any stage: "+str(payload))
+    m=Model();m.rotor_submit();m.tick(30)
+    assert not m.moe() and m.rotor()["result"]==19
+    passed("rotor DQ requires captured same-boot zero")
+    m=zero_ready();m.write("model_position_period_ticks",10000);m.rotor_submit();m.tick(17)
+    assert not m.moe() and m.word("model_enable_calls")==0 and m.rotor()["result"]==20
+    passed("rotor DQ waits for two fresh SSI frames without enabling and rejects stale baseline")
+
+    for iq in [0.1,-0.1]:
+        m=rotor_powered(iq);decay=math.exp(-3.1*0.0001/0.002)
+        ia=ibeta=0.0;pending=[(0.5,0.5,0.5)]*2
+        initial=m.word("model_time");position=m.cpu.mem_read(symbols["model_position_turns"],4)
+        origin=struct.unpack("<f",position)[0];speed=0.5 if iq>0 else -0.5
+        # 真实R/L电气积分独立于固件；机械速度为外部给定，不冒充转矩/惯量模型。
+        for i in range(1,10001):
+            t=m.word("model_time")+2
+            theta=math.tau*((7*(origin+speed*(t-initial)/20000)-0.125)%1)
+            emf=0.15 if iq>0 else -0.15
+            duty=pending.pop(0);va,vb,vc=[12*(v-sum(duty)/3) for v in duty]
+            ea=-emf*math.sin(theta);eb=emf*math.cos(theta)
+            ia=decay*ia+(1-decay)*((2*va-vb-vc)/3-ea)/3.1
+            ibeta=decay*ibeta+(1-decay)*((vb-vc)/math.sqrt(3)-eb)/3.1
+            b=(-ia+math.sqrt(3)*ibeta)/2;c=(-ia-math.sqrt(3)*ibeta)/2
+            m.write("model_current_b_a",-0.012-b,"f");m.write("model_current_c_a",-0.001-c,"f")
+            if t%20==0:m.write("model_position_turns",(origin+speed*(t-initial)/20000)%1,"f")
+            m.tick();pending.append(struct.unpack("<3f",m.cpu.mem_read(symbols["model_last_duty"],12)))
+        r=m.rotor()
+        assert not m.moe() and r["result"]==1 and r["samples"]==10002 and r["enabled"]==10001,r
+        assert r["window_samples"]==2000 and abs(r["mean_id"])<0.02 and abs(r["mean_iq"]-iq)<0.02,r
+        assert r["peak_error"]<0.04 and r["max_voltage"]<1.8 and r["limited_samples"]==0,r
+        assert 29.9<abs(r["mean_rpm"])<30.1 and 0.49<abs(r["displacement"])<0.51,r
+        assert m.word("model_enable_calls")==1 and m.word("model_stage_calls")==10001
+        m.tick(5);assert m.rotor()==r
+        passed("rotor DQ with independent delayed RL and back-EMF, prescribed motion: "+str(iq))
+        print("ROTOR_MODEL_METRICS",iq,r)
+
+    for field,value,fmt,reason in [("model_position_valid",0,"I",20),("model_position_age_ticks",31,"I",20),
+        ("model_current_b_a",0.7,"f",22),("model_bus_voltage",9.0,"f",7),
+        ("model_stage_ok",0,"I",8),("model_step_ticks",3,"I",6)]:
+        m=rotor_powered();m.write(field,value,fmt);m.tick()
+        assert not m.moe() and m.rotor()["result"]==reason,m.rotor()
+        m.tick(5);assert m.word("model_enable_calls")==1
+        passed("rotor DQ withdraws without retry: "+field)
+    m=rotor_powered();m.submit(1);m.tick()
+    assert not m.moe() and m.rotor()["result"]==2
+    passed("rotor DQ Stop terminates")
+    m=rotor_powered();m.call("model_trip_event");m.tick()
+    assert not m.moe() and m.rotor()["result"]==11
+    passed("rotor DQ asynchronous Trip terminates")
+    m=rotor_powered();m.advance_guard(150);m.tick()
+    assert not m.moe() and m.rotor()["result"]==6
+    passed("rotor DQ independent heartbeat terminates")
+    m=rotor_powered();deadline=m.word("s_deadline_cycles")
+    m.memory_write(DWT_CYCCNT,deadline);m.write("s_last_sample_cycles",deadline);m.call("model_guard");m.tick()
+    assert not m.moe() and m.rotor()["result"]==18
+    passed("rotor DQ independent finite deadline remains a failure")
+    m=rotor_powered();m.write("model_position_turns",0.30,"f");m.tick()
+    assert not m.moe() and m.rotor()["result"]==20
+    passed("rotor DQ rejects changed position under duplicate timestamp")
+    m=rotor_powered()
+    while (m.word("model_time")+2)%20:m.tick()
+    m.write("model_position_turns",0.27,"f");m.tick()
+    assert not m.moe() and m.rotor()["result"]==23,m.rotor()
+    passed("rotor DQ speed bound withdraws before another request")
+    m=rotor_powered();position=0.25
+    for _ in range(9000):
+        if (m.word("model_time")+2)%20==0:
+            position=(position+0.0025)%1
+            m.write("model_position_turns",(round(position*16384)%16384)/16384,"f")
+        m.tick()
+        if not m.moe():break
+    assert m.rotor()["result"]==23 and 2.0<=abs(m.rotor()["displacement"])<2.01,m.rotor()
+    passed("rotor DQ accumulated displacement bound spans encoder wrap and terminates")
 
 print(f"PASS: {len(cases)} ARM-executed G431 validation cases.")
 print("Fake HCC/time only; does not prove electrical behavior, interrupt latency or hardware L1/L2.")
