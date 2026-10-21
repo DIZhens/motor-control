@@ -83,6 +83,15 @@ static float s_angle_window_mean[3];
 static volatile bool s_current_hold_active; /* TIM6读取它选择失败超时，ADC拥有其余状态。 */
 static CurrentHold s_current_hold;
 static CurrentHoldSnapshot s_current_hold_report;
+/* 逐拍只累加；均值和误差开方在已关断的终态发布前一次结算。
+ * 独立于对外Snapshot，活动期间不会把总和伪装成均值。 */
+typedef struct {
+    float alpha_sum_a, beta_sum_a;
+    float voltage_alpha_sum_v, voltage_beta_sum_v;
+    float velocity_sum_rpm, iq_reference_sum_a, speed_error_sum_rpm;
+    float peak_error_squared_a2;
+} CurrentHoldStatistics;
+static CurrentHoldStatistics s_current_hold_statistics;
 static ControlTime s_current_hold_started;
 static ControlTime s_current_hold_last_sample;
 
@@ -161,6 +170,24 @@ static void finish_operation(void)
     if (s_current_hold_active) {
         uint32_t sequence = g_target_validation_current_hold.sequence;
 
+        /* 所有调用点已执行stop_operation；不在带功率路径逐拍求均值和开方。
+         * active仅在本次发布后撤销，后续Stop不会重复归一化或改写结果。 */
+        if (s_current_hold_report.window_samples != 0U) {
+            const CurrentHoldStatistics *s = &s_current_hold_statistics;
+            float scale = 1.0f / (float)s_current_hold_report.window_samples;
+            s_current_hold_report.mean_alpha_a = s->alpha_sum_a * scale;
+            s_current_hold_report.mean_beta_a = s->beta_sum_a * scale;
+            s_current_hold_report.mean_voltage_alpha_v = s->voltage_alpha_sum_v * scale;
+            s_current_hold_report.mean_voltage_beta_v = s->voltage_beta_sum_v * scale;
+            s_current_hold_report.peak_tracking_error_a = sqrtf(s->peak_error_squared_a2);
+            if (s_rotor_current_active) {
+                s_rotor_current_report.mean_velocity_rpm = s->velocity_sum_rpm * scale;
+            }
+            if (s_rotor_speed_active) {
+                s_rotor_speed_report.mean_iq_reference_a = s->iq_reference_sum_a * scale;
+                s_rotor_speed_report.mean_speed_error_rpm = s->speed_error_sum_rpm * scale;
+            }
+        }
         current_controller_reset(&s_current_hold.controller);
         if (s_current_hold.speed_mode) { speed_controller_reset(&s_current_hold.speed_controller); }
         s_current_hold_report.active = 0U;
@@ -637,6 +664,7 @@ static void prepare_current_hold(const TargetValidationMailbox *request,
     bool survey, float excursion, const RotorCurrentConfig *rotor, const RotorSpeedConfig *speed)
 {
     CurrentHoldSnapshot empty = {0};
+    CurrentHoldStatistics empty_statistics = {0};
     PositionObservation position;
     TargetValidationResult failure = TARGET_VALIDATION_RESULT_NONE;
 
@@ -657,6 +685,7 @@ static void prepare_current_hold(const TargetValidationMailbox *request,
         failure = TARGET_VALIDATION_RESULT_BAD_POSITION;
     }
     s_current_hold_report = empty;
+    s_current_hold_statistics = empty_statistics;
     s_current_hold_report.request_sequence = request->sequence;
     s_current_hold_report.alpha_reference_a = config->alpha_reference_a;
     s_current_hold_report.beta_reference_a = config->beta_reference_a;
@@ -1322,8 +1351,6 @@ static void run_current_hold(const PhaseCurrentObservation *current, uint32_t in
         stop_operation(TARGET_VALIDATION_RESULT_BAD_POSITION);
         return;
     }
-    valpha = output.applied_vd_v * s_current_hold.stator_cosine - output.applied_vq_v * s_current_hold.stator_sine;
-    vbeta = output.applied_vd_v * s_current_hold.stator_sine + output.applied_vq_v * s_current_hold.stator_cosine;
     voltage = sqrtf(output.applied_vd_v * output.applied_vd_v
         + output.applied_vq_v * output.applied_vq_v);
     if (!output.valid || !isfinite(voltage) || voltage > ((s_current_survey_active || s_rotor_current_active) ? CURRENT_SURVEY_MAX_VOLTAGE_V : 0.4f) + 0.00001f) {
@@ -1339,9 +1366,14 @@ static void run_current_hold(const PhaseCurrentObservation *current, uint32_t in
         return;
     }
     g_target_validation.stage_successes++;
-    report->min_duty = fminf(report->min_duty, fminf(output.duty_a, fminf(output.duty_b, output.duty_c)));
-    report->max_duty = fmaxf(report->max_duty, fmaxf(output.duty_a, fmaxf(output.duty_b, output.duty_c)));
-    report->max_voltage_v = fmaxf(report->max_voltage_v, voltage);
+    /* stage已逐项验证三相duty，voltage也已通过有限值检查，直接比较即可。 */
+    if (output.duty_a < report->min_duty) { report->min_duty = output.duty_a; }
+    if (output.duty_b < report->min_duty) { report->min_duty = output.duty_b; }
+    if (output.duty_c < report->min_duty) { report->min_duty = output.duty_c; }
+    if (output.duty_a > report->max_duty) { report->max_duty = output.duty_a; }
+    if (output.duty_b > report->max_duty) { report->max_duty = output.duty_b; }
+    if (output.duty_c > report->max_duty) { report->max_duty = output.duty_c; }
+    if (voltage > report->max_voltage_v) { report->max_voltage_v = voltage; }
     report->voltage_limited_samples += output.voltage_limited ? 1U : 0U;
     if (s_rotor_speed_active && s_current_hold.last_speed_elapsed == elapsed
         && (s_current_hold.speed_update_count - 1U) % ROTOR_SPEED_TRACE_DIVIDER == 0U) {
@@ -1366,29 +1398,33 @@ static void run_current_hold(const PhaseCurrentObservation *current, uint32_t in
         || (elapsed >= 55000U && elapsed < 60000U) || (elapsed >= 85000U && elapsed < 90000U))
         : (elapsed >= 40000U && elapsed < 50000U)));
     if (window) {
-        float count = (float)++report->window_samples;
+        CurrentHoldStatistics *s = &s_current_hold_statistics;
         float measured_d = s_rotor_current_active ? output.id_a : alpha;
         float measured_q = s_rotor_current_active ? output.iq_a : beta;
         float ea = measured_d - report->alpha_reference_a;
         float eb = measured_q - (s_rotor_speed_active ? s_current_hold.active_iq_reference_a : report->beta_reference_a);
+        float error_squared = ea * ea + eb * eb;
 
-        report->mean_alpha_a += (measured_d - report->mean_alpha_a) / count;
-        report->mean_beta_a += (measured_q - report->mean_beta_a) / count;
+        report->window_samples++;
+        s->alpha_sum_a += measured_d;
+        s->beta_sum_a += measured_q;
         if (s_rotor_current_active) {
-            s_rotor_current_report.mean_velocity_rpm += (s_current_hold.velocity.velocity_rpm
-                - s_rotor_current_report.mean_velocity_rpm) / count;
+            s->velocity_sum_rpm += s_current_hold.velocity.velocity_rpm;
         }
         if (s_rotor_speed_active) {
             float speed_error = s_current_hold.target_velocity_rpm - s_current_hold.velocity.velocity_rpm;
-            s_rotor_speed_report.mean_iq_reference_a += (s_current_hold.active_iq_reference_a
-                - s_rotor_speed_report.mean_iq_reference_a) / count;
-            s_rotor_speed_report.mean_speed_error_rpm += (speed_error - s_rotor_speed_report.mean_speed_error_rpm) / count;
-            s_rotor_speed_report.peak_speed_error_rpm = fmaxf(s_rotor_speed_report.peak_speed_error_rpm, fabsf(speed_error));
+            s->iq_reference_sum_a += s_current_hold.active_iq_reference_a;
+            s->speed_error_sum_rpm += speed_error;
+            if (fabsf(speed_error) > s_rotor_speed_report.peak_speed_error_rpm) {
+                s_rotor_speed_report.peak_speed_error_rpm = fabsf(speed_error);
+            }
             if (s_current_hold.last_speed_elapsed == elapsed) { s_rotor_speed_report.speed_window_updates++; }
         }
-        report->mean_voltage_alpha_v += (valpha - report->mean_voltage_alpha_v) / count;
-        report->mean_voltage_beta_v += (vbeta - report->mean_voltage_beta_v) / count;
-        report->peak_tracking_error_a = fmaxf(report->peak_tracking_error_a, sqrtf(ea * ea + eb * eb));
+        valpha = output.applied_vd_v * s_current_hold.stator_cosine - output.applied_vq_v * s_current_hold.stator_sine;
+        vbeta = output.applied_vd_v * s_current_hold.stator_sine + output.applied_vq_v * s_current_hold.stator_cosine;
+        s->voltage_alpha_sum_v += valpha;
+        s->voltage_beta_sum_v += vbeta;
+        if (error_squared > s->peak_error_squared_a2) { s->peak_error_squared_a2 = error_squared; }
     }
 }
 

@@ -1204,6 +1204,52 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
     assert r['max_voltage']<=1.80001 and r['integral_limited']>0,r
     passed('stalled-feedback fixture keeps speed Iq, current voltage and integral bounded; Stop withdraws')
 
+    # 固定机械角与速度：独立从输入相电流、staged duty计算窗口均值与峰值。
+    # 非恒定样本和部分窗口Stop避免只验证“恒值输入得到恒值输出”。
+    m=speed_powered();started=struct.unpack('<Q',m.cpu.mem_read(symbols['s_current_hold_started'],8))[0]
+    terminal_writes=[]
+    def statistics_write(cpu,access,address,size,value,data):
+        terminal_writes.append(m.moe())
+    base=symbols['s_current_hold_report']
+    for lo,hi in [(48,55),(72,83)]:
+        m.cpu.hook_add(UC_HOOK_MEM_WRITE,statistics_write,begin=base+lo,end=base+hi)
+    while m.word('model_time')<started+15998:m.tick()
+    expected=[]
+    def f32(x):return struct.unpack('<f',struct.pack('<f',x))[0]
+    for i in range(113):
+        alpha=0.006+0.004*math.sin(i*0.37);beta=0.008+0.003*math.cos(i*0.23)
+        b=(-alpha+math.sqrt(3)*beta)/2;c=(-alpha-math.sqrt(3)*beta)/2
+        rb=f32(-0.012-b);rc=f32(-0.001-c)
+        m.write('model_current_b_a',rb,'f');m.write('model_current_c_a',rc,'f');m.tick()
+        assert m.moe(),m.speed()
+        cb=-(rb-f32(-0.012));cc=-(rc-f32(-0.001))
+        ca=-(cb+cc);bc=(cb-cc)/math.sqrt(3)
+        sine=cosine=-math.sqrt(0.5) # 7*0.25-0.125 = 0.625电角圈
+        d=ca*cosine+bc*sine;q=-ca*sine+bc*cosine
+        da,db,dc=struct.unpack('<3f',m.cpu.mem_read(symbols['model_last_duty'],12))
+        va=12*(2*da-db-dc)/3;vb=12*(db-dc)/math.sqrt(3)
+        expected.append((d,q,va,vb,math.hypot(d,q-0.1)))
+    assert not terminal_writes,'窗口运行中改写了终态均值/开方结果'
+    m.submit(1);m.tick();r=m.speed()
+    assert not m.moe() and r['result']==2 and r['window_samples']==113,r
+    means=[math.fsum(row[k] for row in expected)/len(expected) for k in range(4)]
+    assert abs(r['mean_id']-means[0])<2e-6 and abs(r['mean_iq']-means[1])<2e-6,r
+    hold=struct.unpack('<8I13f',m.cpu.mem_read(symbols['s_current_hold_report'],84))
+    assert abs(hold[18]-means[2])<2e-5 and abs(hold[19]-means[3])<2e-5,hold
+    assert abs(r['peak_current_error']-max(row[4] for row in expected))<2e-6,r
+    assert abs(r['mean_iq_ref']-0.1)<2e-6 and r['mean_speed_error']==60 and r['mean_rpm']==0,r
+    assert terminal_writes and not any(terminal_writes)
+    passed('varying partial window matches independent phase/duty statistics; terminal arithmetic only after safe-off')
+    m.tick(20);m.submit(1);m.tick();assert m.speed()==r
+    passed('repeated Stop preserves finalized means and peak without a second normalization')
+    m.write('model_current_b_a',-0.012,'f');m.write('model_current_c_a',-0.001,'f')
+    m.speed_submit();m.tick(30);assert m.moe()
+    m.submit(1);m.tick();empty=m.speed()
+    assert not m.moe() and empty['result']==2 and empty['window_samples']==0
+    assert all(empty[k]==0 for k in ['mean_id','mean_iq','mean_iq_ref','mean_speed_error','mean_rpm','peak_current_error']),empty
+    assert bytes(m.cpu.mem_read(symbols['s_current_hold_statistics'],32))==bytes(32)
+    passed('new request clears previous sums; empty window has zero counts and no division by zero')
+
     for field,value,fmt,mask in [('model_bus_available',0,'I',1),('model_bus_valid',0,'I',2),
         ('model_bus_voltage',math.nan,'f',4),('model_bus_voltage',9.9,'f',8),
         ('model_bus_voltage',14.1,'f',16),('model_bus_future_ticks',1,'I',32),('model_bus_age_ticks',101,'I',64)]:
