@@ -159,9 +159,11 @@ class Session(pwm.Session):
         power_duration = getattr(self, "power_duration_us", DURATION_US)
         payload_parameters = getattr(self, "payload_parameters", self.parameters)
         if "-w32" in arguments:
-            if len(arguments) == 10:
-                expected = ["-w32", hex(self.layout["config"]), hex(float_bits(payload_parameters[0])),
-                    hex(float_bits(payload_parameters[1])), "-w32", hex(self.layout["request"] + 4),
+            require(len(payload_parameters) == 2 or (power_command == 20 and len(payload_parameters) == 4),
+                    "功率配置长度非法")
+            if len(arguments) == 8 + len(payload_parameters):
+                expected = ["-w32", hex(self.layout["config"]), *[hex(float_bits(v)) for v in payload_parameters],
+                    "-w32", hex(self.layout["request"] + 4),
                     hex(power_command), hex(KEY), hex(power_duration), hex(float_bits(0.5))]
                 require(self.action == "execute" and not self.power_payload_attempted and arguments == expected,
                         "开环 payload 非法或重复")

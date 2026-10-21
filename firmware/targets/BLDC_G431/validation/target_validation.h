@@ -288,6 +288,7 @@ extern volatile CurrentHoldSnapshot g_target_validation_current_hold;
 extern volatile RotorCurrentConfig g_target_validation_rotor_current_config;
 extern volatile RotorCurrentSnapshot g_target_validation_rotor_current;
 extern volatile RotorSpeedConfig g_target_validation_rotor_speed_config;
+extern volatile RotorSpeedTrace g_target_validation_rotor_speed_trace;
 extern volatile RotorSpeedSnapshot g_target_validation_rotor_speed;
 /* ADC 丢失时快照可能停在旧状态；此字独立记录关断原因。 */
 extern volatile uint32_t g_target_validation_stop_reason;

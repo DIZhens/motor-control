@@ -104,12 +104,12 @@ def submit_power_once(session):
     previous=session.last_sequence
     request=((previous+1)&0xffffffff) or 1
     session.last_sequence=request
-    iq,offset=session.payload_parameters
-    session.execute('rotor-payload',['-w32',hex(session.layout['config']),hex(loop.float_bits(iq)),
-        hex(loop.float_bits(offset)),'-w32',hex(session.layout['request']+4),hex(session.power_command),hex(loop.KEY),
+    payload=session.payload_parameters
+    session.execute('rotor-payload',['-w32',hex(session.layout['config']),*[hex(loop.float_bits(v)) for v in payload],
+        '-w32',hex(session.layout['request']+4),hex(session.power_command),hex(loop.KEY),
         hex(session.power_duration_us),hex(loop.float_bits(0.5))])
-    raw=session.upload('rotor-payload-readback',[('config',session.layout['config'],8),('request',session.layout['request'],20)])
-    require(raw['config']==struct.pack('<2f',iq,offset)
+    raw=session.upload('rotor-payload-readback',[('config',session.layout['config'],4*len(payload)),('request',session.layout['request'],20)])
+    require(raw['config']==struct.pack('<'+str(len(payload))+'f',*payload)
         and raw['request']==struct.pack('<IIIIf',previous,session.power_command,loop.KEY,session.power_duration_us,0.5),
         '转子DQ参数读回不符，禁止提交sequence')
     session.power_commit_ready=True

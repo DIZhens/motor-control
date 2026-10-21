@@ -102,15 +102,20 @@ static bool reject_rotor_feedback(CurrentHold *hold)
 bool current_hold_speed_init(CurrentHold *hold, const RotorSpeedConfig *config)
 {
     RotorCurrentConfig rotor = {ROTOR_SPEED_MAX_IQ_A, 0.0f};
-    const SpeedControllerConfig speed = {0.001f, 0.004f, 20.0f,
+    SpeedControllerConfig speed = {0.001f, 0.004f, 20.0f,
         ROTOR_SPEED_MAX_IQ_A, ROTOR_SPEED_MAX_IQ_A, ROTOR_SPEED_MAX_RPM, 0.00125f};
     const PositionEstimatorConfig velocity = {ROTOR_CURRENT_MAX_RPM, 0.005f};
     if (hold == NULL) { return false; }
     memset(hold, 0, sizeof(*hold));
     if (config == NULL || !isfinite(config->target_velocity_rpm)
-        || fabsf(config->target_velocity_rpm) < 10.0f || fabsf(config->target_velocity_rpm) > ROTOR_SPEED_MAX_RPM) {
+        || fabsf(config->target_velocity_rpm) < 10.0f || fabsf(config->target_velocity_rpm) > ROTOR_SPEED_MAX_RPM
+        || !isfinite(config->speed_kp_a_per_rpm) || config->speed_kp_a_per_rpm < 0.0005f
+        || config->speed_kp_a_per_rpm > 0.005f || !isfinite(config->speed_ki_a_per_rpm_s)
+        || config->speed_ki_a_per_rpm_s < 0.0f || config->speed_ki_a_per_rpm_s > 0.02f) {
         return false;
     }
+    speed.kp_a_per_rpm = config->speed_kp_a_per_rpm;
+    speed.ki_a_per_rpm_s = config->speed_ki_a_per_rpm_s;
     rotor.electrical_offset_turns = config->electrical_offset_turns;
     if (!current_hold_rotor_init(hold, &rotor) || !speed_controller_init(&hold->speed_controller, &speed)
         || !position_estimator_init(&hold->velocity, &velocity)) {

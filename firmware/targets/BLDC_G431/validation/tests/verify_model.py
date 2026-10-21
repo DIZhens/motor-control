@@ -230,8 +230,8 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
                 "start_position","end_position","displacement","max_rpm","last_rpm","mean_rpm","max_age"]
             return dict(zip(keys,struct.unpack("<8I16f",self.cpu.mem_read(symbols["g_target_validation_rotor_current"],96))))
 
-        def speed_submit(self, rpm=60.0, offset=0.125, key=KEY, duration=2000000, duty=0.5):
-            self.cpu.mem_write(symbols["g_target_validation_rotor_speed_config"],struct.pack("<2f",rpm,offset))
+        def speed_submit(self, rpm=60.0, offset=0.125, key=KEY, duration=2000000, duty=0.5, kp=0.001, ki=0.004):
+            self.cpu.mem_write(symbols["g_target_validation_rotor_speed_config"],struct.pack("<4f",rpm,offset,kp,ki))
             self.submit(20,key=key,duration=duration,duty=duty)
 
         def speed(self):
@@ -241,6 +241,12 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
                 'mean_iq_ref','mean_speed_error','peak_speed_error','last_iq_ref',
                 'speed_updates','speed_limited','speed_window_updates','integral_limited']
             return dict(zip(keys,struct.unpack('<8I20f4I',self.cpu.mem_read(symbols['g_target_validation_rotor_speed'],128))))
+
+        def speed_trace(self):
+            address=symbols['g_target_validation_rotor_speed_trace']
+            header=struct.unpack('<8I2f',self.cpu.mem_read(address,40))
+            samples=[struct.unpack('<2I4f',self.cpu.mem_read(address+40+24*i,24)) for i in range(header[4])]
+            return header,samples
 
         def hold(self):
             keys = ["sequence", "request", "active", "result", "samples", "enabled_samples", "window_samples",
@@ -1105,6 +1111,8 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
         return m
 
     for payload,reason in [({'rpm':0},4),({'rpm':9.9},4),({'rpm':80.1},4),({'rpm':-80.1},4),
+        ({'kp':0.00049},4),({'kp':0.00501},4),({'kp':math.nan},4),
+        ({'ki':-0.001},4),({'ki':0.02001},4),({'ki':math.inf},4),
         ({'rpm':math.nan},4),({'offset':1.0},4),({'offset':math.nan},4),({'key':0},3),
         ({'duration':1500000},4),({'duty':0.4},4)]:
         m=zero_ready();m.speed_submit(**payload);m.tick(30)
@@ -1146,12 +1154,34 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
         assert abs(r['last_rpm'])<15 and r['max_rpm']<300 and abs(r['displacement'])<2,r
         assert abs(r['mean_iq_ref'])<=0.100001 and abs(r['last_iq_ref'])<=0.100001 and r['max_voltage']<=1.80001,r
         assert m.word('model_stage_calls')==15001 and m.word('model_enable_calls')==1
+        header,trace=m.speed_trace()
+        assert header[:8]==(2,r['request'],0,1,375,375,4,0),header
+        assert abs(header[8]-0.001)<1e-9 and abs(header[9]-0.004)<1e-9
+        assert [p[0] for p in trace]==list(range(2,30000,80))
+        assert all(p[1]<=30 and 0<=p[2]<1 and abs(p[3])<300 and abs(p[4])<=0.100001 for p in trace)
+        assert all(math.isfinite(x) for p in trace for x in p)
         passed('cascaded speed/current with independent delayed electrical/mechanical plant and load step: '+str((target,inertia,inductance)))
+        passed('250Hz trace publishes 375 timestamped samples only after output-off: '+str(target))
+
+    for kp,ki in [(0.0005,0.0),(0.005,0.02),(0.002,0.004)]:
+        m=zero_ready();m.write('model_position_period_ticks',20);m.speed_submit(kp=kp,ki=ki)
+        for _ in range(30):
+            m.tick()
+            if m.moe():break
+        assert m.moe()
+        header,trace=m.speed_trace();assert header[0]%2==1 and header[2]==1 and header[4]==0,header
+        m.tick(200);m.submit(1);m.tick()
+        header,trace=m.speed_trace()
+        assert not m.moe() and header[0]%2==0 and header[2:4]==(0,2) and 0<len(trace)<375
+        assert abs(header[8]-kp)<1e-9 and abs(header[9]-ki)<1e-9
+        m.tick(20);assert m.speed_trace()==(header,trace) and m.word('model_enable_calls')==1
+        passed('bounded PI payload with partial trace frozen by Stop, no restart: '+str((kp,ki)))
 
     for field,value,fmt,reason in [('model_position_valid',0,'I',20),('model_position_age_ticks',31,'I',20),
         ('model_current_b_a',0.7,'f',22),('model_bus_voltage',9.0,'f',7),('model_stage_ok',0,'I',8),('model_step_ticks',3,'I',6)]:
         m=speed_powered();m.write(field,value,fmt);m.tick()
         assert not m.moe() and m.speed()['result']==reason,m.speed()
+        header,trace=m.speed_trace();assert header[0]%2==0 and header[2:4]==(0,reason),header
         m.tick(5);assert m.word('model_enable_calls')==1
         passed('speed mode withdraws without restart: '+field)
     m=speed_powered();m.submit(1);m.tick();assert not m.moe() and m.speed()['result']==2

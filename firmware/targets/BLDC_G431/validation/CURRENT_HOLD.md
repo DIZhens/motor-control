@@ -194,6 +194,19 @@ stop_reason可能变为2，不能覆盖或重新解释原始失败。既有冻�
 只在已读rank≥1/≥2时解释本序列的VBUS/VREFINT原始码，未采到的字段可能残留上一序列。
 健康采样不执行故障记录复制，私有诊断不扩充公共BusObservation合同。
 
+命令20的私有配置包含目标、零位和速度PI的Kp/Ki，共16字节；默认仍为0.001 A/rpm、
+0.004 A/(rpm*s)。允许范围分别为0.0005～0.005与0～0.02，控制器仍执行原±0.10 A
+限幅。参数随同一请求完整读回后才提交sequence，运行中不允许改写活动PI配置；
+这不是正式Motor参数安装接口。旧8字节速度候选不被新版工具接受。
+
+`g_target_validation_rotor_speed_trace`只用于有限曲线诊断：375份24字节样本和40字节头，
+每4次1 kHz速度更新记录一次，覆盖1.5秒轨迹。记录elapsed/位置年龄（50 µs单位）、
+原周期位置、滤波速度及Iq目标/反馈；运行中版本保持奇数，先关断后发布偶数版本。
+新请求仅清计数，不将未覆盖旧槽解释为新结果。主机只在结束后上传并核对版本、
+请求、实际PI、计数和时间，保存`speed-trace.json`。曲线约250 Hz，不代表1 kHz原始
+SSI噪声捕获，位置差分对应约4 ms平均速度；原4000点窗口及峰值验收门限保持，
+不能用降采样曲线替代原速度/电流初筛。
+
 母线regular三rank改由DMA1_Channel1按normal模式一次搬运3个halfword。TC、剩余计数0及
 DMA ready同时成立才发布；不读DR、不按实时EOS推断rank，半传输中断关闭。每10次
 同步电流callback启动一次的1 kHz节奏保持。DMA与ADC均为抢占优先级1，避免publication
@@ -209,3 +222,6 @@ writer互相抢占；arm时校验DMA配置与两个优先级。静态配置由Cu
 .\.venv\Scripts\python.exe -B -X utf8 firmware/targets/BLDC_G431/validation/tools/rotor_speed_once.py --output <新的候选目录>
 .\.venv\Scripts\python.exe -B -X utf8 firmware/targets/BLDC_G431/validation/tests/verify_rotor_speed_tool.py
 ```
+
+执行工具的`--kp`和`--ki`默认保留原参数；每轮按事先确认的参数仅提交一次，调参
+不需要改固件或重新冻结相同候选，不自动遍历参数、重试或反向。

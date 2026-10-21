@@ -24,11 +24,29 @@
 #define ROTOR_SPEED_DURATION_US 2000000U
 #define ROTOR_SPEED_MAX_RPM 80.0f
 #define ROTOR_SPEED_MAX_IQ_A 0.1f
+#define ROTOR_SPEED_TRACE_CAPACITY 375U
+#define ROTOR_SPEED_TRACE_DIVIDER 4U
 
 typedef struct {
     float target_velocity_rpm; /* 命令20：正负10～80rpm，1.5秒有限轨迹。 */
     float electrical_offset_turns;
+    float speed_kp_a_per_rpm; /* 有限调参：0.0005～0.005 A/rpm。 */
+    float speed_ki_a_per_rpm_s; /* 有限调参：0～0.02 A/(rpm*s)。 */
 } RotorSpeedConfig;
+
+typedef struct {
+    uint32_t elapsed_ticks, position_age_ticks; /* ControlTime单位：50 us。 */
+    float position_turns, velocity_rpm, iq_reference_a, iq_measured_a;
+} RotorSpeedTraceSample;
+
+/* ADC单写者；运行中sequence为奇数，关断后才发布偶数版本。
+ * 仅按250 Hz留存本次有限轨迹，未写入的旧槽不属于本次结果。 */
+typedef struct {
+    uint32_t sequence, request_sequence, active, result;
+    uint32_t count, capacity, divider_updates, dropped;
+    float speed_kp_a_per_rpm, speed_ki_a_per_rpm_s;
+    RotorSpeedTraceSample samples[ROTOR_SPEED_TRACE_CAPACITY];
+} RotorSpeedTrace;
 
 typedef struct {
     uint32_t sequence, request_sequence, active, result;

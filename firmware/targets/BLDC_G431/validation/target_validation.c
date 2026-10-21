@@ -38,6 +38,7 @@ volatile RotorCurrentConfig g_target_validation_rotor_current_config;
 volatile RotorCurrentSnapshot g_target_validation_rotor_current;
 volatile RotorSpeedConfig g_target_validation_rotor_speed_config;
 volatile RotorSpeedSnapshot g_target_validation_rotor_speed;
+volatile RotorSpeedTrace g_target_validation_rotor_speed_trace;
 volatile uint32_t g_target_validation_stop_reason;
 volatile uint32_t g_target_validation_timing_recovery_ticks;
 
@@ -200,6 +201,11 @@ static void finish_operation(void)
                 g_target_validation_rotor_speed = *v;
                 __DMB();
                 g_target_validation_rotor_speed.sequence = sequence + 2U;
+                /* stop_operation已先撤销输出，整段曲线此时才变为可读取结果。 */
+                g_target_validation_rotor_speed_trace.result = r->result;
+                g_target_validation_rotor_speed_trace.active = 0U;
+                __DMB();
+                g_target_validation_rotor_speed_trace.sequence++;
                 s_rotor_speed_active = false;
             } else {
                 g_target_validation_rotor_current.sequence = sequence + 1U;
@@ -678,6 +684,17 @@ static void prepare_current_hold(const TargetValidationMailbox *request,
             s_rotor_speed_report = empty_speed;
             s_rotor_speed_report.target_velocity_rpm = speed->target_velocity_rpm;
             s_rotor_speed_report.electrical_offset_turns = speed->electrical_offset_turns;
+            g_target_validation_rotor_speed_trace.sequence++;
+            __DMB();
+            g_target_validation_rotor_speed_trace.request_sequence = request->sequence;
+            g_target_validation_rotor_speed_trace.active = 1U;
+            g_target_validation_rotor_speed_trace.result = TARGET_VALIDATION_RESULT_NONE;
+            g_target_validation_rotor_speed_trace.count = 0U;
+            g_target_validation_rotor_speed_trace.capacity = ROTOR_SPEED_TRACE_CAPACITY;
+            g_target_validation_rotor_speed_trace.divider_updates = ROTOR_SPEED_TRACE_DIVIDER;
+            g_target_validation_rotor_speed_trace.dropped = 0U;
+            g_target_validation_rotor_speed_trace.speed_kp_a_per_rpm = speed->speed_kp_a_per_rpm;
+            g_target_validation_rotor_speed_trace.speed_ki_a_per_rpm_s = speed->speed_ki_a_per_rpm_s;
             g_target_validation_rotor_speed.sequence++;
             __DMB();
             g_target_validation_rotor_speed.request_sequence = request->sequence;
@@ -1326,6 +1343,23 @@ static void run_current_hold(const PhaseCurrentObservation *current, uint32_t in
     report->max_duty = fmaxf(report->max_duty, fmaxf(output.duty_a, fmaxf(output.duty_b, output.duty_c)));
     report->max_voltage_v = fmaxf(report->max_voltage_v, voltage);
     report->voltage_limited_samples += output.voltage_limited ? 1U : 0U;
+    if (s_rotor_speed_active && s_current_hold.last_speed_elapsed == elapsed
+        && (s_current_hold.speed_update_count - 1U) % ROTOR_SPEED_TRACE_DIVIDER == 0U) {
+        uint32_t index = g_target_validation_rotor_speed_trace.count;
+        if (index < ROTOR_SPEED_TRACE_CAPACITY) {
+            RotorSpeedTraceSample sample;
+            sample.elapsed_ticks = (uint32_t)elapsed;
+            sample.position_age_ticks = (uint32_t)(current->observation_time - position.observation_time);
+            sample.position_turns = position.mechanical_position_turns;
+            sample.velocity_rpm = s_current_hold.velocity.velocity_rpm;
+            sample.iq_reference_a = s_current_hold.active_iq_reference_a;
+            sample.iq_measured_a = output.iq_a;
+            g_target_validation_rotor_speed_trace.samples[index] = sample;
+            g_target_validation_rotor_speed_trace.count = index + 1U;
+        } else {
+            g_target_validation_rotor_speed_trace.dropped++;
+        }
+    }
     window = s_rotor_speed_active ? (elapsed >= 16000U && elapsed < 24000U)
         : (s_rotor_current_active ? (elapsed >= 12000U && elapsed < 16000U)
         : (s_current_survey_active ? ((elapsed >= 25000U && elapsed < 30000U)

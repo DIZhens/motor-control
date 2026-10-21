@@ -22,14 +22,18 @@ class FakeSession(current.FakeSession):
     power_command,power_duration_us=20,2000000
     snapshot_size,result_fields=speed.SIZE,speed.FIELDS
 
-    def __init__(self,output,rpm=60):
+    def __init__(self,output,rpm=60,kp=0.001,ki=0.004):
         super().__init__(output)
-        self.payload_parameters=speed.parameters(rpm,0.125)
-        self.rotor_layout={'result':0x20000700,'bus_failure':0x20000800,**{'field_'+n:4*i for i,n in enumerate(speed.FIELDS)}}
+        self.payload_parameters=speed.parameters(rpm,0.125,kp,ki)
+        self.rotor_layout={'result':0x20000700,'bus_failure':0x20000800,'trace':0x20001000,
+            **{'field_'+n:4*i for i,n in enumerate(speed.FIELDS)}}
         self.raw_result=bytes(speed.SIZE)
         self.raw_bus=bytes(speed.BUS_SIZE)
+        self.raw_trace=bytes(speed.TRACE_SIZE)
 
     def upload(self,tag,blocks):
+        if blocks[0][0]=='header':return {'header':self.raw_trace[:speed.TRACE_HEADER_SIZE]}
+        if blocks[0][0]=='trace':return {'trace':self.raw_trace}
         if blocks[0][0]=='bus_sequence':return {'bus_sequence':self.raw_bus[:4]}
         if blocks[0][0]=='bus_failure':return {'bus_failure':self.raw_bus}
         return super().upload(tag,blocks)
@@ -39,10 +43,16 @@ class FakeSession(current.FakeSession):
         if len(args)==3 and 20 in self.writes:
             self.state.update(active_request_sequence=self.last_sequence)
             for k,v in [('stage_attempts',15001),('stage_successes',15001),('enable_attempts',1),('enable_successes',1)]:self.state[k]+=v
-            rpm,offset=self.payload_parameters;sign=1 if rpm>0 else -1
+            rpm,offset,kp,ki=self.payload_parameters;sign=1 if rpm>0 else -1
             values=[6,self.last_sequence,0,1,15002,15001,4000,0,rpm,offset,0,sign*0.03,0.02,0.4,0.045,0.45,0.55,
                 0.25,(0.25+sign*1.2)%1,sign*1.2,65,sign*5,sign*59,0.001,sign*0.03,sign,5,sign*0.01,1500,0,400,0]
             self.raw_result=struct.pack('<8I20f4I',*values)
+            raw=bytearray(speed.TRACE_SIZE)
+            struct.pack_into('<8I2f',raw,0,2,self.last_sequence,0,1,speed.TRACE_CAPACITY,speed.TRACE_CAPACITY,4,0,kp,ki)
+            for i in range(speed.TRACE_CAPACITY):
+                struct.pack_into('<2I4f',raw,speed.TRACE_HEADER_SIZE+i*speed.TRACE_SAMPLE_SIZE,
+                    2+80*i,2,(0.25+sign*i*0.004)%1,sign*59,sign*0.03,sign*0.03)
+            self.raw_trace=bytes(raw)
         return result
 
 
@@ -53,6 +63,7 @@ class Tests(unittest.TestCase):
 
     def test_invalid_target_and_missing_confirmation_never_connect(self):
         for args in [['--velocity-rpm','0'],['--velocity-rpm','9'],['--velocity-rpm','80.1'],['--velocity-rpm','-80.1'],
+            ['--kp','0.00049'],['--kp','0.00501'],['--ki','-0.001'],['--ki','0.02001'],['--kp','nan'],
             ['--velocity-rpm','nan'],['--action','zero','--prepared','x'],['--action','execute','--prepared','x','--bench-confirmed','--vbus-dmm-v','12']]:
             with TemporaryDirectory() as tmp,patch.object(speed,'Session') as access:
                 with self.assertRaises(RuntimeError):speed.main(['--output',str(Path(tmp)/'new'),*args])
@@ -68,8 +79,9 @@ class Tests(unittest.TestCase):
             with TemporaryDirectory() as tmp:
                 s=FakeSession(tmp,rpm);anchor=loop.zero(s,12);s.action='execute'
                 r=speed.execute_once(s,anchor,12,clock=base.Clock())
-                self.assertEqual(s.writes,[4,20]);self.assertEqual([len(c) for c in s.calls],[9,10,3])
-                self.assertEqual(struct.unpack('<2f',s.config),s.payload_parameters)
+                self.assertEqual(s.writes,[4,20]);self.assertEqual([len(c) for c in s.calls],[9,12,3])
+                self.assertEqual(struct.unpack('<4f',s.config),s.payload_parameters)
+                self.assertEqual(r['trace']['header']['count'],375)
                 for k in ['normal_completion','current_tracking_screen_passed','speed_tracking_screen_passed','motion_direction_screen_passed','deceleration_screen_passed']:
                     self.assertTrue(r['analysis'][k],k)
                 self.assertFalse(r['final']['moe']);self.assertFalse(r['analysis']['calibration_applied'])
@@ -126,6 +138,7 @@ class Tests(unittest.TestCase):
                     raw=bytearray(speed.BUS_SIZE);struct.pack_into('<4I2Qf3IQ10I',raw,0,
                         2,2,2,1,1000,980,0,0,1,0,980,4,1,1,1400,1500,2,0,16,0,0)
                     s.raw_bus=bytes(raw)
+                    trace=bytearray(s.raw_trace);struct.pack_into('<I',trace,12,7);s.raw_trace=bytes(trace)
                 return result
             s.execute=bad_bus
             def connect(output,*args):
@@ -166,6 +179,31 @@ class Tests(unittest.TestCase):
                 self.assertEqual(result['acquisition_cause'],label)
                 self.assertTrue(result['matches_terminal_request']);self.assertFalse(result['vbus_raw_captured'])
             self.assertEqual(s.writes,[])
+
+    def test_bounded_gains_are_echoed_and_legacy_payload_cannot_commit(self):
+        for kp,ki in [(0.0005,0),(0.005,0.02),(0.002,0.004)]:
+            with TemporaryDirectory() as tmp:
+                s=FakeSession(tmp,kp=kp,ki=ki);anchor=loop.zero(s,12);s.action='execute'
+                r=speed.execute_once(s,anchor,12,clock=base.Clock())
+                self.assertEqual(s.payload_parameters[2:],tuple(r['controller_gains'].values()))
+                self.assertEqual(s.writes,[4,20])
+        with TemporaryDirectory() as tmp:
+            s=FakeSession(tmp);s.action='execute'
+            with self.assertRaises(RuntimeError):s.execute('old-payload',['-w32',hex(s.layout['config']),'0','0',
+                '-w32',hex(s.layout['request']+4),'20',hex(loop.KEY),'2000000',hex(loop.float_bits(0.5))])
+            self.assertFalse(s.write_attempted)
+
+    def test_trace_rejects_torn_wrong_request_capacity_gain_and_bad_samples_without_writes(self):
+        with TemporaryDirectory() as tmp:
+            s=FakeSession(tmp);anchor=loop.zero(s,12);s.action='execute'
+            terminal=speed.execute_once(s,anchor,12,clock=base.Clock())['rotor_speed'];good=s.raw_trace
+            mutations=[(0,'I',3),(4,'I',9),(8,'I',1),(16,'I',376),(20,'I',374),(24,'I',5),(28,'I',1),
+                (32,'f',0.003),(40,'I',4),(44,'I',31),(48,'f',math.nan),(52,'f',math.inf),(56,'f',0.101)]
+            writes=list(s.writes)
+            for offset,fmt,value in mutations:
+                raw=bytearray(good);struct.pack_into('<'+fmt,raw,offset,value);s.raw_trace=bytes(raw)
+                with self.assertRaises(RuntimeError):speed.read_speed_trace(s,terminal)
+                self.assertEqual(s.writes,writes)
 
 
 if __name__=='__main__':unittest.main(verbosity=1)

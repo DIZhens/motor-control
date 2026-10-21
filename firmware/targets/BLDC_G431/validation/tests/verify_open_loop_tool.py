@@ -87,9 +87,10 @@ class FakeSession:
         def cli(command, stdout, stderr, timeout):
             self.calls.append(arguments)
             stdout.write(b"Device ID : 0x468\nCore is running\n")
-            if len(arguments) == 10:
-                self.config = struct.pack("<2I", int(arguments[2], 0), int(arguments[3], 0))
-                self.mailbox[4:] = struct.pack("<4I", *(int(v, 0) for v in arguments[6:10]))
+            if len(arguments) in [10, 12]:
+                marker = len(arguments) - 6
+                self.config = struct.pack("<" + str(marker - 2) + "I", *(int(v, 0) for v in arguments[2:marker]))
+                self.mailbox[4:] = struct.pack("<4I", *(int(v, 0) for v in arguments[marker + 2:]))
             else:
                 if len(arguments) == 9:
                     self.mailbox[4:] = struct.pack("<4I", *(int(v, 0) for v in arguments[2:6]))
