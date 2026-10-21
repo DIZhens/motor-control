@@ -31,6 +31,7 @@ def decode_pwm(block):
                          "preload": bool(value & (1 << (shift + 3)))})
     return {"center_aligned_mode": (word(block) >> 5) & 3,
             "clock_division": (word(block) >> 8) & 3, "prescaler": word(block, 40),
+            "update_irq_enabled": bool(word(block, 12) & 1),
             "period_counts": word(block, 44), "repetition": word(block, 48),
             "channels": channels, "output_config": word(block, 32) & 0x3FFF,
             "sample_compare": word(block, 64), "timer_deadtime_code": word(block, 68) & 0xFF}
@@ -46,10 +47,13 @@ class Session(common.Session):
         return state, blocks
 
 
-def check_configuration(state):
+def check_configuration(state, expected_repetition=3, *, check_update_irq=True):
     cfg = state["pwm"]
     require(cfg["center_aligned_mode"] == 1 and cfg["clock_division"] == cfg["prescaler"] == 0
-            and cfg["period_counts"] == 4250 and cfg["repetition"] == 0, "Unexpected PWM timing configuration")
+            and cfg["period_counts"] == 4250 and cfg["repetition"] == expected_repetition,
+            "Unexpected PWM timing configuration")
+    require(not check_update_irq or cfg["update_irq_enabled"] == (expected_repetition == 3),
+            "Unexpected PWM update IRQ ownership")
     require([item["mode"] for item in cfg["channels"]] == [6, 6, 6, 7]
             and all(item["selection"] == 0 and item["preload"] for item in cfg["channels"]),
             "Unexpected PWM mode/preload configuration")
@@ -113,7 +117,8 @@ def run(session, previous, action, percent):
             "before": before, "final": after, "capture": updated, "scope_qualified": False,
             "requested_common_duty_percent": percent, "mailbox_duty_bits": bits,
             "duration_us_including_staging": DURATION_US,
-            "expected_nominal_period_us": 50, "expected_LA_high_us_before_driver_effects": (100 - percent) / 2,
+            "expected_nominal_period_us": 50, "expected_control_period_us": 100,
+            "expected_LA_high_us_before_driver_effects": (100 - percent) / 2,
             "note": "Counters are sanity checks, not physical packet-duration or Gate-delay measurements."}
 
 
@@ -126,11 +131,15 @@ def main():
     mode.add_argument("--inspect-startup", action="store_true")
     mode.add_argument("--preflight", action="store_true")
     mode.add_argument("--execute-once", action="store_true")
+    common.add_candidate_arguments(parser)
     args = parser.parse_args()
+    common.configure_candidate(args)
     action = "inspect-startup" if args.inspect_startup else "execute" if args.execute_once else "preflight"
     require((action == "inspect-startup") == (args.previous_summary is None),
             "Supply previous evidence for preflight/execution; inspect-startup is read-only and requires fresh startup")
     previous = json.loads(args.previous_summary.read_text(encoding="utf-8")) if args.previous_summary else None
+    if previous:
+        require(previous.get("hex_sha256") == common.EXPECTED, "Previous evidence belongs to another image")
     require(not args.output.exists(), "Output directory exists; refusing overwrite or replay")
     args.output.mkdir()
     session = None

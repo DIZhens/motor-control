@@ -1,4 +1,4 @@
-/* Fake HCC/time for executing the actual ARM validation code; no electrical model. */
+/* 用 HCC 与时间替身执行正式 ARM 验证代码；不包含电气模型。 */
 #include "target_validation.h"
 #include "tim.h"
 #include "comp.h"
@@ -10,13 +10,22 @@ uint32_t SystemCoreClock = 170000000U;
 TIM_HandleTypeDef htim1 = { .Instance = TIM1 };
 TIM_HandleTypeDef htim6 = { .Instance = TIM6 };
 uint64_t model_time;
-uint32_t model_step_ticks = 1U;
-uint32_t model_step_us = 50U;
+uint32_t model_step_ticks = 2U;
+uint32_t model_step_us = 100U;
 uint32_t model_current_valid = 1U;
 uint32_t model_current_mask = PHASE_MASK_B | PHASE_MASK_C;
 float model_current_b_a;
 float model_current_c_a;
 uint32_t model_bus_valid = 1U;
+uint32_t model_bus_available = 1U;
+uint32_t model_bus_diagnostic_calls;
+uint32_t model_bus_diagnostic_while_powered;
+uint32_t model_position_valid = 1U;
+uint32_t model_position_referenced = 1U;
+uint32_t model_position_age_ticks;
+uint32_t model_position_future_ticks;
+uint32_t model_position_period_ticks = 2U;
+float model_position_turns = 0.25f;
 uint32_t model_bus_age_ticks;
 uint32_t model_bus_future_ticks;
 float model_bus_voltage = 12.0f;
@@ -74,16 +83,22 @@ const uint32_t model_offsets[] = {
     offsetof(TargetValidationCurrentStatistics, phase_b),
     offsetof(TargetValidationCurrentStatistics, phase_c),
     sizeof(TargetValidationMailbox),
-    sizeof(PlatformBringupDebug)
+    sizeof(PlatformBringupDebug),
+    offsetof(TargetValidationSnapshot, interval_min_cycles),
+    offsetof(TargetValidationSnapshot, interval_max_cycles)
 };
 
 const uint32_t model_probe_size = sizeof(ProtectionProbeCapture);
+const uint32_t model_open_loop_sizes[] = {
+    sizeof(TargetValidationOpenLoopConfig), sizeof(TargetValidationOpenLoopSnapshot),
+    sizeof(TargetValidationSnapshot)
+};
 
 bool realtime_motor_io_get_facts(RealtimeMotorIoFacts *facts)
 {
     facts->normal_voltage_utilization = 0.45f;
     facts->control_time_ticks_per_second = 20000U;
-    facts->fast_tick_period_ticks = 1U;
+    facts->fast_tick_period_ticks = 2U;
     return model_facts_ok != 0U;
 }
 bool realtime_motor_io_bind_sample_ready(PhaseCurrentSampleReadyHandler fn, void *ctx)
@@ -118,6 +133,9 @@ bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *duty)
     }
     s_staged = true;
     s_pending = true;
+    TIM1->CCR1 = (uint32_t)(duty->phase_a_duty * 4250.0f + 0.5f);
+    TIM1->CCR2 = (uint32_t)(duty->phase_b_duty * 4250.0f + 0.5f);
+    TIM1->CCR3 = (uint32_t)(duty->phase_c_duty * 4250.0f + 0.5f);
     return true;
 }
 bool realtime_motor_io_power_enable(void)
@@ -133,6 +151,9 @@ void realtime_motor_io_safe_off(void)
 {
     model_off_calls++;
     TIM1->BDTR &= ~TIM_BDTR_MOE;
+    TIM1->CCR1 = 2125U;
+    TIM1->CCR2 = 2125U;
+    TIM1->CCR3 = 2125U;
     s_window = false;
     s_staged = false;
     s_pending = false;
@@ -196,17 +217,31 @@ bool position_observation_arm(void) { return true; }
 bool bus_observation_arm(void) { return true; }
 bool position_observation_get_latest(PositionObservation *out)
 {
-    out->observation_time = model_time;
-    out->mechanical_position_turns = 0.25f;
-    out->referenced = true;
-    out->acquisition_valid = true;
+    out->observation_time = (model_time / model_position_period_ticks) * model_position_period_ticks
+        - model_position_age_ticks + model_position_future_ticks;
+    out->mechanical_position_turns = model_position_turns;
+    out->referenced = model_position_referenced != 0U;
+    out->acquisition_valid = model_position_valid != 0U;
     return true;
 }
 bool bus_observation_get_latest(BusObservation *out)
 {
+    if (!model_bus_available) { return false; }
     out->observation_time = model_time - model_bus_age_ticks + model_bus_future_ticks;
     out->voltage_v = model_bus_voltage;
     out->acquisition_valid = model_bus_valid != 0U;
+    return true;
+}
+bool g431_bus_acquisition_get_diagnostic(G431BusAcquisitionDiagnostic *out)
+{
+    G431BusAcquisitionDiagnostic diagnostic = {0};
+    model_bus_diagnostic_calls++;
+    if ((TIM1->BDTR & TIM_BDTR_MOE) != 0U) { model_bus_diagnostic_while_powered++; }
+    if (!model_bus_available) { return false; }
+    diagnostic.observation_time = model_time - model_bus_age_ticks + model_bus_future_ticks;
+    diagnostic.cause = model_bus_valid ? G431_BUS_ACQUISITION_OK : G431_BUS_ACQUISITION_ADC_ERROR;
+    diagnostic.adc_error = model_bus_valid ? 0U : 2U;
+    *out = diagnostic;
     return true;
 }
 uint32_t HAL_GetTick(void) { return DWT->CYCCNT / 170000U; }

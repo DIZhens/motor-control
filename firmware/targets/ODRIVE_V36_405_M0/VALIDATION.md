@@ -39,19 +39,18 @@ callback_max_cycles 只统计本 consumer，不是整个 ADC ISR 的 WCET。
 ## 已有仪器与电机
 
 用户已接好 MT6701。电机标称参数来自用户提供的
-[2804 资料](../../../hardware/BLDC_G431/actuator/image%284%29.png)：
-12N14P、7 对极、12 V、额定电流 0.5 A、KV 220、线间电阻 5.1 Ω，
+[2804 电机与 MT6701 资料](../../../hardware/actuators/2804-mt6701/README.md)：
+12N14P、7 对极、12 V、额定电流 0.5 A、KV 220、原图所称“绕线电阻”5.1 Ω，
 标称相电阻 2.55 Ω、相电感 0.86 mH。最大电流 2 A 只作为资料数值，
-不作为当前测试设定；电阻、电感、相序和电角度偏置尚未实测。
+不作为当前测试设定；电阻、电感的测量口径未明确，电阻、电感、相序和电角度偏置尚未实测。
 
 当前前端名义灵敏度 20 mV/A，12-bit ADC、3.3 V 名义参考，
 约为 40 mA/LSB。0.5 A 对应约 10 mV / 12.4 counts。
 进入电流闭环前需要先测零点、噪声和信号幅度；这个量化计算不能替代实际精度验证。
 校准修正与缺相重构仍属于后续 portable Measurement。
 
-示波器为正点原子 DS100：双通道、标称 50 MHz，基础套餐配普通 MCX 探头。
-最大标称采样率不代表所有时间档位和双通道下都达到该速率。
-参考制造商 [DS100 手册](https://supereyes.ru/img/instructions/Manual_Punctual_Atom_DS100_Mini.pdf)；
+本轮使用正点原子 DS100。跨板卡复用的型号、规格与手册统一见
+[台架仪器档案](../../../hardware/bench/README.md)，下列内容仅规定本轮接法和测量条件；
 菜单随固件版本可能不同。
 
 - 两支探头接 CHA / CHB；探头开关与示波器菜单都设为 X10，使用 DC 耦合。
@@ -95,7 +94,7 @@ MOE/GPIO 读回或相端波形代替。
 
 正式工程：MDK-ARM/ODRIVE_V36_405_M0.uvprojx。
 普通 Rebuild / Download 沿用 DEVELOPMENT.md 的用户操作分工。
-复杂命令、内存读取和结果分析由 Codex 处理；同一时刻只有一个工具占用 ST-Link。
+复杂命令、内存读取和结果分析由主机工具完成；同一时刻只有一个工具占用 ST-Link。
 
 CubeCLT 可以读取 Keil AXF 的符号与类型。接入前先核对板上 Flash 与对应 HEX，
 地址和结构布局从这份 AXF 取得，不沿用旧镜像的地址。

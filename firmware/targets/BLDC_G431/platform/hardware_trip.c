@@ -60,7 +60,7 @@ static uint32_t ovp_dac_code(void)
     return voltage_to_dac_code(comparator_threshold_v);
 }
 
-static HardwareTripCauseFlags pending_timer_causes(void)
+__STATIC_FORCEINLINE HardwareTripCauseFlags pending_timer_causes(void)
 {
     HardwareTripCauseFlags causes = HARDWARE_TRIP_CAUSE_NONE;
 
@@ -75,17 +75,19 @@ static HardwareTripCauseFlags pending_timer_causes(void)
     return causes;
 }
 
-static HardwareTripCauseFlags current_condition_causes(void)
+__STATIC_FORCEINLINE HardwareTripCauseFlags current_condition_causes(void)
 {
     HardwareTripCauseFlags causes = HARDWARE_TRIP_CAUSE_NONE;
 
-    if ((HAL_COMP_GetOutputLevel(&hcomp1) == COMP_OUTPUT_LEVEL_HIGH)
-        || (HAL_COMP_GetOutputLevel(&hcomp2) == COMP_OUTPUT_LEVEL_HIGH)
-        || (HAL_COMP_GetOutputLevel(&hcomp4) == COMP_OUTPUT_LEVEL_HIGH)) {
+    /* 与 HAL_COMP_GetOutputLevel 的 VALUE 位读取相同；热路径避免四次函数跳转。
+     * 保留原短路顺序、每次 volatile 读取和 sticky evidence 的归属。 */
+    if ((READ_BIT(hcomp1.Instance->CSR, COMP_CSR_VALUE) != 0U)
+        || (READ_BIT(hcomp2.Instance->CSR, COMP_CSR_VALUE) != 0U)
+        || (READ_BIT(hcomp4.Instance->CSR, COMP_CSR_VALUE) != 0U)) {
         causes |= HARDWARE_TRIP_CAUSE_OVERCURRENT;
     }
 
-    if (HAL_COMP_GetOutputLevel(&hcomp3) == COMP_OUTPUT_LEVEL_HIGH) {
+    if (READ_BIT(hcomp3.Instance->CSR, COMP_CSR_VALUE) != 0U) {
         causes |= HARDWARE_TRIP_CAUSE_BUS_OVERVOLTAGE;
     }
 

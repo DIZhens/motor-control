@@ -1,0 +1,746 @@
+{
+  "schema_version": 1,
+  "result": "FAIL_STAGE_DEADLINE_AFTER_OTIME_POWER_REMAINED_OFF",
+  "base_commit": "d56f37738c011213d708ca488cf18eece6b3686c",
+  "target": "BLDC_G431_Observe",
+  "files": {
+    "BLDC_G431_Observe.hex": "6073e8c75c0c71815946fcfdaca97be317c4e3aea10bbb38903a977f22972a86",
+    "BLDC_G431_Observe.axf": "c6958737c63e24a7c516a54a21ab99f8b3276ef41291f2f86ce8a82dff64a0eb",
+    "BLDC_G431_Observe.map": "68726b6e2d5677a87c40a49c64a7d954d695a15021b930107caf04c49f66113a"
+  },
+  "control_enabled": false,
+  "physical_calibrations_confirmed": false,
+  "stage_timing_qualified": false,
+  "foc_qualified": false,
+  "full_isr_wcet": false,
+  "conditions": {
+    "psu_output_on": false,
+    "battery_connected": false,
+    "motor_phases_connected": false,
+    "external_current_source_connected": false,
+    "supply": "ST-Link logic 3V3",
+    "encoder": "MT6701 SSI",
+    "operator_reconfirmed_before_final_download": true,
+    "dmm_reference_v": 2.7,
+    "dmm_measured_this_run": false
+  },
+  "change": {
+    "hot_groups": [
+      "Control",
+      "Application/User/Motor",
+      "Application/User/Runtime"
+    ],
+    "compiler_policy": "ARMCC -O3 -Otime",
+    "algorithm_c_exact_base_commit": true,
+    "floating_point_mode_changed": false,
+    "fast_math_enabled": false,
+    "generated_sources_changed": false,
+    "platform_sources_changed": false,
+    "old_bench_target_config_unchanged": true,
+    "temporary_cost_wrappers_in_final_image": false
+  },
+  "object_policy": {
+    "current_controller": {
+      "linked_object": "current_controller.o",
+      "otime_in_command": true,
+      "ospace_in_command": false,
+      "finite_entity": false,
+      "functions": {
+        "current_controller_update": 1124
+      }
+    },
+    "foc_math": {
+      "linked_object": "foc_math.o",
+      "otime_in_command": true,
+      "ospace_in_command": false,
+      "finite_entity": false,
+      "functions": {
+        "foc_svpwm": 712
+      }
+    },
+    "electrical_angle": {
+      "linked_object": "electrical_angle.o",
+      "otime_in_command": true,
+      "ospace_in_command": false,
+      "finite_entity": false,
+      "functions": {
+        "electrical_angle_update_with_trig": 464
+      }
+    },
+    "current_measurement": {
+      "linked_object": "current_measurement.o",
+      "otime_in_command": true,
+      "ospace_in_command": false,
+      "finite_entity": false,
+      "functions": {
+        "current_measurement_process": 476
+      }
+    },
+    "speed_controller": {
+      "linked_object": "speed_controller.o",
+      "otime_in_command": true,
+      "ospace_in_command": false,
+      "finite_entity": false,
+      "functions": {}
+    },
+    "position_estimator": {
+      "linked_object": "position_estimator.o",
+      "otime_in_command": true,
+      "ospace_in_command": false,
+      "finite_entity": false,
+      "functions": {}
+    },
+    "control_runtime": {
+      "linked_object": "control_runtime.o",
+      "otime_in_command": true,
+      "ospace_in_command": false,
+      "finite_entity": false,
+      "functions": {
+        "control_runtime_step": 3092
+      }
+    },
+    "target_runtime": {
+      "linked_object": "target_runtime_1.o",
+      "otime_in_command": true,
+      "ospace_in_command": false,
+      "finite_entity": false,
+      "functions": {
+        "sample_ready": 882
+      }
+    },
+    "stage_budget_runtime": {
+      "linked_object": "stage_budget_runtime.o",
+      "otime_in_command": true,
+      "ospace_in_command": false,
+      "finite_entity": false,
+      "functions": {
+        "g431_stage_budget_runtime_step": 3092
+      }
+    },
+    "adc": {
+      "linked_object": "adc.o",
+      "otime_in_command": false,
+      "ospace_in_command": false,
+      "finite_entity": false,
+      "functions": {}
+    },
+    "hardware_trip": {
+      "linked_object": "hardware_trip.o",
+      "otime_in_command": false,
+      "ospace_in_command": false,
+      "finite_entity": false,
+      "functions": {}
+    },
+    "temporary_cost_wrappers_absent": true
+  },
+  "cost_attribution": {
+    "type": "单次私有同源Runtime插桩包围读数",
+    "files": {
+      "BLDC_G431_Observe.hex": "027f20752f3c492292bb701a5bdec4917691950afab785865c27a7bb80a7a467",
+      "BLDC_G431_Observe.axf": "d91c363b07f7e667515cc5469eb646dacadbddfed6486e1e99fb1e9d04d0122a",
+      "BLDC_G431_Observe.map": "f0252d8828df49f1f545cdd4d9125f835e78fac07bc9f88597bd8bd3443d41b4"
+    },
+    "result": {
+      "schema_version": 1,
+      "request_sequence": 1,
+      "state": 4,
+      "failure": 6,
+      "completed_samples": 0,
+      "stage_calls": 1,
+      "stage_accepted": 0,
+      "enable_attempts": 0,
+      "observation_refreshes": 0,
+      "speed_updates": 0,
+      "min_remaining_counts": 0,
+      "last_shadow_faults": 1024,
+      "limited_samples": 0,
+      "fast_samples": 0,
+      "slow_samples": 0,
+      "last_elapsed_cycles": 8587,
+      "last_step_cycles": 7436,
+      "last_timer_count": 3712,
+      "last_entry_count": 3771,
+      "last_cr1": 177,
+      "last_bdtr": 50344960,
+      "rows[0].count": 0,
+      "rows[0].min_cycles": 0,
+      "rows[0].max_cycles": 0,
+      "rows[0].sum_cycles": 0,
+      "rows[1].count": 0,
+      "rows[1].min_cycles": 0,
+      "rows[1].max_cycles": 0,
+      "rows[1].sum_cycles": 0,
+      "rows[2].count": 0,
+      "rows[2].min_cycles": 0,
+      "rows[2].max_cycles": 0,
+      "rows[2].sum_cycles": 0,
+      "rows[3].count": 0,
+      "rows[3].min_cycles": 0,
+      "rows[3].max_cycles": 0,
+      "rows[3].sum_cycles": 0,
+      "rows[4].count": 0,
+      "rows[4].min_cycles": 0,
+      "rows[4].max_cycles": 0,
+      "rows[4].sum_cycles": 0,
+      "rows[5].count": 0,
+      "rows[5].min_cycles": 0,
+      "rows[5].max_cycles": 0,
+      "rows[5].sum_cycles": 0
+    },
+    "rows": [
+      {
+        "name": "双角更新",
+        "count": 2,
+        "cycles": 1558,
+        "us": 9.16470588235294
+      },
+      {
+        "name": "电流处理",
+        "count": 1,
+        "cycles": 555,
+        "us": 3.264705882352941
+      },
+      {
+        "name": "电流控制器",
+        "count": 1,
+        "cycles": 2755,
+        "us": 16.205882352941178
+      },
+      {
+        "name": "速度环",
+        "count": 0,
+        "cycles": 0,
+        "us": 0.0
+      },
+      {
+        "name": "位置估计",
+        "count": 0,
+        "cycles": 0,
+        "us": 0.0
+      },
+      {
+        "name": "stage诊断端口",
+        "count": 1,
+        "cycles": 715,
+        "us": 4.205882352941177
+      }
+    ],
+    "frozen_reread": true,
+    "limits": "一次插桩普通拍；包含调用与DWT边界开销，非无探针截止或WCET；不能从整链减去段和推算剩余净成本。",
+    "formal_runtime_source_copied": false,
+    "only_private_translation_unit_wrapped": true,
+    "temporary_source_sha256": "8812363e047d92365280dfd955adf7a26bbdb8f1ff04b0024ab8055a319170a7"
+  },
+  "no_probe_comparison": {
+    "baseline_hex_sha256": "2a3ad80ad0363904cf93245e8aed4e29b6c7386d0a4e5e64cbc2c2f1e0a57510",
+    "baseline_result": {
+      "schema_version": 1,
+      "request_sequence": 1,
+      "state": 4,
+      "failure": 6,
+      "completed_samples": 0,
+      "stage_calls": 1,
+      "stage_accepted": 0,
+      "enable_attempts": 0,
+      "observation_refreshes": 0,
+      "speed_updates": 0,
+      "min_remaining_counts": 0,
+      "last_shadow_faults": 1024,
+      "limited_samples": 0,
+      "fast_samples": 0,
+      "slow_samples": 0,
+      "last_elapsed_cycles": 8260,
+      "last_step_cycles": 7103,
+      "last_timer_count": 4039,
+      "last_entry_count": 3771,
+      "last_cr1": 177,
+      "last_bdtr": 50344960,
+      "rows[0].count": 0,
+      "rows[0].min_cycles": 0,
+      "rows[0].max_cycles": 0,
+      "rows[0].sum_cycles": 0,
+      "rows[1].count": 0,
+      "rows[1].min_cycles": 0,
+      "rows[1].max_cycles": 0,
+      "rows[1].sum_cycles": 0,
+      "rows[2].count": 0,
+      "rows[2].min_cycles": 0,
+      "rows[2].max_cycles": 0,
+      "rows[2].sum_cycles": 0,
+      "rows[3].count": 0,
+      "rows[3].min_cycles": 0,
+      "rows[3].max_cycles": 0,
+      "rows[3].sum_cycles": 0,
+      "rows[4].count": 0,
+      "rows[4].min_cycles": 0,
+      "rows[4].max_cycles": 0,
+      "rows[4].sum_cycles": 0,
+      "rows[5].count": 0,
+      "rows[5].min_cycles": 0,
+      "rows[5].max_cycles": 0,
+      "rows[5].sum_cycles": 0
+    },
+    "current_result": {
+      "schema_version": 1,
+      "request_sequence": 1,
+      "state": 4,
+      "failure": 6,
+      "completed_samples": 0,
+      "stage_calls": 1,
+      "stage_accepted": 0,
+      "enable_attempts": 0,
+      "observation_refreshes": 0,
+      "speed_updates": 0,
+      "min_remaining_counts": 0,
+      "last_shadow_faults": 1024,
+      "limited_samples": 0,
+      "fast_samples": 0,
+      "slow_samples": 0,
+      "last_elapsed_cycles": 6457,
+      "last_step_cycles": 5342,
+      "last_timer_count": 2661,
+      "last_entry_count": 3770,
+      "last_cr1": 161,
+      "last_bdtr": 50344960,
+      "rows[0].count": 0,
+      "rows[0].min_cycles": 0,
+      "rows[0].max_cycles": 0,
+      "rows[0].sum_cycles": 0,
+      "rows[1].count": 0,
+      "rows[1].min_cycles": 0,
+      "rows[1].max_cycles": 0,
+      "rows[1].sum_cycles": 0,
+      "rows[2].count": 0,
+      "rows[2].min_cycles": 0,
+      "rows[2].max_cycles": 0,
+      "rows[2].sum_cycles": 0,
+      "rows[3].count": 0,
+      "rows[3].min_cycles": 0,
+      "rows[3].max_cycles": 0,
+      "rows[3].sum_cycles": 0,
+      "rows[4].count": 0,
+      "rows[4].min_cycles": 0,
+      "rows[4].max_cycles": 0,
+      "rows[4].sum_cycles": 0,
+      "rows[5].count": 0,
+      "rows[5].min_cycles": 0,
+      "rows[5].max_cycles": 0,
+      "rows[5].sum_cycles": 0
+    },
+    "current_result_reread_unchanged": true,
+    "callback_reduction_fraction": 0.2182808716707022,
+    "step_reduction_fraction": 0.24792341264254536,
+    "clock_hz": 170000000,
+    "deadline_count_unchanged": 1700,
+    "entry_budget_cycles": 2070,
+    "entry_budget_us": 12.176470588235293,
+    "callback_us": 37.98235294117647,
+    "step_us": 31.423529411764704,
+    "overrun_cycles": 4387,
+    "limits": "仅两个候选各一次同类普通首拍；不是稳定加速比、无探针净函数成本、完整80拍覆盖或WCET。当前返回在随后上数半周，不能据CNT高于截止判定可接受。"
+  },
+  "post_health": {
+    "coherent": true,
+    "words": {
+      "guard_before": 0,
+      "bdtr_before": 50344960,
+      "cpu_before": 16842752,
+      "pub_before": 524,
+      "pub_after": 524,
+      "request": 1,
+      "active": 0,
+      "guard_after": 0,
+      "bdtr_after": 50344960,
+      "cpu_after": 16842752
+    },
+    "publication": {
+      "snapshot.control_time_ticks": 51600,
+      "snapshot.control_time_ticks_per_second": 20000,
+      "snapshot.state": 3,
+      "snapshot.faults": 4,
+      "snapshot.bus_voltage_v": 2.634165048599243,
+      "snapshot.status_valid": 1,
+      "snapshot.control_time_valid": 1,
+      "snapshot.bus_voltage_valid": 1,
+      "has_sample": 1,
+      "stage_probe_permitted": 0
+    },
+    "issues": [
+      "真实 Motor 并非无故障 IDLE",
+      "缺少有效状态或 stage 诊断许可：stage_probe_permitted"
+    ],
+    "time": 51600,
+    "request": 1,
+    "bus_voltage_v": 2.634165048599243
+  },
+  "primary_failure": "firmware:STAGE",
+  "request_writes_for_final_candidate": 1,
+  "automatic_request_retry": false,
+  "preflight_connection_failure_wrote_request": false,
+  "build": {
+    "full_rebuild_errors": 0,
+    "full_rebuild_warnings": 0,
+    "code_bytes": 75672,
+    "ro_data_bytes": 1368,
+    "rw_data_bytes": 352,
+    "zi_data_bytes": 25512,
+    "load_uncompressed_bytes": 77392,
+    "load_physical_bytes": 77052,
+    "ram_bytes": 25864,
+    "stack_reserved_bytes": 4096,
+    "static_max_chain_bytes": 760,
+    "static_chain_has_unknown_callbacks": true,
+    "worst_case_stack_proven": false
+  },
+  "tests": {
+    "algorithms": {
+      "current_controller": 24,
+      "foc_math": 13,
+      "electrical_angle": 15,
+      "current_measurement": 19,
+      "speed_controller": 15,
+      "position_estimator": 10,
+      "svpwm_comparisons": 7
+    },
+    "target_runtime_groups": 65,
+    "direct_foc_runtime_groups": 13,
+    "stage_budget_groups": 15,
+    "svpwm_bitwise_pairs": 9942,
+    "ospace_otime_controller_bitwise_pairs": 5554,
+    "comparison_is_full_input_proof": false
+  },
+  "sources": [
+    {
+      "path": "control/current_controller.c",
+      "sha256": "c2cb31f56f452e91d7d4258194423463b4a44d7c9f45b1d6ad9cf2c12a15b23a",
+      "git_blob_sha1": "8600e52c68461695ce38d951664deff94bc77e42"
+    },
+    {
+      "path": "control/current_controller.h",
+      "sha256": "a8388cd156ce374c689b70e7a6033cd37cdd3a512689f01628b26145670bcff8",
+      "git_blob_sha1": "23f4678d05164e26a760bb0aca7aec9937f686dd"
+    },
+    {
+      "path": "control/current_measurement.c",
+      "sha256": "5ad4a7fe1f0d5a372add75e75e42d0f2c8fcf1a16a515171891e8f5992504659",
+      "git_blob_sha1": "ad049b3b30cbcc01872785d24cb61b4b266ccfa4"
+    },
+    {
+      "path": "control/current_measurement.h",
+      "sha256": "bcd9858734024d3ff4e7ea12324f228e7e040d7ce1bbae2333c11cb66ec9bb52",
+      "git_blob_sha1": "598e6a1a58984055199e3ddcc21bbbec33d9c31a"
+    },
+    {
+      "path": "control/electrical_angle.c",
+      "sha256": "a8b0b54b8c2d9eb961a15dd60e6b5a55f9c2feb764adec5f2dbee065da92efd3",
+      "git_blob_sha1": "717492e389ded88e54137c812e944b94218f62a9"
+    },
+    {
+      "path": "control/electrical_angle.h",
+      "sha256": "5dd2364ae16bc4918ca7a1680c1080027dcee0868db945414b0b31ed1d66a8d3",
+      "git_blob_sha1": "adae9618c5b1299fd8defb751f2d684e709e46ca"
+    },
+    {
+      "path": "control/foc_math.c",
+      "sha256": "63d6757f090e9b8b0952d83e7c2341d39748ac0be87631012441016a74cf5b0d",
+      "git_blob_sha1": "b0e9dcae7ab0ec43f9f6dfdbfe3287c9339370ae"
+    },
+    {
+      "path": "control/foc_math.h",
+      "sha256": "6df29a5c014e6454cdf1e43dcdd633567171e538082584ec504113eb7512fcfd",
+      "git_blob_sha1": "469711f26d20e3554c75370e2f612c6df7d72f66"
+    },
+    {
+      "path": "control/foc_math_internal.h",
+      "sha256": "da2619ce0f85d519001b720c02279328d7ec9cabf01546d3f6af9bcc54494339",
+      "git_blob_sha1": "d815ace6e5ab4f8ccae91ee64e74d3bf2281a1f9"
+    },
+    {
+      "path": "control/speed_controller.c",
+      "sha256": "6b60c9ad474d2999418c2ec46e97a33d75f5142a1813c8258b23e76fdc0b0d1f",
+      "git_blob_sha1": "944d92c2ec9ed38f8d855dd019a2b993d3eb56db"
+    },
+    {
+      "path": "control/speed_controller.h",
+      "sha256": "f460f132e61c3f0bfdbd89fa27a08a6ba6864b00a7e9e4ca02b8d523b08282c1",
+      "git_blob_sha1": "3f7de34fd9547b4d30bf8966ef55af28b83af42f"
+    },
+    {
+      "path": "control/tests/current_controller_model.c",
+      "sha256": "ab8073b6950943a70421786da2fe95b49eadd671239b0fbececc5876835f66a6",
+      "git_blob_sha1": "4de9f8a4d940962800a49b82353595c8368e000a"
+    },
+    {
+      "path": "control/tests/verify_current_controller.py",
+      "sha256": "29b551f976589ee95f7e84555cf9bfad73d66166ba29858dd6775e68fb72d265",
+      "git_blob_sha1": "f0b03829220b03af5d0780db5a3b2b139c29c6f8"
+    },
+    {
+      "path": "control/tests/verify_current_measurement.py",
+      "sha256": "e8023b683ec0e9ee0b3726ab752394aea2c6394d200fbfe77d3a2122f10449a9",
+      "git_blob_sha1": "408412e394e9d3c5981cae0e4c967f38f607de4e"
+    },
+    {
+      "path": "control/tests/verify_electrical_angle.py",
+      "sha256": "68abc2e38e1c6a9ce64751fff2135a161046ea9baf25f6127009f4889ef2e6fe",
+      "git_blob_sha1": "0a23c7383e32b87712bd6450f68e7bbf30180f1d"
+    },
+    {
+      "path": "control/tests/verify_foc_math.py",
+      "sha256": "c4cadc701bd508386350d954c4b8f7e7def443a0c66b7d61180239f342906235",
+      "git_blob_sha1": "c4b0f046781aeb6dd97c1dbf4bb22d096c8e5145"
+    },
+    {
+      "path": "control/tests/verify_position_estimator.py",
+      "sha256": "9d5593bbc2b460d3efdaab0dee4b10e0d1612af63fd60b7e39b309b96ac7c3fd",
+      "git_blob_sha1": "dd92f1f4a55962ebeee88515d01a2e6e0c68b89e"
+    },
+    {
+      "path": "control/tests/verify_speed_controller.py",
+      "sha256": "a85ff095b72d4e4650d5235cd7e7cb75d722791c58fb5f0ac9a214a7ecfab059",
+      "git_blob_sha1": "669c0bdcdd5d4d97250c874a6ac4c97273b61a1c"
+    },
+    {
+      "path": "control/tests/verify_svpwm_comparisons.py",
+      "sha256": "12123454e3cbd175fb25a5c2c87a33efc73ed53a5456ff3eac3ad23f8885bd3f",
+      "git_blob_sha1": "6e2de63725951270e007039a3bf02ec95a8283c0"
+    },
+    {
+      "path": "firmware/app/motor/control_runtime.c",
+      "sha256": "40052c11ebd73dd2e04aadcb805632392bce5c95508c9727445f81f52e7af171",
+      "git_blob_sha1": "64969939ca1ae54ae53f17801fb8e64fbc176bd3"
+    },
+    {
+      "path": "firmware/app/motor/control_runtime.h",
+      "sha256": "91c43067c4cbebc22160fadca338960a208f4ccb65ab8e64062ddea10c5cc5ef",
+      "git_blob_sha1": "6a9b5eee568004bf43bc736567fb94ae420a9337"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/BLDC_control V1.ioc",
+      "sha256": "1656ba99d4f816f691611752f78d3f925c2bca79cf8bf12236e19db97c56d981",
+      "git_blob_sha1": "aab9a76374f287f9b51161e3217b7a7a86337ec7"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/Core/Inc/cordic.h",
+      "sha256": "0fa33c01f816ab757f9d3916fe56bccc4ba54b9b3d31d638bbe2fb9190ad09e8",
+      "git_blob_sha1": "095d8cf3c71f6157ee2e2ff2e2b4cc6292d74b64"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/Core/Inc/stm32g4xx_hal_conf.h",
+      "sha256": "7b7213c8122450594c6dfe3dc5b510f60bf7175aaa29b70ece899d857cb6064b",
+      "git_blob_sha1": "d86f937e2bdfdbb50dabb895b4899f022d72e174"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/Core/Src/cordic.c",
+      "sha256": "b1421ae4a6d75ecb711d3bd5a096ed500e9b66e687b4ac22488b492dd24abf71",
+      "git_blob_sha1": "c756809ee3ae250cf33217aa08b2a869c45601e6"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/Core/Src/main.c",
+      "sha256": "b0adba87cd5b3967250b24d423a6f75b225611e3da4e192262e938e6ce4f2ed7",
+      "git_blob_sha1": "2c8c9ad686f5efce80dc602e73484ff3a8378033"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/Core/Src/stm32g4xx_it.c",
+      "sha256": "2bb8aed352d3ad2f567467b507b1e2e6e5d5693687ce46d4914352a168c7a8a0",
+      "git_blob_sha1": "90d535ad614522db39af801583e74a32b8aeb08d"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_cordic.h",
+      "sha256": "c7e6054eeac3cccfc6b10c8ff68f5632f6cac239177116c288b1bbb8b5ec7108",
+      "git_blob_sha1": "ddb7a7b0a3780ba26255d93de08c61de0fb3eef0"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_ll_cordic.h",
+      "sha256": "a2332ecf4afe62aaf1f240e608b948dcbeb66a3026713c809aa65bc22c093fb6",
+      "git_blob_sha1": "5abc53203bcb59bff6fe9f8ed28cacd432f468f6"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/Drivers/STM32G4xx_HAL_Driver/Src/stm32g4xx_hal_cordic.c",
+      "sha256": "a7e32512ee2beebcbf5e6f8b329b4e9cf66c6b70fce19709f8fdc530e02136f4",
+      "git_blob_sha1": "efb7a1cdeb9232688543b12375c717fb6b5001c1"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1.uvprojx",
+      "sha256": "2484ce0eebd657570a0774c9e83fbeb713c287f49c357369979166e8d9d97c21",
+      "git_blob_sha1": "0c60c22fa0147232259ea496ee680029cd9a3bd1"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/MDK-ARM/startup_stm32g431xx.s",
+      "sha256": "750fbae9c49937c0a888c928195ccdfe6fe81a14b3c2551cda51b95e9f313eb9",
+      "git_blob_sha1": "53752322188b282ad134ce752f41c3b41df36a16"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/platform/realtime_motor_io.c",
+      "sha256": "d328691e01301d5757c79f0b4cd8866653819dbc2b26d004ea288a4558a7b1a8",
+      "git_blob_sha1": "8eef106b5349feb1467c9a911f1e267f4d5a5e12"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/platform/realtime_motor_io_diagnostic.h",
+      "sha256": "e7db0f743ed1ba9cd78518368781c6d444f81aef04dfd50755346b3e5f0ac263",
+      "git_blob_sha1": "3b1a9a40000be9254bd3548806831dd8c36e6f6f"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/compute_comparison.c",
+      "sha256": "2b340eab1d6ff32acc5fc2f2365e8543dda76d6dea524d4aff88954311af20d7",
+      "git_blob_sha1": "ee7972f89306fdfc42ae5e044ccf441c07f325c8"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/compute_comparison.h",
+      "sha256": "88e47761ea150bc51e673aaa3c195d65b1a17b8d24567eb4c6defe089d3ba15a",
+      "git_blob_sha1": "944d64e9f8c59fa1c3df252eb66e0d9f5bbc3d7a"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/compute_probe.c",
+      "sha256": "81ad11ec6d611b28cfa1cecdadff1d13e39b309daeb754bcc2be78ae3453cb79",
+      "git_blob_sha1": "8a2ebca6ffa47f4c35897f9cc5f885c26fc2c9f3"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/compute_probe.h",
+      "sha256": "9db94eda95358f85924bdf8ed071174c30540fdfd10e806e09c94327428733c4",
+      "git_blob_sha1": "5fe6adfcc11d39ee8161a201856101ca3d040d4b"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/controller_profile.c",
+      "sha256": "80d3e350c1ab1cd0ddc939e23cfe4b37bf3be8f0fd94af1768cc4b728611bcf4",
+      "git_blob_sha1": "bb75672ef1a5081bc9518cceeb0a6f8f2a7ae3ef"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/controller_profile.h",
+      "sha256": "c8f15d50678679f16844a1915188c7084c0ac828d35a2c2ef75ea406579f4ee4",
+      "git_blob_sha1": "83eca27fbf478e373fd74bd2d191b1a9ee555106"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/cordic_math.c",
+      "sha256": "8b3216f29bad1cad11a69c48ee69355d184ec0500c30ee155c563db6fabed74f",
+      "git_blob_sha1": "2a3d525d51ed8901e83531d9d4b09d6685db6495"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/cordic_math.h",
+      "sha256": "c8bfa20397723c1183873bd9129c61fdd032b6efac0a359f9b9c18aabd846dd2",
+      "git_blob_sha1": "a93629205884ffd1d14c464166b9f3c74a053881"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/irq_timing.c",
+      "sha256": "d4040ca08ae405ad970001b7fceab4f862d7d62180293282b86b915e7b5e8c84",
+      "git_blob_sha1": "c369506277d63b46fd288d7c1ea7a441002354f7"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/irq_timing.h",
+      "sha256": "a8e2f62107a8e58ce2919e35c7fd183266915432d5455711bee08732cff2a975",
+      "git_blob_sha1": "2902b79e185bc6e5228a656af3d9a4722104de13"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/stage_budget.c",
+      "sha256": "5db579dfb26a6a7fda8e009ecd695658feeae79174b046b15d82f38fdb6ca4f0",
+      "git_blob_sha1": "71886d54cb71485ac78a9122a0b41924ddac6756"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/stage_budget.h",
+      "sha256": "b051ad5fc6b0ab31d34693311396b64bafb383e3bfb4358a310a8699526da319",
+      "git_blob_sha1": "f193712052396ac2e2936513d3ebd24a174d5cf9"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/stage_budget_runtime.c",
+      "sha256": "692a02a828354e8df8a5f31137ed04631d08d5e7d57828f5ab16850515c72628",
+      "git_blob_sha1": "554a06d3bebfecb4f9a7772b194d3b68dc0b9577"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/target_runtime.c",
+      "sha256": "28229cdaeb91fb5d9ee8ad456df49d4ae9862f2b59b38a4f454b1217ad478d15",
+      "git_blob_sha1": "da80e4adf2038d56edc387725125c22d034f8698"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/target_runtime.h",
+      "sha256": "20d026cf8eb01b04137b5c8f6ec1cd25295b41a00ef82e97645de6a7394d25e0",
+      "git_blob_sha1": "53303cfe165a42019e9c70eb6dd5f654b57cc713"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/controller_profile_model.c",
+      "sha256": "814bc9de263123da920a085f69de8db3a87b837ae69721ae4c1ad9af2db787c3",
+      "git_blob_sha1": "a5c45e8f3f75a49394745ea4ef03c106417497c8"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/cordic_math_model.c",
+      "sha256": "8b7edab045e9dd730e866a288e7b3a6752115641e1a16ede97ede995eb2b1729",
+      "git_blob_sha1": "ec0fbf979364df700fc70eb98b5120e9ea26c245"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/foc_runtime_model.c",
+      "sha256": "711b2b9b1a669919208b2869ca0354ad54143725f5c24b0b3a8d82c1ac55ca69",
+      "git_blob_sha1": "3c59b4cca06e41dd2aa3b181a012cda1322a28a3"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/model.c",
+      "sha256": "149bce65a7db5af0795fb3463cfa6e0735d57e0dba0d5d971e79a8a7eb500ba2",
+      "git_blob_sha1": "e0c933303b5f45129999c07edfc194eb9a68f6ce"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/stage_budget_model.c",
+      "sha256": "4c15291807e68f0066bbad1c94b2f29c2cc9853d48fc6ef43b2433a8a0f8e2bc",
+      "git_blob_sha1": "664d0710ef363e3199efed9d78bfe1422d97c82a"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/test_compute_probe_tool.py",
+      "sha256": "7505607776f1c6487bb5a0907cd8443b6ec5d4108f0dc7e83dd5d00d8218a8d9",
+      "git_blob_sha1": "cffa8dbd0218d71b599bb836ff48175c1ebb510f"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/test_current_capture_tool.py",
+      "sha256": "aca2b10ea8502a5837a7b0c97e6a5463df602fd8b557e9ce856b9363d8135df9",
+      "git_blob_sha1": "de8ac7f99a838468255aa0eac62bfab4e1a843cd"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/test_stage_budget_tool.py",
+      "sha256": "b113625423feea226bca730e996dabd42b7bcb9e1f22b6aa6050de288dde4d52",
+      "git_blob_sha1": "c490914c1f91b751683b2b8d3c4c47ac8e992f2f"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/verify_controller_profile.py",
+      "sha256": "b0c7d9302f843bffb25e6d0321bbb5ee27b13d35102297f5d90ae2583ffa3b36",
+      "git_blob_sha1": "e84f46819706b2fe69e72c51c00f0769a727ed67"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/verify_cordic_math.py",
+      "sha256": "b43216f5debcd9d0b80e85167dca50bc0070d61c2a59c2c71b5f4ce178384931",
+      "git_blob_sha1": "07ba3f2769ba664e8d18da0a156b0ae010a2bacc"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py",
+      "sha256": "7941bb03013b105913ece86562ab0e33399f63e7312045f7125f81a6dee6d9f8",
+      "git_blob_sha1": "417352f10516bdd5ddda69e6b00058271031db32"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/verify_irq_timing.py",
+      "sha256": "0da331a794c2644cdc5964da952a8932494a53fea4d1e46b3092b6f2eaa4403a",
+      "git_blob_sha1": "f68b62889e2d2ffe907061017c98834de12c5bfb"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py",
+      "sha256": "bc48acb3c24a0a2fd16e9f2e579297dd48de9272acdde2bdff04b1ad2cd647e8",
+      "git_blob_sha1": "b17604ec0316eb70bf8bc57d31847ad12634f74e"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tests/verify_stage_budget.py",
+      "sha256": "1ab416ff6e4a2b54230c03352789a9c3a5adcc4264b77fba96381245bcbafbb3",
+      "git_blob_sha1": "c2131375382015572fbd99db2cb15806a6143c3f"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tools/compute_probe.py",
+      "sha256": "a6225d65fb5b2c670aa82eb3a98b403ed93b0545366c17de998274d623147cf3",
+      "git_blob_sha1": "85e6daaceb22c0c6dc601a7815dfd1ee1f37a841"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tools/current_capture.py",
+      "sha256": "8114e0da837a89007a595849e1e8c878a5e7f266fc9f12e2659e1c70d676d205",
+      "git_blob_sha1": "c698bbc63ccf61004346f637049d6d74fe83ab72"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/tools/stage_budget.py",
+      "sha256": "37a8dfe6cd8a075940f053951442d7ba8af64db931c362b49b158ad8792e8133",
+      "git_blob_sha1": "2042d322a401c315e53047b505d2054fd8e2b8e5"
+    }
+  ],
+  "source_identity_notes": "源码和相应验证脚本为本次工作文件身份；工程Git blob排除原有本机Observe Flash2设置。当前算法C/Platform/Cube生成源码没有改变。插桩候选绑定其本地临时源与独立产物，不套用为最终无探针源。完整原始SWD日志、源快照和构建日志位于Target local-evidence；预检停止未补发请求。",
+  "next": "先评估关键路径的计算/提交组织和延迟语义，再选择针对性修改；维持原截止和PWM/ADC配置，实物标定与功率许可继续关闭。"
+}

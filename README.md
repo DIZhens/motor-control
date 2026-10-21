@@ -15,50 +15,32 @@
 control/      可移植电机控制算法
 interface/    Firmware / Host 共享的设备与协议合同
 firmware/     MCU 固件、Hardware Capability Contract 与各板 Target
-host/         Qt6 PC Host
-hardware/     已确认的物理硬件事实
+host/         PC 调试工具配置与说明，后续 Qt6 Host
+hardware/     板级硬件事实与电机、编码器参考资料
 ```
 
 长期架构见 `ARCHITECTURE.md`，开发、协作和验证方式见 `DEVELOPMENT.md`。
 
-## 当前实现
+## 展示目标与交付边界
 
-仓库目前处于硬件适配与基础验证阶段。已有自研 STM32G431 板和 ODrive V3.6 / STM32F405 M0 的 Target 工程、公共硬件能力接口及台架验证入口。
+展示版本以自研 STM32G431 板、一台电机和 MT6701 编码器为基础，完成 FOC 电流内环与速度外环、UART 自研设备协议及 FreeRTOS 后台任务集成，覆盖嵌入式控制、通信和实时软件组织。
 
-- **G431**：完成首板修复后的无电机基础波形、受控保护注入与恢复、静态电流统计和编码器手动转动检查。限于已记录的测量条件；尚未完成带载控制验收，且占空比提交的硬件截止检查仍有实现缺口。见 [验证结果与剩余门槛](firmware/targets/BLDC_G431/VALIDATION.md)。
-- **F405 M0**：已有 Platform 适配和功率关闭的观测入口，当前工程的实机验收尚未完成。见 [Target 说明](firmware/targets/ODRIVE_V36_405_M0/README.md)。
-- **公共应用与 Host**：正式 Motor / ControlRuntime、控制算法、协议实现和 Qt Host 尚未落地；当前 `main()` 运行的是 Target 台架程序。
+交付按控制基线、自研 UART 协议、FreeRTOS 集成依次验收。控制基线先沿用现有 UART 命令和 VOFA，提供可重复的有限范围启停、设速、观测及故障关断；协议与调度迁移分别形成后续增量。具体活动分支的范围、完成条件和下一步由本地 Git 检查点正文保存，恢复方法见 [开发规则](DEVELOPMENT.md)。
 
-两个 Target 的实现与验收范围见 [固件入口](firmware/README.md)。少量原始波形及测量限制见 [公开证据索引](firmware/targets/BLDC_G431/validation/evidence/20261018-baseline/README.md)；完整本地日志不随仓库克隆分发。
+CAN 实物联调、Qt Host、位置环、标准 Modbus / CANopen 栈及 F405 同功能验收在后续范围。自研协议统一设备语义，UART / CAN 可分别定义线上表示；[协议设计草案](interface/PROTOCOL_DESIGN.md)尚未冻结字段、编号或兼容承诺。
 
-## 后续系统目标
+## 实现与验证入口
 
-主线使用自研 STM32G431 BLDC 控制板和 UART 链路；F405 保留为第二种硬件适配实现，实机验收独立记录。
+当前 G431 控制基线使用公共 Motor / ControlRuntime，已取得有限空载 UART 正反向启动、调速、显式 Stop 和独立 1.5 秒关断的实物证据。实测绑定固定板卡、电机、接线和镜像，不代表持续运行、全部保护或性能验收。独立电流精度、持久标定、故障恢复、自研协议与 FreeRTOS 尚未完成，具体证据和限制见 Target 验证页。
 
-后续按三个方面组织可展示成果，具体功能与指标在各阶段开始前确定：
+日常开发打开 `firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1.uvprojx`，唯一正式 Target 为 `BLDC_G431_Run`。观察、专项计时和旧台架另存于同目录 `BLDC_G431_Validation.uvprojx`，共享核心源码；它们不是不同的应用版本。F405 M0 保留独立实现与验证范围。
 
-- **嵌入式软件**：确定性采样与控制时序、清晰的接口和状态所有权、故障恢复、可重复构建与针对性测试。
-- **嵌入式硬件**：采样与功率级设计依据、首板调试、保护链路和仪器测量，保留问题定位与修复证据。
-- **电机控制**：编码器反馈、测量校准与 FOC 闭环工程实现，记录限定工况下的控制效果和限制。
+- [固件入口](firmware/README.md)：Target、公共应用与构建边界。
+- [G431 Runtime 入口](firmware/targets/BLDC_G431/runtime/README.md)：正式构建、运行边界、模块职责与验证工程。
+- [G431 验证结果与剩余门槛](firmware/targets/BLDC_G431/VALIDATION.md)：G431 验收结论、镜像与证据的唯一汇总入口。
+- [F405 M0 说明](firmware/targets/ODRIVE_V36_405_M0/README.md)：独立的实现和验证范围。
+- [Host 入口](host/README.md)：V1 的 VOFA 资料职责与后续 Qt Host。
+- [硬件资料入口](hardware/README.md)：控制板事实与独立的电机、编码器资料。
+- [共享接口入口](interface/README.md)：设备语义、UART 命令与观测合同。
 
-后续目标是形成下面的系统链路；此图表示设计目标，不代表当前已实现：
-
-```text
-Qt Host
-   ↓
-Device API
-   ↓
-Protocol
-   ↓
-UART
-   ↓
-STM32 Firmware
-   ↓
-Motor Control
-   ↓
-Telemetry
-   ↓
-Qt Host
-```
-
-已有 F405 Target 保留为第二种硬件适配。USB/CAN/TCP、多设备、CANopen、ESP32 Gateway 和通用插件平台暂不扩展，优先完成单电机系统及其可复现验证。
+完整本地日志不随仓库克隆分发；公开证据及其测量限制从对应 Target 验证页进入。

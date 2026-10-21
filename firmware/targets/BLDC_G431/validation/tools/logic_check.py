@@ -19,6 +19,8 @@ BUILD = TARGET / "MDK-ARM/BLDC_control V1"
 CLI = Path(r"D:\cube\cubeclt\STM32CubeCLT_1.22.0\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe")
 GDB = CLI.parents[2] / "GNU-tools-for-STM32/bin/arm-none-eabi-gdb.exe"
 EXPECTED = "29ab28611691dd220624708ecf826be9ea31f4c82753418dcc6be64d8f5facff"
+DEFAULT_BUILD, DEFAULT_CLI, DEFAULT_GDB, DEFAULT_EXPECTED = BUILD, CLI, GDB, EXPECTED
+CANDIDATE = None
 SNAP_FIELDS = ["started", "state", "result", "command_sequence", "active_request_sequence",
                "fast_tick_count", "invalid_current_count", "interval_min_cycles", "interval_max_cycles",
                "callback_max_cycles", "stage_attempts", "stage_successes", "enable_attempts",
@@ -40,6 +42,66 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2, allow_nan=False), encoding="utf-8")
 
 
+def add_candidate_arguments(parser):
+    parser.add_argument("--candidate-manifest", type=Path,
+                        help="Explicit offline candidate identity; does not authorize a powered action")
+    parser.add_argument("--cli", type=Path, help="STM32_Programmer_CLI executable")
+    parser.add_argument("--gdb", type=Path, help="arm-none-eabi-gdb executable")
+
+
+def configure_candidate(args):
+    global BUILD, CLI, GDB, EXPECTED, CANDIDATE
+    BUILD, CLI, GDB, EXPECTED = DEFAULT_BUILD, DEFAULT_CLI, DEFAULT_GDB, DEFAULT_EXPECTED
+    CANDIDATE = args.candidate_manifest.resolve() if args.candidate_manifest else None
+    CLI = args.cli.resolve() if args.cli else CLI
+    GDB = args.gdb.resolve() if args.gdb else GDB
+    if CANDIDATE:
+        import candidate_manifest
+        candidate, BUILD = candidate_manifest.load(CANDIDATE, TARGET)
+        EXPECTED = candidate["files"]["BLDC_control V1.hex"]
+    if CANDIDATE or args.cli or args.gdb:
+        require(CLI.is_file() and GDB.is_file(), "Selected CLI/GDB executable missing")
+
+
+def verify_source_freeze(output):
+    if CANDIDATE:
+        import candidate_manifest
+        candidate, _ = candidate_manifest.load(CANDIDATE, TARGET)
+        files = candidate["source_files"]
+    else:
+        freeze = json.loads((TARGET / "validation/local-evidence/20261017-duty-check/source-freeze.json").read_text())
+        files = freeze["files"]
+        for name, expected in files.items():
+            require(hashlib.sha256((TARGET / name).read_bytes()).hexdigest() == expected,
+                    "Frozen source changed: " + name)
+    save(output / "source-verification.json", {"verified": files,
+         "candidate_manifest": str(CANDIDATE) if CANDIDATE else None})
+
+
+def offline_layout(build, gdb, log):
+    spec = {"legacy": "&g_platform_bringup", "request": "&g_target_validation_request",
+            "snapshot": "&g_target_validation", "capture": "&g_target_validation_capture",
+            "probe": "&g_target_validation_probe", "stop": "&g_target_validation_stop_reason",
+            "tick": "&uwTick", "request_size": "sizeof(TargetValidationMailbox)",
+            "snapshot_size": "sizeof(TargetValidationSnapshot)", "probe_size": "sizeof(ProtectionProbeCapture)",
+            "legacy_size": "sizeof(PlatformBringupDebug)",
+            "capture_size": "sizeof(TargetValidationCurrentCapture)"}
+    for field in SNAP_FIELDS:
+        spec["s_" + field] = "&((TargetValidationSnapshot*)0)->" + field
+        spec["z_" + field] = "sizeof(((TargetValidationSnapshot*)0)->" + field + ")"
+    arguments = [str(gdb), "-batch", "-ex", 'file "' + (build / "BLDC_control V1.axf").as_posix() + '"']
+    for expression in spec.values():
+        arguments += ["-ex", "p/x (unsigned int)" + expression]
+    process = subprocess.run(arguments, capture_output=True, text=True, timeout=20)
+    log.write_text(process.stdout + process.stderr, encoding="utf-8")
+    values = re.findall(r"^\$\d+ = (0x[0-9a-f]+|\d+)\s*$", process.stdout, re.M)
+    require(process.returncode == 0 and len(values) == len(spec), "Offline AXF layout unavailable")
+    layout = dict(zip(spec, [int(value, 0) for value in values]))
+    require([layout[k] for k in ["request_size", "snapshot_size", "probe_size", "legacy_size", "capture_size"]]
+            == [20, 184, 68, 76, 80], "Unexpected layout sizes")
+    return layout
+
+
 def decode_snapshot(data, layout):
     state = {}
     for field in SNAP_FIELDS:
@@ -56,44 +118,32 @@ class Session:
         self.out.mkdir(exist_ok=True)
         self.last_sequence = None
         self.write_attempted = False
+        candidate = None
+        if CANDIDATE:
+            import candidate_manifest
+            candidate, selected_build = candidate_manifest.load(CANDIDATE, TARGET)
+            require(selected_build == BUILD and candidate["files"]["BLDC_control V1.hex"] == EXPECTED,
+                    "Candidate selection changed")
         require(hashlib.sha256((BUILD / "BLDC_control V1.hex").read_bytes()).hexdigest() == EXPECTED,
                 "Selected HEX is not the reviewed probe candidate")
-        spec = {"legacy": "&g_platform_bringup", "request": "&g_target_validation_request",
-                "snapshot": "&g_target_validation", "capture": "&g_target_validation_capture",
-                "probe": "&g_target_validation_probe", "stop": "&g_target_validation_stop_reason",
-                "tick": "&uwTick", "request_size": "sizeof(TargetValidationMailbox)",
-                "snapshot_size": "sizeof(TargetValidationSnapshot)", "probe_size": "sizeof(ProtectionProbeCapture)"}
-        for field in SNAP_FIELDS:
-            spec["s_" + field] = "&((TargetValidationSnapshot*)0)->" + field
-            spec["z_" + field] = "sizeof(((TargetValidationSnapshot*)0)->" + field + ")"
-        arguments = [str(GDB), "-batch", "-ex", 'file "' + (BUILD / "BLDC_control V1.axf").as_posix() + '"']
-        for expression in spec.values():
-            arguments += ["-ex", "p/x (unsigned int)" + expression]
-        process = subprocess.run(arguments, capture_output=True, text=True, timeout=20)
-        (self.out / "layout-gdb.log").write_text(process.stdout + process.stderr, encoding="utf-8")
-        values = re.findall(r"^\$\d+ = (0x[0-9a-f]+|\d+)\s*$", process.stdout, re.M)
-        require(process.returncode == 0 and len(values) == len(spec), "Offline AXF layout unavailable")
-        self.layout = dict(zip(spec, [int(value, 0) for value in values]))
-        require([self.layout[k] for k in ["request_size", "snapshot_size", "probe_size"]] == [20, 184, 68],
-                "Unexpected layout sizes")
-        manifest = json.loads((TARGET / "validation/local-evidence/20261015-protection-probe/BUILD_MANIFEST.json").read_text())
+        self.layout = offline_layout(BUILD, GDB, self.out / "layout-gdb.log")
+        manifest = candidate or json.loads((TARGET / "validation/local-evidence/20261015-protection-probe/BUILD_MANIFEST.json").read_text())
         for name in ["BLDC_control V1.axf", "BLDC_control V1.map"]:
-            require(hashlib.sha256((BUILD / name).read_bytes()).hexdigest().upper() == manifest["files"][name],
+            require(hashlib.sha256((BUILD / name).read_bytes()).hexdigest() == manifest["files"][name].lower(),
                     "AXF/MAP differs from reviewed build")
-        for name in ["legacy", "request", "snapshot", "probe", "stop"]:
-            require(self.layout[name] == manifest["layout"][name], "Candidate layout differs: " + name)
+        if candidate:
+            require(self.layout == candidate["layout"], "Candidate AXF layout differs from manifest")
+            checked, checked_build = candidate_manifest.load(CANDIDATE, TARGET)
+            require(checked == candidate and checked_build == BUILD, "Candidate changed during offline checks")
+            save(self.out / "candidate-identity.json", {"manifest": str(CANDIDATE),
+                 "manifest_sha256": hashlib.sha256(CANDIDATE.read_bytes()).hexdigest(),
+                 "status": candidate["status"], "hardware_qualified": False})
+        else:
+            for name in ["legacy", "request", "snapshot", "probe", "stop"]:
+                require(self.layout[name] == manifest["layout"][name], "Candidate layout differs: " + name)
         save(self.out / "layout.json", self.layout)
-        image, base = {}, 0
-        for line in (BUILD / "BLDC_control V1.hex").read_text().splitlines():
-            record = bytes.fromhex(line[1:])
-            require(sum(record) % 256 == 0, "HEX checksum mismatch")
-            if record[3] == 4:
-                base = int.from_bytes(record[4:6], "big") << 16
-            elif record[3] == 0:
-                image.update({base + int.from_bytes(record[1:3], "big") + i: value
-                              for i, value in enumerate(record[4:4 + record[0]])})
-            else:
-                require(record[3] in [1, 5], "Unexpected HEX record")
+        import candidate_manifest
+        image = candidate_manifest.read_hex(BUILD / "BLDC_control V1.hex")
         start, end = min(image), max(image) + 1
         require(0x08000000 <= start < end <= 0x08020000, "Unexpected Flash range")
         flash = self.upload("identity", [("flash", start, end - start)])["flash"]
@@ -211,7 +261,7 @@ def run(session, inspect_only):
         check_logic_idle(before)
         sequence = session.submit_logic(command, "submit-command-" + str(command))
         if command == 4:
-            time.sleep(0.3)
+            time.sleep(0.5)
         after, data = session.read("after-command-" + str(command))
         check_logic_idle(after)
         require(after["command_sequence"] == sequence and after["result"] == expected, "Wrong command result")
@@ -237,7 +287,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--inspect-only", action="store_true")
+    add_candidate_arguments(parser)
     args = parser.parse_args()
+    configure_candidate(args)
     session = Session(args.output)
     try:
         report = run(session, args.inspect_only)

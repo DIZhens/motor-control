@@ -1,0 +1,36 @@
+{
+  "target": "BLDC_G431",
+  "hex_sha256": "8b7fc787ff174fda0ddda3f206a0578941b767bb97af823bc090551c3f491c33",
+  "command_sequence": 1,
+  "requested_common_duty_percent": 30,
+  "requested_total_duration_us": 2000,
+  "scope": "LA relative to GND; CHA X10, DC, 5 V/div; supplied STOP views 50 us/div",
+  "photos": [
+    {
+      "file": "la-duty30-stable.jpg",
+      "sha256": "4725a0c743679062530f508c5b809bb85f8160ab68c1a9bd12a32325f792ec8e"
+    },
+    {
+      "file": "la-duty30-packet-end.jpg",
+      "sha256": "3f7a9402a8f4474da4c999d45ca79563aa5ae08b0dafc02e279afb7208de95ba"
+    }
+  ],
+  "observed": {
+    "stable_frequency_khz": 20.0,
+    "stable_positive_width_us": 34.7,
+    "vmax_readout_v": 12.4,
+    "vmin_readout_v": -0.0123,
+    "packet_end_visible": true,
+    "low_after_packet_visible": true
+  },
+  "operator_report": {
+    "power_supply_abnormal": false,
+    "drv_abnormal": false
+  },
+  "qualification": "LA basic stable waveform and packet-end low observed for this episode",
+  "limits": [
+    "Total packet duration not measured from these two partial views",
+    "Tail-view automatic 20.7 kHz / 33.0 us readings are not used as nominal steady-state measurements",
+    "Not a dynamic Gate-spike, deadtime, three-phase update-boundary or loaded qualification"
+  ]
+}

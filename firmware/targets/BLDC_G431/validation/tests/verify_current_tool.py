@@ -16,7 +16,7 @@ LAYOUT = dict(zip(current.FIELDS, [0, 8, 12, 16, 20, 24, 32, 40, 48, 52, 56, 60,
 
 
 def capture(changes=None):
-    values = dict(zip(current.FIELDS, [4, 7, 1, 4096, 8400, 8600, 100, 4195,
+    values = dict(zip(current.FIELDS, [4, 7, 1, 4096, 16900, 17100, 100, 8290,
                                       -0.012, -0.02, 0, 1e-5, 0, -0.01, 0.01, 1e-5]))
     values.update(changes or {})
     data = bytearray(80)
@@ -34,9 +34,9 @@ class Tests(unittest.TestCase):
     def test_bad_statistics(self):
         for field, value in [("sequence", 3), ("statistics.request_sequence", 6),
                              ("statistics.result", 6), ("statistics.sample_count", 126),
-                             ("statistics.last_sample_time", 4196),
-                             ("statistics.interval_min_cycles", 4249),
-                             ("statistics.interval_max_cycles", 12751),
+                             ("statistics.last_sample_time", 8291),
+                             ("statistics.interval_min_cycles", 12749),
+                             ("statistics.interval_max_cycles", 21251),
                              ("statistics.phase_b.mean_a", float("nan")),
                              ("statistics.phase_c.variance_a2", -1),
                              ("statistics.phase_c.min_a", 0.02)]:
@@ -68,13 +68,14 @@ class Tests(unittest.TestCase):
                 session.submit_logic.return_value = 7
                 session.upload.return_value = {"capture": capture()}
                 pairs = [(before, before, {}), (after, after, {})]
-                with patch.object(current, "healthy_pair", side_effect=pairs), patch.object(current.time, "sleep"):
+                with patch.object(current, "healthy_pair", side_effect=pairs), patch.object(current.time, "sleep") as wait:
                     if mutation:
                         with self.assertRaises(RuntimeError):
                             current.window(session, LAYOUT, 1)
                     else:
                         current.window(session, LAYOUT, 1)
                 session.submit_logic.assert_called_once_with(4, "window-1-submit-capture")
+                wait.assert_called_once_with(0.5)
 
     def test_preflight_failure_no_write(self):
         session = unittest.mock.Mock()

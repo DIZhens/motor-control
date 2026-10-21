@@ -1,0 +1,362 @@
+{
+  "schema_version": 1,
+  "result": "PASS_SOFTWARE_MODEL_ONLY",
+  "hardware_qualified": false,
+  "scope": "正式ARM C Runtime与独立合成PMSM对象，按20/10/1kHz名义输出时序集成；不是实物闭环、标定或执行预算验收。",
+  "software_timing": {
+    "pwm_hz": 20000,
+    "control_time_ticks_per_second": 20000,
+    "fast_tick_period_ticks": 2,
+    "current_loop_hz": 10000,
+    "speed_loop_hz": 1000,
+    "sample_to_actuation_nominal_s": 7.5e-05,
+    "actuation_hold_interval_s": 0.0001,
+    "actuation_prediction_midpoint_s": 0.000125
+  },
+  "tests": {
+    "default_both_arm_groups": 30,
+    "legacy_arm_groups": 13,
+    "slot_arm_groups": 17,
+    "run_mode": "最终源文件一次默认both执行通过；导出的slot轨迹和单独slot执行逐字节一致。",
+    "new_boundary_cases": [
+      "25/50/74us不装载、75us才生效、100us保持",
+      "UEV前异常早采样下由真实Runtime消费Stop/故障，撤销pending和epoch",
+      "漏目标UEV不得顺延",
+      "漏UEV后下一sample先到不得由新stage覆盖旧pending"
+    ],
+    "coverage": "两节拍共用完整门控、Start/Stop/重启、PI输入dt与1ms速度分频、反馈/数值/提交失败、独立对象正反目标与两编码器方向测试。"
+  },
+  "synthetic_plant": {
+    "resistance_ohm": 2.0,
+    "inductance_d_h": 0.002,
+    "inductance_q_h": 0.002,
+    "flux_linkage_wb": 0.01,
+    "inertia_kg_m2": 0.0003,
+    "viscous_friction_nm_s": 0.0001,
+    "pole_pairs": 7
+  },
+  "traces": {
+    "legacy": {
+      "arm_groups": 13,
+      "trace_schema_version": 1,
+      "rows": 27304,
+      "sample_interval_s": 5e-05,
+      "control_config": {
+        "fast_tick_hz": 20000,
+        "position_observation_hz": 1000,
+        "velocity_filter_time_s": 0.001,
+        "speed_divider": 20,
+        "current_kp_v_per_a": 2.0,
+        "current_ki_v_per_a_s": 1000.0,
+        "current_tracking_gain_per_s": 200.0,
+        "current_integral_limit_v": 4.0,
+        "current_reference_limit_a": 0.6,
+        "voltage_ratio": 0.45,
+        "speed_kp_a_per_rpm": 0.006,
+        "speed_ki_a_per_rpm_s": 0.04,
+        "speed_tracking_gain_per_s": 20.0,
+        "max_iq_a": 0.4,
+        "speed_integral_limit_a": 0.4,
+        "max_target_rpm": 200.0,
+        "phase_current_trip_a": 1.2,
+        "actuation_prediction_time_s": 5e-05,
+        "nominal_offset_b_a": 0.02,
+        "nominal_offset_c_a": -0.03,
+        "signed_gain_b": 1.25,
+        "signed_gain_c": -0.8
+      },
+      "csv_sha256": "add87e393de18499d67e2870b5220be56141042fc989081a7e0baccc8fcd48ba",
+      "metadata_sha256": "bec0fd21c8391f047d8ca0da4796625a6f5b651a74c74e6544d8b0f19b43e204",
+      "matlab_report_sha256": "1df7c01463bdd8d50de4c36949210cd1d12900d0cc7e29dbdfcc834fb04e1735",
+      "matlab_segments": [
+        {
+          "first_row": 1,
+          "last_row": 751,
+          "start_time_s": 0.00325,
+          "end_time_s": 0.04075,
+          "max_abs_error": [
+            8.780653281293543e-10,
+            6.668923718811115e-09,
+            2.364245639541185e-09,
+            3.8100712694086477e-13
+          ],
+          "rms_error": [
+            4.889098166227801e-10,
+            1.5239008553957028e-09,
+            5.404282384057958e-10,
+            8.70894883027639e-14
+          ],
+          "passed": true
+        },
+        {
+          "first_row": 26554,
+          "last_row": 27304,
+          "start_time_s": 1.3309,
+          "end_time_s": 1.3684,
+          "max_abs_error": [
+            7.626913090479472e-10,
+            5.279643111588683e-09,
+            1.8772787768739363e-09,
+            3.0281332996651145e-13
+          ],
+          "rms_error": [
+            5.817520793492095e-10,
+            1.1840147114806852e-09,
+            4.200163212739159e-10,
+            6.764947158648659e-14
+          ],
+          "passed": true
+        },
+        {
+          "first_row": 8754,
+          "last_row": 9504,
+          "start_time_s": 0.4409,
+          "end_time_s": 0.4784,
+          "max_abs_error": [
+            1.2297844999439677e-09,
+            4.988651353121654e-09,
+            1.7704895327597114e-09,
+            2.83550960489265e-13
+          ],
+          "rms_error": [
+            6.794107735213251e-10,
+            1.134524420948737e-09,
+            4.005183542035368e-10,
+            6.3594892709852e-14
+          ],
+          "passed": true
+        },
+        {
+          "first_row": 15754,
+          "last_row": 16504,
+          "start_time_s": 0.7909,
+          "end_time_s": 0.8284,
+          "max_abs_error": [
+            7.209091036804172e-10,
+            7.004122254405942e-09,
+            2.488213635132297e-09,
+            4.0167869030938164e-13
+          ],
+          "rms_error": [
+            3.0668291160524857e-10,
+            1.5923074438439152e-09,
+            5.660789328435158e-10,
+            9.189129254614705e-14
+          ],
+          "passed": true
+        }
+      ],
+      "max_abs_error": [
+        1.2297844999439677e-09,
+        7.004122254405942e-09,
+        2.488213635132297e-09,
+        4.0167869030938164e-13
+      ],
+      "absolute_limits": [
+        0.002,
+        0.002,
+        0.1,
+        5e-05
+      ]
+    },
+    "slot": {
+      "arm_groups": 17,
+      "trace_schema_version": 2,
+      "rows": 13654,
+      "sample_interval_s": 0.0001,
+      "control_config": {
+        "fast_tick_hz": 10000,
+        "position_observation_hz": 1000,
+        "velocity_filter_time_s": 0.001,
+        "speed_divider": 10,
+        "current_kp_v_per_a": 2.0,
+        "current_ki_v_per_a_s": 1000.0,
+        "current_tracking_gain_per_s": 200.0,
+        "current_integral_limit_v": 4.0,
+        "current_reference_limit_a": 0.6,
+        "voltage_ratio": 0.45,
+        "speed_kp_a_per_rpm": 0.006,
+        "speed_ki_a_per_rpm_s": 0.04,
+        "speed_tracking_gain_per_s": 20.0,
+        "max_iq_a": 0.4,
+        "speed_integral_limit_a": 0.4,
+        "max_target_rpm": 200.0,
+        "phase_current_trip_a": 1.2,
+        "actuation_prediction_time_s": 0.000125,
+        "nominal_offset_b_a": 0.02,
+        "nominal_offset_c_a": -0.03,
+        "signed_gain_b": 1.25,
+        "signed_gain_c": -0.8
+      },
+      "csv_sha256": "9cd67353261b7fab8dd4245d0ff770f60e6e04c24b92185d34f6136d8f353573",
+      "metadata_sha256": "29642ea21754fba1434c7f13fe79c65d440b0412801b5743390550e38e43267b",
+      "matlab_report_sha256": "0f10f3dda2b84bd258793f65e89d2a1ed1795ef9c28f09258f8d02a305d0c4ad",
+      "matlab_segments": [
+        {
+          "first_row": 1,
+          "last_row": 751,
+          "start_time_s": 0.0033,
+          "end_time_s": 0.0783,
+          "max_abs_error": [
+            5.3861383662336376e-09,
+            2.5824045568612064e-08,
+            9.155058947052375e-09,
+            1.475372692541686e-12
+          ],
+          "rms_error": [
+            3.4723506214329963e-09,
+            4.158204708897721e-09,
+            1.4689723627864376e-09,
+            2.368569406284149e-13
+          ],
+          "passed": true
+        },
+        {
+          "first_row": 12904,
+          "last_row": 13654,
+          "start_time_s": 1.2936,
+          "end_time_s": 1.3686,
+          "max_abs_error": [
+            2.9126469814853795e-09,
+            2.0539029810251463e-08,
+            7.3038624037735644e-09,
+            1.1833867219479544e-12
+          ],
+          "rms_error": [
+            2.5828947990093026e-09,
+            3.2628756701985276e-09,
+            1.1559509720112139e-09,
+            1.8742516699449028e-13
+          ],
+          "passed": true
+        },
+        {
+          "first_row": 4254,
+          "last_row": 5004,
+          "start_time_s": 0.4286,
+          "end_time_s": 0.5036,
+          "max_abs_error": [
+            4.684299209018128e-09,
+            1.9301003240101977e-08,
+            6.851768930005164e-09,
+            1.09889874977398e-12
+          ],
+          "rms_error": [
+            2.6616503549349574e-09,
+            3.0865436938203126e-09,
+            1.087641403011949e-09,
+            1.736367191790839e-13
+          ],
+          "passed": true
+        },
+        {
+          "first_row": 7754,
+          "last_row": 8504,
+          "start_time_s": 0.7786,
+          "end_time_s": 0.8536,
+          "max_abs_error": [
+            2.8065504035362787e-09,
+            2.712037025509595e-08,
+            9.634704589700505e-09,
+            1.5505374761914936e-12
+          ],
+          "rms_error": [
+            9.95663720080988e-10,
+            4.337269279323658e-09,
+            1.5419615413456226e-09,
+            2.47379001064762e-13
+          ],
+          "passed": true
+        }
+      ],
+      "max_abs_error": [
+        5.3861383662336376e-09,
+        2.712037025509595e-08,
+        9.634704589700505e-09,
+        1.5505374761914936e-12
+      ],
+      "absolute_limits": [
+        0.002,
+        0.002,
+        0.1,
+        5e-05
+      ]
+    }
+  },
+  "matlab": {
+    "version": "9.11.0.1769968 (R2021b)",
+    "method": "每段仅取首状态，用ode45按75us旧输出与25us新输出累计积分；旧schema1仍按完整50us保持。",
+    "legacy_passed": true,
+    "slot_passed": true,
+    "corrupted_post_boundary_voltage_rejected": true,
+    "corrupt_max_abs_error": [
+      0.19790845289359463,
+      0.10349609784162056,
+      2.299002406171983,
+      0.013811079390135705
+    ],
+    "error_columns": [
+      "id_a",
+      "iq_a",
+      "mechanical_omega_rad_s",
+      "mechanical_turns"
+    ],
+    "figure": "trace.png",
+    "figure_sha256": "3b2d543d7583dae2d2ffd80ba197873a1cf1e17d1ce108269fd8e5be3fec0433"
+  },
+  "firmware": {
+    "production_source_changed": false,
+    "flashed": false,
+    "device_requests_sent": 0,
+    "formal_artifacts_and_user_settings_unchanged": {
+      "firmware\\targets\\BLDC_G431\\MDK-ARM\\BLDC_control V1.uvoptx": "bb0411550fa2074e91479b0d3c73c9fe894a0a3b4b520566d9bc4bbb6cefbdef",
+      "firmware\\targets\\BLDC_G431\\MDK-ARM\\BLDC_control V1.uvprojx": "842c32e52124358d717e0fab6b887d98a8adfa7dfd601e9f4a79b3e65374da06",
+      "firmware\\targets\\BLDC_G431\\MDK-ARM\\build\\observe\\BLDC_G431_Observe.hex": "b2ca00eea00a72477dfbaaaf21a1179525468b9bcb5ccc593a921797fe6040ef",
+      "firmware\\targets\\BLDC_G431\\MDK-ARM\\build\\observe\\BLDC_G431_Observe.axf": "67a8a1616c8a42d9bb0602bcf9706d47a5ef2b297239d9c3ba84a79594189264",
+      "firmware\\targets\\BLDC_G431\\MDK-ARM\\build\\timing\\BLDC_G431_Timing.hex": "46b4bafd9237ed352641d1c0103f69cd578b5f509acbcbc98bf778aecd6ad526",
+      "firmware\\targets\\BLDC_G431\\MDK-ARM\\build\\timing\\BLDC_G431_Timing.axf": "54ca05ba624d675811ca59d9865530b0ad58665421abae396eedadbab8930586",
+      "firmware\\targets\\BLDC_G431\\MDK-ARM\\BLDC_control V1\\BLDC_control V1.hex": "3033f843da4b7d05bd64d562ce0cc41b07126ebce607849263f925d7433460d2",
+      "firmware\\targets\\BLDC_G431\\MDK-ARM\\BLDC_control V1\\BLDC_control V1.axf": "17fe6948eed6e28d737541ceae029139a15ce1e1585035d9de840a3e511f7f29"
+    }
+  },
+  "boundaries": [
+    "PI和PMSM参数为合成fixture，未装配为实物标定或运行许可",
+    "ready窗口仅测试fixture等时长缩放，正式2048点零偏配置未改",
+    "固定理想12V母线；不模拟回灌、死区、噪声、开路或二极管行为",
+    "名义75us边界和125us预测不代替真实采样保持时间及ISR截止证据",
+    "中途Stop/故障早采样仅为保护注入，不是正常100us采样实现",
+    "本次未连接、烧录或运行设备，不重跑既有示波器验证"
+  ],
+  "source_sha256": {
+    "firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py": "f9ababb1e1eb97c93eeadc6f23cdf5c54ab1f02b8935a09667e9f57cf19cb2ed",
+    "firmware/targets/BLDC_G431/runtime/tests/foc_runtime_model.c": "5f34d56075ea1a63f716248d9ba0738ce870e00cb437f2cdd36f57b05ade3f00",
+    "firmware/targets/BLDC_G431/runtime/tests/verify_foc_trace.m": "5175c953758f97ee5a8697372522892692d0b3729dbcb571e74a1b8d58be8822",
+    "firmware/app/motor/control_runtime.c": "40052c11ebd73dd2e04aadcb805632392bce5c95508c9727445f81f52e7af171",
+    "firmware/app/motor/control_runtime.h": "91c43067c4cbebc22160fadca338960a208f4ccb65ab8e64062ddea10c5cc5ef",
+    "firmware/app/motor/motor.c": "61143f69ca71d005f49a600677c40d5a3c296cb7e38dff8b0da67e273b56809f",
+    "firmware/app/motor/motor.h": "dfa485243eb4891e1dd8523669df6fb9e793c7632b118b18baf014675c3d2a87",
+    "firmware/app/motor/motor_snapshot.h": "dd4d606942c2f82aec3f75094909da4c2b5c60c1cfd7579f5b0c1e734e39caa9",
+    "control/position_estimator.c": "3584712a7a1f251675c943ebba86b4b995fb30c16b68dfa4c0aadcd2eac57551",
+    "control/position_estimator.h": "beccbae484c334998af8914362fbca3417745ebf437896df7adaa8f71c652ca7",
+    "control/current_measurement.c": "5ad4a7fe1f0d5a372add75e75e42d0f2c8fcf1a16a515171891e8f5992504659",
+    "control/current_measurement.h": "bcd9858734024d3ff4e7ea12324f228e7e040d7ce1bbae2333c11cb66ec9bb52",
+    "control/electrical_angle.c": "a8b0b54b8c2d9eb961a15dd60e6b5a55f9c2feb764adec5f2dbee065da92efd3",
+    "control/electrical_angle.h": "5dd2364ae16bc4918ca7a1680c1080027dcee0868db945414b0b31ed1d66a8d3",
+    "control/current_controller.c": "c2cb31f56f452e91d7d4258194423463b4a44d7c9f45b1d6ad9cf2c12a15b23a",
+    "control/current_controller.h": "a8388cd156ce374c689b70e7a6033cd37cdd3a512689f01628b26145670bcff8",
+    "control/speed_controller.c": "6b60c9ad474d2999418c2ec46e97a33d75f5142a1813c8258b23e76fdc0b0d1f",
+    "control/speed_controller.h": "f460f132e61c3f0bfdbd89fa27a08a6ba6864b00a7e9e4ca02b8d523b08282c1",
+    "control/foc_math.c": "63d6757f090e9b8b0952d83e7c2341d39748ac0be87631012441016a74cf5b0d",
+    "control/foc_math.h": "6df29a5c014e6454cdf1e43dcdd633567171e538082584ec504113eb7512fcfd",
+    "firmware/platform_contract/bus_observation.h": "80fac6d7068dc9e542f0022434f79c888b536283935279ef843a2364a07d9b08",
+    "firmware/platform_contract/control_time.h": "4ae37e0c7962cee3c8b911f8a5c954c604a42f4e08102762b7f6401c203ee397",
+    "firmware/platform_contract/hardware_trip.h": "4e60788b2dc669d8379684153b1a51d08c9b7d58124cb19c55df0649b081f845",
+    "firmware/platform_contract/position_observation.h": "5c0b5ccd51d34be3cdc5d5fe998522c1a7910e5e7d48a068e8447f7aed253ab6",
+    "firmware/platform_contract/realtime_motor_io.h": "cddd84a773210cc901d40d32c308a28bcea52789a229ef0f154d94b600d7c14e"
+  },
+  "reproduce": {
+    "arm": ".venv/Scripts/python.exe -B -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py --trace-timing slot --trace-output <output.csv>",
+    "matlab": "addpath(firmware/targets/BLDC_G431/runtime/tests); verify_foc_trace(csv_path, metadata_path, report_path)"
+  },
+  "input_base_commit": "09f3b0e1d283661adc2a998e4174dbef8f5f61c6"
+}

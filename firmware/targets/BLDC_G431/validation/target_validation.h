@@ -8,6 +8,9 @@
 #include "realtime_motor_io.h"
 #include "position_observation.h"
 #include "bus_observation.h"
+#include "../platform/bus_observation_internal.h"
+#include "timing_probe.h"
+#include "current_hold.h"
 
 /* 首板无功率诊断快照：仅供 Keil Watch 观察，不作为正式 Firmware API。 */
 typedef struct
@@ -52,14 +55,26 @@ typedef enum {
     TARGET_VALIDATION_COMMAND_BREAK_OCP_C = 6,
     TARGET_VALIDATION_COMMAND_BREAK_OCP_AB = 7,
     TARGET_VALIDATION_COMMAND_CLEAR_INJECTION = 8,
-    TARGET_VALIDATION_COMMAND_REARM = 9
+    TARGET_VALIDATION_COMMAND_REARM = 9,
+    TARGET_VALIDATION_COMMAND_OPEN_LOOP = 15, /* 有限低电压试转；不复用旧的 10～14 时序命令。 */
+    TARGET_VALIDATION_COMMAND_ANGLE_SURVEY = 16, /* 单次有限静态电角往返，仅生成观测证据。 */
+    TARGET_VALIDATION_COMMAND_CURRENT_SURVEY = 18, /* 5秒有限电流磁场往返；不授予转子FOC。 */
+    TARGET_VALIDATION_COMMAND_CURRENT_HOLD = 17, /* 3秒静止αβ电流PI；不依赖转子电角标定。 */
+    TARGET_VALIDATION_COMMAND_ROTOR_CURRENT = 19, /* 1秒有限转子DQ，零位只在本次请求中使用。 */
+    TARGET_VALIDATION_COMMAND_ROTOR_SPEED = 20, /* 1.5秒有限速度闭环，复用现有转子DQ链。 */
+    TARGET_VALIDATION_COMMAND_TIMING_IMMEDIATE = TIMING_PROBE_CASE_IMMEDIATE,
+    TARGET_VALIDATION_COMMAND_TIMING_BEFORE = TIMING_PROBE_CASE_BEFORE,
+    TARGET_VALIDATION_COMMAND_TIMING_AFTER = TIMING_PROBE_CASE_AFTER,
+    TARGET_VALIDATION_COMMAND_TIMING_CROSS_CYCLE = TIMING_PROBE_CASE_CROSS_CYCLE,
+    TARGET_VALIDATION_COMMAND_TIMING_CANCEL = TIMING_PROBE_CASE_CANCEL
 } TargetValidationCommand;
 
 typedef enum {
     TARGET_VALIDATION_STATE_OBSERVE = 0,
     TARGET_VALIDATION_STATE_STAGING = 1,
     TARGET_VALIDATION_STATE_POWERED = 2,
-    TARGET_VALIDATION_STATE_CAPTURING_CURRENT = 3
+    TARGET_VALIDATION_STATE_CAPTURING_CURRENT = 3,
+    TARGET_VALIDATION_STATE_TIMING = 4
 } TargetValidationState;
 
 typedef enum {
@@ -78,24 +93,97 @@ typedef enum {
     TARGET_VALIDATION_RESULT_BAD_CLOCK = 12,
     TARGET_VALIDATION_RESULT_PROBE_REJECTED = 13,
     TARGET_VALIDATION_RESULT_BREAK_NOT_OBSERVED = 14,
-    TARGET_VALIDATION_RESULT_REARM_REJECTED = 15
+    TARGET_VALIDATION_RESULT_REARM_REJECTED = 15,
+    TARGET_VALIDATION_RESULT_TIMING_REJECTED = 16,
+    TARGET_VALIDATION_RESULT_TIMING_TIMEOUT = 17,
+    TARGET_VALIDATION_RESULT_OPEN_LOOP_TIMEOUT = 18,
+    TARGET_VALIDATION_RESULT_BAD_ZERO = 19,
+    TARGET_VALIDATION_RESULT_BAD_POSITION = 20,
+    TARGET_VALIDATION_RESULT_OPEN_LOOP_REJECTED = 21,
+    TARGET_VALIDATION_RESULT_NOMINAL_CURRENT = 22,
+    TARGET_VALIDATION_RESULT_ROTOR_MOTION_LIMIT = 23
 } TargetValidationResult;
 
 #define TARGET_VALIDATION_POWER_KEY (0x4310A11EU)
 #define TARGET_VALIDATION_MAX_BURST_US (10000U)
 #define TARGET_VALIDATION_CURRENT_SAMPLE_COUNT (4096U)
 #define TARGET_VALIDATION_PROBE_DURATION_US (2000U)
+#define TARGET_VALIDATION_OPEN_LOOP_DURATION_US (3500000U)
+#define TARGET_VALIDATION_ANGLE_SURVEY_DURATION_US (5500000U)
 
 /* 先写 payload，最后写新的非零 sequence；等待消费后再提交下一条。
- * power_key 消费即清零，PWM_BURST / BREAK_* 必须逐次提供。不是安全认证。
- * BREAK_* 固定 duration_us=2000 / common_duty=0.5，不允许带电机。 */
+ * power_key 消费即清零，PWM_BURST / BREAK_* / OPEN_LOOP / ANGLE_SURVEY / CURRENT_* 必须逐次提供。不是安全认证。
+ * BREAK_* 固定 duration_us=2000 / common_duty=0.5，不允许带电机。
+ * TIMING_* 固定 power_key=0 / duration_us=0 / common_duty=0，仅低于 4 V 母线。 */
 typedef struct {
     uint32_t sequence;
     uint32_t command;
     uint32_t power_key;
-    uint32_t duration_us; /* stage/burst 总时间 1000～10000 us，包含 staging。 */
-    float common_duty;   /* 三相相同，0.10～0.90；电机三相必须断开。 */
+    uint32_t duration_us; /* 旧 stage/burst 为 1000～10000 us；命令 15/16 分别固定 3500000/5500000 us。 */
+    float common_duty;   /* 旧 stage/burst 三相相同且电机断开；命令 15/16 固定 0.5，仅用于中性预热。 */
 } TargetValidationMailbox;
+
+/* 独立扩展 payload；先写本结构与旧 mailbox payload，最后写旧 sequence。
+ * OPEN_LOOP 固定 common_duty=0.5、duration_us=3500000，并须逐次提供 power_key。
+ * 配置只在接收时复制；活动事务不读取主机随后修改的 payload。 */
+typedef struct {
+    float voltage_v; /* (0, 0.5] V，电压矢量模长。 */
+    float electrical_frequency_hz; /* 非零，绝对值不超过 5 Hz。 */
+} TargetValidationOpenLoopConfig;
+
+/* 命令 16 独立 payload，不改命令 15 的 8 字节语义；duration_us 固定 5500000。 */
+typedef struct {
+    float voltage_v; /* (0,0.5] V，沿用低电压和名义电流辅助限制。 */
+    float excursion_turns; /* (0,1] 电角圈；轨迹为 0 → excursion → 0，一整圈可核对极对数。 */
+} TargetValidationAngleSurveyConfig;
+
+/* 每个保持段仅统计末尾 250 ms 中时间戳不同的新 SSI 观测。
+ * 不能把保持段开始前采到的旧位置计入，也不把圆均值当作可信标定。 */
+typedef struct {
+    uint32_t sample_count;
+    ControlTime first_position_time;
+    ControlTime last_position_time;
+    float mean_position_turns; /* 相对窗口锚展开后求均值，再归一化至 [0,1)。 */
+    float span_turns; /* 相对同一锚的最大值减最小值，机械圈。 */
+    float first_position_turns;
+    float last_position_turns;
+    float mean_nominal_b_a; /* 消费这些新位置的回调中，同步相电流名义值的均值；不是标定。 */
+    float mean_nominal_c_a;
+} TargetValidationAngleWindow;
+
+typedef struct {
+    uint32_t sequence;
+    uint32_t request_sequence;
+    uint32_t result;
+    uint32_t stable_window_mask; /* 位 0/1/2 对应 0、excursion、返回 0；仅有限稳定观察。 */
+    float excursion_turns;
+    float voltage_v;
+    TargetValidationAngleWindow windows[3];
+} TargetValidationAngleSurveySnapshot;
+
+/* ADC 单写者的独立结果，保持旧 Watch / Mailbox ABI 不变。
+ * 前后 sequence 相同且为偶数才一致；ADC 停止时另读 stop_reason / 实际 MOE。
+ * 名义电流及圈数仅为本次试转诊断，不安装电流增益、电角度或方向标定。 */
+typedef struct {
+    uint32_t sequence;
+    uint32_t request_sequence;
+    uint32_t active;
+    uint32_t result;
+    uint32_t module_state;
+    uint32_t module_reason;
+    uint32_t sample_count;
+    uint32_t enabled_samples;
+    float voltage_v;
+    float electrical_frequency_hz;
+    float offset_b_a;
+    float offset_c_a;
+    float peak_abs_current_a;
+    float start_position_turns;
+    float end_position_turns;
+    float displacement_turns;
+    float min_duty;
+    float max_duty;
+} TargetValidationOpenLoopSnapshot;
 
 typedef struct {
     float mean_a;
@@ -110,7 +198,7 @@ typedef struct {
     uint32_t sample_count;
     uint32_t interval_min_cycles;
     uint32_t interval_max_cycles;
-    ControlTime first_sample_time; /* 本 Target 1 tick = 50 us，不是 us。 */
+    ControlTime first_sample_time; /* 1 tick = 50 us；正常相邻样本相差 2 tick。 */
     ControlTime last_sample_time;
     TargetValidationPhaseStatistics phase_b;
     TargetValidationPhaseStatistics phase_c;
@@ -152,11 +240,60 @@ typedef struct {
     BusObservation bus;
 } TargetValidationSnapshot;
 
+/* 本启动首个功率母线失败；先关断再发布，SAFE_OFF及后续请求不覆盖。旧结果ABI保持。 */
+typedef struct {
+    uint32_t sequence, request_sequence, failure_mask, publication_available;
+    ControlTime sample_time, observation_time;
+    float voltage_v;
+    uint32_t acquisition_valid, diagnostic_available, reserved;
+    G431BusAcquisitionDiagnostic acquisition;
+} TargetValidationBusFailure;
+
+enum {
+    TARGET_BUS_FAILURE_UNAVAILABLE = 1U,
+    TARGET_BUS_FAILURE_INVALID = 2U,
+    TARGET_BUS_FAILURE_NONFINITE = 4U,
+    TARGET_BUS_FAILURE_UNDERVOLTAGE = 8U,
+    TARGET_BUS_FAILURE_OVERVOLTAGE = 16U,
+    TARGET_BUS_FAILURE_FUTURE = 32U,
+    TARGET_BUS_FAILURE_STALE = 64U
+};
+
+extern volatile TargetValidationBusFailure g_target_validation_bus_failure;
 extern volatile TargetValidationMailbox g_target_validation_request;
 extern volatile TargetValidationSnapshot g_target_validation;
 extern volatile TargetValidationCurrentCapture g_target_validation_capture;
+extern volatile TargetValidationOpenLoopConfig g_target_validation_open_loop_config;
+extern volatile TargetValidationOpenLoopSnapshot g_target_validation_open_loop;
+extern volatile TargetValidationAngleSurveyConfig g_target_validation_angle_survey_config;
+extern volatile TargetValidationAngleSurveySnapshot g_target_validation_angle_survey;
+/* 与电压往返独立的单位及地址；只允许excursion_turns=1。 */
+typedef struct {
+    float current_reference_a;
+    float excursion_turns;
+} TargetValidationCurrentSurveyConfig;
+typedef struct {
+    uint32_t sequence;
+    uint32_t request_sequence;
+    uint32_t result;
+    uint32_t stable_window_mask;
+    float excursion_turns;
+    float current_reference_a;
+    TargetValidationAngleWindow windows[3];
+} TargetValidationCurrentSurveySnapshot;
+extern volatile TargetValidationCurrentSurveyConfig g_target_validation_current_survey_config;
+extern volatile TargetValidationCurrentSurveySnapshot g_target_validation_current_survey;
+extern volatile CurrentHoldConfig g_target_validation_current_hold_config;
+extern volatile CurrentHoldSnapshot g_target_validation_current_hold;
+extern volatile RotorCurrentConfig g_target_validation_rotor_current_config;
+extern volatile RotorCurrentSnapshot g_target_validation_rotor_current;
+extern volatile RotorSpeedConfig g_target_validation_rotor_speed_config;
+extern volatile RotorSpeedTrace g_target_validation_rotor_speed_trace;
+extern volatile RotorSpeedSnapshot g_target_validation_rotor_speed;
 /* ADC 丢失时快照可能停在旧状态；此字独立记录关断原因。 */
 extern volatile uint32_t g_target_validation_stop_reason;
+/* 时序用例后的连续正常采样数，饱和至 2；不改变旧诊断结构的 ABI。 */
+extern volatile uint32_t g_target_validation_timing_recovery_ticks;
 
 /* 外设初始化后调用一次；默认 OBSERVE，不消费复位前的请求。 */
 void target_validation_start(void);

@@ -18,7 +18,8 @@ enum
 };
 
 /*
- * 下一确定 PWM 周期希望实现的 A/B/C 三相归一化平均 duty。
+ * Target 声明的下一有效更新边界起希望实现的 A/B/C 三相归一化平均 duty。
+ * 一个更新区间可以包含多个 PWM 载波周期；采样、生效边界和保持时长由 Target 固定声明。
  * 每相正常范围为 [0, 1]，不表达 Timer count、3PWM/6PWM、极性或 dead-time。
  */
 typedef struct
@@ -95,11 +96,12 @@ bool realtime_motor_io_arm(void);
 bool realtime_motor_io_start_drive_timing(void);
 
 /*
- * 为下一确定 update boundary stage 一组三相 duty。
+ * 为本次同步样本对应的下一确定有效 update boundary stage 一组三相 duty。
  *
  * true 表示整个请求按 Hardware Capability Contract 被接受并能够正常实现。
  * 如果请求非法、超出 Target 正常包络、错过 staging deadline，或 Platform 必须
  * 改变请求才能落到硬件，则返回 false；safety clamp 不能伪装成正常成功。
+ * 迟到请求不得顺延到别的边界或在后续 Start 中重放。
  */
 bool realtime_motor_io_stage_phase_duty(
     const PhaseDutyRequest *request);

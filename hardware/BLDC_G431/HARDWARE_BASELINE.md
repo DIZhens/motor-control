@@ -4,6 +4,8 @@
 
 详细原理图、PCB、制造与设计说明见同目录 `HARDWARE_DESIGN.md` 及原始设计文件；发生冲突时，以最新制造文件、原理图/网表和实物验证为准。
 
+配套 [2804 电机与 MT6701 编码器资料](../actuators/2804-mt6701/README.md) 独立保存用户提供的商家参数、装配图及编码器板资料。其标称参数不属于本板实测或已完成的 FOC 标定；本页既有验证范围不因此改变。
+
 ## 1. Board Identity
 
 ```text
@@ -30,7 +32,7 @@ TIM1 clock     170 MHz
 PWM            20 kHz center-aligned mode 1
 PSC            0
 ARR            4250
-CH1/2/3        phase A/B/C complementary PWM
+CH1/2/3        physical phase C/B/A complementary PWM
 CH4            sampling trigger, PWM2
 CCR4           4240
 TRGO2          OC4REF
@@ -45,6 +47,18 @@ Drive Timing Start != Power Enable
 ```
 
 PWM 时基和功率输出使能必须分开管理。
+
+物理引脚映射以原始网表为准，不按定时器通道顺序推定相名：
+
+| 物理相 | MCU 高侧 / 低侧引脚 | LQFP48 管脚号 | 定时器通道 |
+| --- | --- | --- | --- |
+| A | PA10 / PB15 | U4.32 / U4.29 | CH3 / CH3N |
+| B | PA9 / PB14 | U4.31 / U4.28 | CH2 / CH2N |
+| C | PA8 / PB13 | U4.30 / U4.27 | CH1 / CH1N |
+
+网表 `INHA/INLA` 接 U4.32/29，`INHB/INLB` 接 U4.31/28，`INHC/INLC` 接 U4.30/27。
+旧版“CH1/2/3=A/B/C”说明有误；Platform 须将物理 A/B/C duty 分别写入 CCR3/2/1。
+该修正不改变下一节的 B/C 电流采集物理通道；旧镜像的方向与电角度候选不能直接照搬。
 
 ## 3. Current Sensing
 

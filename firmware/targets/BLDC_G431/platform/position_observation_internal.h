@@ -9,4 +9,7 @@
  */
 void position_observation_fast_tick(ControlTime fast_tick_time);
 
+/* SPI1 IRQ 唯一运行期入口，调用后不再执行 HAL_SPI_IRQHandler。 */
+void position_observation_irq(void);
+
 #endif /* BLDC_G431_POSITION_OBSERVATION_INTERNAL_H */

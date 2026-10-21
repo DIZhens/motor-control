@@ -266,8 +266,11 @@ def main():
     mode.add_argument("--clear", action="store_true")
     mode.add_argument("--verify-sticky", action="store_true")
     mode.add_argument("--rearm", action="store_true")
+    common.add_candidate_arguments(parser)
     args = parser.parse_args()
+    common.configure_candidate(args)
     previous = json.loads(args.previous_summary.read_text(encoding="utf-8"))
+    require(previous.get("hex_sha256") == common.EXPECTED, "Previous evidence belongs to another image")
     require(not args.output.exists(), "Output directory already exists; refusing overwrite/replay")
     session = common.Session(args.output)
     action = "execute" if args.execute_once else next(name for name in ["preflight", "held-rearm", "clear", "verify-sticky", "rearm"]

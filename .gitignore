@@ -25,6 +25,8 @@ Listings/
 
 # Keil MDK generated files for the current board target
 /firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1/
+# Optional BLDC_G431_Observe target output and listings
+/firmware/targets/BLDC_G431/MDK-ARM/build/observe/
 /firmware/targets/BLDC_G431/MDK-ARM/build*.log
 /firmware/targets/BLDC_G431/MDK-ARM/*.lst
 /firmware/targets/BLDC_G431/MDK-ARM/*.uvguix.*

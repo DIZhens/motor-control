@@ -21,6 +21,7 @@
 #include "adc.h"
 #include "comp.h"
 #include "dac.h"
+#include "dma.h"
 #include "fdcan.h"
 #include "opamp.h"
 #include "spi.h"
@@ -31,7 +32,15 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#if defined(BLDC_G431_TIMING_ENTRY)
+#include "cordic.h"
+#include "timing_entry.h"
+#elif defined(BLDC_G431_RUNTIME_ENTRY)
+#include "cordic.h"
+#include "target_runtime.h"
+#else
 #include "target_validation.h"
+#endif
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -90,11 +99,13 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  /* 170 MHz / 4 WS：预取减少 ADC 路径的顺序 Flash 取指等待。 */
+  __HAL_FLASH_PREFETCH_BUFFER_ENABLE();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_ADC1_Init();
   MX_ADC2_Init();
   MX_FDCAN1_Init();
@@ -113,7 +124,15 @@ int main(void)
   MX_USB_PCD_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
+#if defined(BLDC_G431_TIMING_ENTRY)
+  MX_CORDIC_Init();
+  timing_entry_start();
+#elif defined(BLDC_G431_RUNTIME_ENTRY)
+  MX_CORDIC_Init();
+  target_runtime_start();
+#else
   target_validation_start();
+#endif
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -123,8 +142,15 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+#if defined(BLDC_G431_TIMING_ENTRY)
+    /* 专用诊断只由ADC推进；后台不重复运行控制链或发送命令。 */
+    __NOP();
+#elif defined(BLDC_G431_RUNTIME_ENTRY)
+    target_runtime_service();
+#else
     /* 周期观测保持 10 ms；不在 HAL_Delay 中延后 urgent rescan。 */
     target_validation_service();
+#endif
   }
   /* USER CODE END 3 */
 }
