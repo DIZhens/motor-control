@@ -1,0 +1,609 @@
+{
+  "contract": "../CORE_PROTOCOL_V1.md",
+  "reference": "固定向量按合同逐字段构造；CRC独立使用Python标准库binascii.crc_hqx，不调用被测C/Python编解码器。测试仅读取，不重新生成期望值。",
+  "crc_check": {
+    "ascii": "123456789",
+    "crc16": "29b1"
+  },
+  "cobs": [
+    {
+      "raw_hex": "",
+      "encoded_hex": "01"
+    },
+    {
+      "raw_hex": "00",
+      "encoded_hex": "0101"
+    },
+    {
+      "raw_hex": "0000",
+      "encoded_hex": "010101"
+    },
+    {
+      "raw_hex": "112233",
+      "encoded_hex": "04112233"
+    },
+    {
+      "raw_hex": "1100220033",
+      "encoded_hex": "021102220233"
+    }
+  ],
+  "frames": [
+    {
+      "name": "open_session",
+      "type": "request",
+      "kind": 1,
+      "message_id": 1,
+      "session_id": 0,
+      "sequence": 1,
+      "payload_hex": "78563412",
+      "decoded_hex": "01010010040001000000000001000000785634128f6f",
+      "wire_hex": "0301010310040201010101010201010107785634128f6f00",
+      "value": {
+        "message_id": 1,
+        "proposed_session_id": 305419896
+      }
+    },
+    {
+      "name": "read_snapshot",
+      "type": "request",
+      "kind": 1,
+      "message_id": 2,
+      "session_id": 305419896,
+      "sequence": 2,
+      "payload_hex": "0200",
+      "decoded_hex": "010100100200020078563412020000000200b42b",
+      "wire_hex": "03010103100202020678563412020101020203b42b00",
+      "value": {
+        "message_id": 2,
+        "subject_id": 2
+      }
+    },
+    {
+      "name": "write_pi",
+      "type": "request",
+      "kind": 1,
+      "message_id": 3,
+      "session_id": 305419896,
+      "sequence": 3,
+      "payload_hex": "02016f12833a6f12833b",
+      "decoded_hex": "010100100a000300785634120300000002016f12833a6f12833b895f",
+      "wire_hex": "03010103100a020306785634120301010d02016f12833a6f12833b895f00",
+      "value": {
+        "message_id": 3,
+        "subject_id": 258,
+        "value": {
+          "kp": 0.001,
+          "ki": 0.004
+        }
+      }
+    },
+    {
+      "name": "write_telemetry",
+      "type": "request",
+      "kind": 1,
+      "message_id": 3,
+      "session_id": 305419896,
+      "sequence": 4,
+      "payload_hex": "01020100fa00",
+      "decoded_hex": "0101001006000300785634120400000001020100fa008f20",
+      "wire_hex": "030101031006020306785634120401010401020102fa038f2000",
+      "value": {
+        "message_id": 3,
+        "subject_id": 513,
+        "value": {
+          "enabled": 1,
+          "rate_hz": 250
+        }
+      }
+    },
+    {
+      "name": "start_positive",
+      "type": "request",
+      "kind": 1,
+      "message_id": 4,
+      "session_id": 305419896,
+      "sequence": 5,
+      "payload_hex": "010000007042",
+      "decoded_hex": "01010010060004007856341205000000010000007042b789",
+      "wire_hex": "0301010310060204067856341205010102010101057042b78900",
+      "value": {
+        "message_id": 4,
+        "subject_id": 1,
+        "target_velocity_rpm": 60.0
+      }
+    },
+    {
+      "name": "start_negative",
+      "type": "request",
+      "kind": 1,
+      "message_id": 4,
+      "session_id": 305419896,
+      "sequence": 6,
+      "payload_hex": "0100000070c2",
+      "decoded_hex": "010100100600040078563412060000000100000070c2f0a9",
+      "wire_hex": "03010103100602040678563412060101020101010570c2f0a900",
+      "value": {
+        "message_id": 4,
+        "subject_id": 1,
+        "target_velocity_rpm": -60.0
+      }
+    },
+    {
+      "name": "update_positive",
+      "type": "request",
+      "kind": 1,
+      "message_id": 4,
+      "session_id": 305419896,
+      "sequence": 7,
+      "payload_hex": "020000002042",
+      "decoded_hex": "010100100600040078563412070000000200000020426297",
+      "wire_hex": "0301010310060204067856341207010102020101052042629700",
+      "value": {
+        "message_id": 4,
+        "subject_id": 2,
+        "target_velocity_rpm": 40.0
+      }
+    },
+    {
+      "name": "update_negative",
+      "type": "request",
+      "kind": 1,
+      "message_id": 4,
+      "session_id": 305419896,
+      "sequence": 8,
+      "payload_hex": "0200000020c2",
+      "decoded_hex": "010100100600040078563412080000000200000020c25b50",
+      "wire_hex": "03010103100602040678563412080101020201010520c25b5000",
+      "value": {
+        "message_id": 4,
+        "subject_id": 2,
+        "target_velocity_rpm": -40.0
+      }
+    },
+    {
+      "name": "negative_zero",
+      "type": "request",
+      "kind": 1,
+      "message_id": 4,
+      "session_id": 305419896,
+      "sequence": 9,
+      "payload_hex": "020000000080",
+      "decoded_hex": "010100100600040078563412090000000200000000807e51",
+      "wire_hex": "03010103100602040678563412090101020201010104807e5100",
+      "value": {
+        "message_id": 4,
+        "subject_id": 2,
+        "target_velocity_rpm": -0.0
+      }
+    },
+    {
+      "name": "sessionless_stop",
+      "type": "request",
+      "kind": 1,
+      "message_id": 4,
+      "session_id": 0,
+      "sequence": 10,
+      "payload_hex": "0300",
+      "decoded_hex": "0101001002000400000000000a0000000300b5c3",
+      "wire_hex": "030101031002020401010101020a0101020303b5c300",
+      "value": {
+        "message_id": 4,
+        "subject_id": 3
+      }
+    },
+    {
+      "name": "clear_fault",
+      "type": "request",
+      "kind": 1,
+      "message_id": 4,
+      "session_id": 305419896,
+      "sequence": 11,
+      "payload_hex": "0400",
+      "decoded_hex": "0101001002000400785634120b0000000400cec2",
+      "wire_hex": "030101031002020406785634120b0101020403cec200",
+      "value": {
+        "message_id": 4,
+        "subject_id": 4
+      }
+    },
+    {
+      "name": "read_object_0001",
+      "type": "response",
+      "kind": 2,
+      "message_id": 2,
+      "session_id": 305419896,
+      "sequence": 12,
+      "payload_hex": "0000010001000100010001003f000000204e0000efcdab8967452301",
+      "decoded_hex": "010200101c000200785634120c0000000000010001000100010001003f000000204e0000efcdab89674523016309",
+      "wire_hex": "03010203101c020206785634120c0101010102010201020102010201023f010103204e010befcdab8967452301630900",
+      "value": {
+        "result_code": 0,
+        "subject_id": 1,
+        "value": {
+          "protocol_version": 1,
+          "device_contract_version": 1,
+          "target_id": 1,
+          "control_profile_id": 1,
+          "capability_flags": 63,
+          "control_time_ticks_per_second": 20000,
+          "firmware_build_id": 81985529216486895
+        }
+      }
+    },
+    {
+      "name": "read_object_0002",
+      "type": "response",
+      "kind": 2,
+      "message_id": 2,
+      "session_id": 305419896,
+      "sequence": 13,
+      "payload_hex": "000002008877665544332211204e0000020000000500000001000000ff010000000070c200006ec2000000be0000803d00004241",
+      "decoded_hex": "0102001034000200785634120d000000000002008877665544332211204e0000020000000500000001000000ff010000000070c200006ec2000000be0000803d00004241e8e7",
+      "wire_hex": "030102031034020206785634120d0101010102020b8877665544332211204e0102020101020501010201010103ff010101010370c201036ec2010102be0103803d01054241e8e700",
+      "value": {
+        "result_code": 0,
+        "subject_id": 2,
+        "value": {
+          "control_time_ticks": 1234605616436508552,
+          "control_time_ticks_per_second": 20000,
+          "motor_state": 2,
+          "fault_flags": 5,
+          "motor_command_result": 1,
+          "valid_flags": 511,
+          "target_velocity_rpm": -60.0,
+          "velocity_rpm": -59.5,
+          "id_a": -0.125,
+          "iq_a": 0.0625,
+          "bus_voltage_v": 12.125
+        }
+      }
+    },
+    {
+      "name": "read_object_0003",
+      "type": "response",
+      "kind": 2,
+      "message_id": 2,
+      "session_id": 305419896,
+      "sequence": 14,
+      "payload_hex": "000003000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f000000100000001100000012000000130000001400000015000000160000001700000018000000190000001a000000",
+      "decoded_hex": "010200106c000200785634120e000000000003000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f000000100000001100000012000000130000001400000015000000160000001700000018000000190000001a0000001de1",
+      "wire_hex": "03010203106c020206785634120e010101010203020101010202010102030101020401010205010102060101020701010208010102090101020a0101020b0101020c0101020d0101020e0101020f010102100101021101010212010102130101021401010215010102160101021701010218010102190101021a0101031de100",
+      "value": {
+        "result_code": 0,
+        "subject_id": 3,
+        "value": {
+          "session_id": 1,
+          "rx_bytes": 2,
+          "tx_bytes": 3,
+          "event_drop_count": 4,
+          "rx_discontinuities": 5,
+          "rx_dma_overruns": 6,
+          "uart_pe": 7,
+          "uart_fe": 8,
+          "uart_ne": 9,
+          "uart_ore": 10,
+          "cobs_errors": 11,
+          "crc_errors": 12,
+          "length_errors": 13,
+          "version_errors": 14,
+          "message_errors": 15,
+          "parser_timeouts": 16,
+          "response_fifo_high_water": 17,
+          "completion_fifo_high_water": 18,
+          "event_fifo_high_water": 19,
+          "telemetry_overwrites": 20,
+          "communication_stack_min_words": 21,
+          "telemetry_stack_min_words": 22,
+          "internal_fault_reason": 23,
+          "internal_fault_count": 24,
+          "tx_busy_count": 25,
+          "tx_errors": 26
+        }
+      }
+    },
+    {
+      "name": "read_object_0101",
+      "type": "response",
+      "kind": 2,
+      "message_id": 2,
+      "session_id": 305419896,
+      "sequence": 15,
+      "payload_hex": "000001016f12833a6f12833b",
+      "decoded_hex": "010200100c000200785634120f000000000001016f12833a6f12833b1eb1",
+      "wire_hex": "03010203100c020206785634120f010101010d01016f12833a6f12833b1eb100",
+      "value": {
+        "result_code": 0,
+        "subject_id": 257,
+        "value": {
+          "kp": 0.001,
+          "ki": 0.004
+        }
+      }
+    },
+    {
+      "name": "read_object_0102",
+      "type": "response",
+      "kind": 2,
+      "message_id": 2,
+      "session_id": 305419896,
+      "sequence": 16,
+      "payload_hex": "000002016f12033b6f12033c78563412",
+      "decoded_hex": "01020010100002007856341210000000000002016f12033b6f12033c785634129daf",
+      "wire_hex": "0301020310100202067856341210010101011102016f12033b6f12033c785634129daf00",
+      "value": {
+        "result_code": 0,
+        "subject_id": 258,
+        "value": {
+          "kp": 0.002,
+          "ki": 0.008,
+          "generation": 305419896
+        }
+      }
+    },
+    {
+      "name": "read_object_0103",
+      "type": "response",
+      "kind": 2,
+      "message_id": 2,
+      "session_id": 305419896,
+      "sequence": 17,
+      "payload_hex": "000003016f12833a6f12833bffffffff01000000",
+      "decoded_hex": "01020010140002007856341211000000000003016f12833a6f12833bffffffff010000007334",
+      "wire_hex": "0301020310140202067856341211010101011003016f12833a6f12833bffffffff01010103733400",
+      "value": {
+        "result_code": 0,
+        "subject_id": 259,
+        "value": {
+          "kp": 0.001,
+          "ki": 0.004,
+          "generation": 4294967295,
+          "currently_in_use": true
+        }
+      }
+    },
+    {
+      "name": "read_object_0201",
+      "type": "response",
+      "kind": 2,
+      "message_id": 2,
+      "session_id": 305419896,
+      "sequence": 18,
+      "payload_hex": "000001020100fa0001000000",
+      "decoded_hex": "010200100c0002007856341212000000000001020100fa0001000000549a",
+      "wire_hex": "03010203100c0202067856341212010101010401020102fa0201010103549a00",
+      "value": {
+        "result_code": 0,
+        "subject_id": 513,
+        "value": {
+          "enabled": 1,
+          "rate_hz": 250,
+          "generation": 1
+        }
+      }
+    },
+    {
+      "name": "write_response_0102",
+      "type": "response",
+      "kind": 2,
+      "message_id": 3,
+      "session_id": 305419896,
+      "sequence": 19,
+      "payload_hex": "000002016f12033b6f12033c78563412",
+      "decoded_hex": "01020010100003007856341213000000000002016f12033b6f12033c78563412295d",
+      "wire_hex": "0301020310100203067856341213010101011102016f12033b6f12033c78563412295d00",
+      "value": {
+        "result_code": 0,
+        "subject_id": 258,
+        "value": {
+          "kp": 0.002,
+          "ki": 0.008,
+          "generation": 305419896
+        }
+      }
+    },
+    {
+      "name": "write_response_0201",
+      "type": "response",
+      "kind": 2,
+      "message_id": 3,
+      "session_id": 305419896,
+      "sequence": 20,
+      "payload_hex": "000001020100fa0001000000",
+      "decoded_hex": "010200100c0003007856341214000000000001020100fa00010000003737",
+      "wire_hex": "03010203100c0203067856341214010101010401020102fa0201010103373700",
+      "value": {
+        "result_code": 0,
+        "subject_id": 513,
+        "value": {
+          "enabled": 1,
+          "rate_hz": 250,
+          "generation": 1
+        }
+      }
+    },
+    {
+      "name": "open_response",
+      "type": "response",
+      "kind": 2,
+      "message_id": 1,
+      "session_id": 0,
+      "sequence": 21,
+      "payload_hex": "0000000078563412",
+      "decoded_hex": "010200100800010000000000150000000000000078563412d138",
+      "wire_hex": "03010203100802010101010102150101010101010778563412d13800",
+      "value": {
+        "result_code": 0,
+        "subject_id": 0,
+        "accepted_session_id": 305419896
+      }
+    },
+    {
+      "name": "motor_accepted",
+      "type": "response",
+      "kind": 2,
+      "message_id": 4,
+      "session_id": 305419896,
+      "sequence": 22,
+      "payload_hex": "0000010000000000",
+      "decoded_hex": "01020010080004007856341216000000000001000000000036d8",
+      "wire_hex": "0301020310080204067856341216010101010201010101010336d800",
+      "value": {
+        "result_code": 0,
+        "subject_id": 1,
+        "motor_result": 0
+      }
+    },
+    {
+      "name": "motor_not_ready",
+      "type": "response",
+      "kind": 2,
+      "message_id": 4,
+      "session_id": 305419896,
+      "sequence": 23,
+      "payload_hex": "0000010006000000",
+      "decoded_hex": "010200100800040078563412170000000000010006000000dafc",
+      "wire_hex": "03010203100802040678563412170101010102010206010103dafc00",
+      "value": {
+        "result_code": 0,
+        "subject_id": 1,
+        "motor_result": 6
+      }
+    },
+    {
+      "name": "transaction_busy",
+      "type": "response",
+      "kind": 2,
+      "message_id": 4,
+      "session_id": 305419896,
+      "sequence": 24,
+      "payload_hex": "01040100ffff0000",
+      "decoded_hex": "0102001008000400785634121800000001040100ffff000075ca",
+      "wire_hex": "030102031008020406785634121801010401040103ffff010375ca00",
+      "value": {
+        "result_code": 1025,
+        "subject_id": 1,
+        "motor_result": 65535
+      }
+    },
+    {
+      "name": "unknown_object",
+      "type": "response",
+      "kind": 2,
+      "message_id": 2,
+      "session_id": 305419896,
+      "sequence": 25,
+      "payload_hex": "0103eeee",
+      "decoded_hex": "010200100400020078563412190000000103eeee3289",
+      "wire_hex": "03010203100402020678563412190101070103eeee328900",
+      "value": {
+        "result_code": 769,
+        "subject_id": 61166
+      }
+    },
+    {
+      "name": "unknown_message",
+      "type": "response",
+      "kind": 2,
+      "message_id": 39321,
+      "session_id": 305419896,
+      "sequence": 26,
+      "payload_hex": "02010000",
+      "decoded_hex": "0102001004009999785634121a00000002010000ca81",
+      "wire_hex": "030102031004089999785634121a01010302010103ca8100",
+      "value": {
+        "result_code": 258,
+        "subject_id": 0
+      }
+    },
+    {
+      "name": "speed_sample_full",
+      "type": "sample",
+      "kind": 3,
+      "message_id": 4097,
+      "session_id": 305419896,
+      "sequence": 27,
+      "payload_hex": "98badcfe88776655443322111122334455667788000070c200006ec20000a03f000080bd000000bd0000803c000042410200000005000000ff0300000f0000007856341221436587",
+      "decoded_hex": "0103001048000110785634121b00000098badcfe88776655443322111122334455667788000070c200006ec20000a03f000080bd000000bd0000803c000042410200000005000000ff0300000f000000785634122143658738fe",
+      "wire_hex": "030103031048080110785634121b01011598badcfe88776655443322111122334455667788010370c201036ec20103a03f010380bd010102bd0103803c010442410201010205010103ff0301020f01010b785634122143658738fe00",
+      "value": {
+        "sample_sequence": 4275878552,
+        "control_time_ticks": 1234605616436508552,
+        "position_observation_time": 9833440827789222417,
+        "target_velocity_rpm": -60.0,
+        "velocity_rpm": -59.5,
+        "mechanical_position_turns": 1.25,
+        "iq_reference_a": -0.0625,
+        "iq_feedback_a": -0.03125,
+        "id_feedback_a": 0.015625,
+        "bus_voltage_v": 12.125,
+        "motor_state": 2,
+        "fault_flags": 5,
+        "valid_flags": 1023,
+        "limit_flags": 15,
+        "active_profile_generation": 305419896,
+        "telemetry_config_generation": 2271560481
+      }
+    },
+    {
+      "name": "speed_sample_invalid",
+      "type": "sample",
+      "kind": 3,
+      "message_id": 4097,
+      "session_id": 305419896,
+      "sequence": 28,
+      "payload_hex": "ffffffff000000000000000000000000000000000000c07f0000c07f0000c07f0000c07f0000c07f0000c07f0000c07f000000000000000000000000000000000000000000000000",
+      "decoded_hex": "0103001048000110785634121c000000ffffffff000000000000000000000000000000000000c07f0000c07f0000c07f0000c07f0000c07f0000c07f0000c07f000000000000000000000000000000000000000000000000a7f5",
+      "wire_hex": "030103031048080110785634121c010105ffffffff010101010101010101010101010101010103c07f0103c07f0103c07f0103c07f0103c07f0103c07f0103c07f010101010101010101010101010101010101010101010103a7f500",
+      "value": {
+        "sample_sequence": 4294967295,
+        "control_time_ticks": 0,
+        "position_observation_time": 0,
+        "target_velocity_rpm": "nan",
+        "velocity_rpm": "nan",
+        "mechanical_position_turns": "nan",
+        "iq_reference_a": "nan",
+        "iq_feedback_a": "nan",
+        "id_feedback_a": "nan",
+        "bus_voltage_v": "nan",
+        "motor_state": 0,
+        "fault_flags": 0,
+        "valid_flags": 0,
+        "limit_flags": 0,
+        "active_profile_generation": 0,
+        "telemetry_config_generation": 0
+      }
+    },
+    {
+      "name": "state_changed",
+      "type": "event",
+      "kind": 4,
+      "message_id": 8193,
+      "session_id": 305419896,
+      "sequence": 29,
+      "payload_hex": "0100000002000000f0debc9a78563412",
+      "decoded_hex": "0104001010000120785634121d0000000100000002000000f0debc9a7856341297db",
+      "wire_hex": "030104031010080120785634121d010102010101020201010bf0debc9a7856341297db00",
+      "value": {
+        "first": 1,
+        "second": 2,
+        "control_time_ticks": 1311768467463790320
+      }
+    },
+    {
+      "name": "fault_latched",
+      "type": "event",
+      "kind": 4,
+      "message_id": 8194,
+      "session_id": 305419896,
+      "sequence": 30,
+      "payload_hex": "8000000085000000f0debc9a78563412",
+      "decoded_hex": "0104001010000220785634121e0000008000000085000000f0debc9a785634127f63",
+      "wire_hex": "030104031010080220785634121e010102800101028501010bf0debc9a785634127f6300",
+      "value": {
+        "first": 128,
+        "second": 133,
+        "control_time_ticks": 1311768467463790320
+      }
+    }
+  ]
+}

@@ -16,4 +16,7 @@ Protocol Contract
 
 展示目标新增 UART 自研设备协议和 FreeRTOS 后台集成。[CORE_PROTOCOL_V1.md](CORE_PROTOCOL_V1.md)是本阶段唯一权威Wire Contract，固定编号、布局与事务语义；[PROTOCOL_DESIGN.md](PROTOCOL_DESIGN.md)只解释设计边界。合同冻结不代表实现或实物通过。协议语义和编解码保持不依赖RTOS；CAN后续共用设备语义并另定帧映射。
 
-先明确命令、失败和恢复语义，再冻结最小 UART 对象、事务与字节格式。位置环、标准 Modbus / CANopen 栈和完整工业协议生态后续再做，不沿用旧工程的对象字典作为默认前提。
+线格式已有[C / Python 离线编解码及验证入口](../firmware/app/communication/README.md)，
+双方分别对照[固定黄金向量](test_vectors/core_protocol_v1.json)。库通过不等于会话、设备端
+服务、DMA 或 RTOS 已接入。位置环、标准 Modbus / CANopen 栈和完整工业协议生态后续再做，
+不沿用旧工程的对象字典作为默认前提。
