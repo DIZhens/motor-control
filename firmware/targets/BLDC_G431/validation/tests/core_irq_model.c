@@ -7,24 +7,36 @@
 /* 通过已保留的 TIM 替身引用真实 SPI 向量，防止模型链接器将未装入向量表的入口回收。 */
 extern void SPI1_IRQHandler(void);
 extern void DMA1_Channel1_IRQHandler(void);
+extern void TIM6_DAC_IRQHandler(void);
 static void (* volatile s_core_spi_vector)(void) = SPI1_IRQHandler;
 static void (* volatile s_core_dma_vector)(void) = DMA1_Channel1_IRQHandler;
+static void (* volatile s_core_guard_vector)(void) = TIM6_DAC_IRQHandler;
 
 volatile uint32_t model_core_hal_calls;
 volatile uint32_t model_core_hal_source;
 volatile uint32_t model_core_hal_flags;
 volatile uint32_t model_core_hal_updates;
 volatile uint32_t model_core_hal_breaks;
+volatile uint32_t model_core_tim6_hal_calls;
+volatile uint32_t model_core_guard_calls;
+volatile uint32_t model_core_dac_hal_calls;
 
 void HAL_TIM_IRQHandler(TIM_HandleTypeDef *htim)
 {
     /* 与当前 stm32g4xx_hal_tim.c 的 UPDATE/BREAK 分支相同：入口快照后按 source 清旗。
      * 本模型只启用 UIE/BIE，不模拟其余 CC/Trigger；Break callback 仅模拟暂停 BIE。 */
-    uint32_t itsource = htim->Instance->DIER;
-    uint32_t itflag = htim->Instance->SR;
+    uint32_t itsource;
+    uint32_t itflag;
 
     (void)s_core_spi_vector;
     (void)s_core_dma_vector;
+    (void)s_core_guard_vector;
+    if (htim == &htim6) {
+        model_core_tim6_hal_calls++;
+        return;
+    }
+    itsource = htim->Instance->DIER;
+    itflag = htim->Instance->SR;
     model_core_hal_calls++;
     model_core_hal_source = itsource;
     model_core_hal_flags = itflag;
@@ -67,7 +79,11 @@ void HAL_DMA_IRQHandler(DMA_HandleTypeDef *handle)
 }
 void position_observation_irq(void) { model_core_position_irq_calls++; }
 void HAL_ADC_IRQHandler(ADC_HandleTypeDef *handle) { (void)handle; model_core_unexpected_irqs++; }
-void HAL_DAC_IRQHandler(DAC_HandleTypeDef *handle) { (void)handle; model_core_unexpected_irqs++; }
+void HAL_DAC_IRQHandler(DAC_HandleTypeDef *handle)
+{
+    if (handle != &hdac1 && handle != &hdac3) { model_core_unexpected_irqs++; }
+    model_core_dac_hal_calls++;
+}
 void HAL_SPI_IRQHandler(SPI_HandleTypeDef *handle)
 {
     (void)handle;
@@ -76,3 +92,4 @@ void HAL_SPI_IRQHandler(SPI_HandleTypeDef *handle)
 }
 void HAL_IncTick(void) { model_core_unexpected_irqs++; }
 void target_validation_guard_irq(void) { model_core_unexpected_irqs++; }
+void target_runtime_guard_irq(void) { model_core_guard_calls++; }

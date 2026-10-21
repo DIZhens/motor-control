@@ -61,7 +61,7 @@ class Tests(unittest.TestCase):
         self.build.mkdir(parents=True)
         (self.target / "Core").mkdir()
         (self.target / "validation/tools").mkdir(parents=True)
-        (self.target / "MDK-ARM/BLDC_control V1.uvprojx").write_text(
+        (self.target / "MDK-ARM/BLDC_G431_Validation.uvprojx").write_text(
             '<Project><FilePath>../Core/main.c</FilePath></Project>', encoding="utf-8")
         (self.target / "Core/main.c").write_text("void main(void) {}", encoding="utf-8")
         (self.target / "Core/main.h").write_text("/* fixture */", encoding="utf-8")

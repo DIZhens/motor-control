@@ -27,9 +27,11 @@
 #if defined(BLDC_G431_TIMING_ENTRY)
 #include "timing_entry.h"
 #include "runtime_timing.h"
-#elif defined(BLDC_G431_OBSERVE_ENTRY)
+#elif defined(BLDC_G431_RUNTIME_ENTRY)
 #include "target_runtime.h"
+#if defined(BLDC_G431_DIAGNOSTICS)
 #include "irq_timing.h"
+#endif
 #else
 #include "target_validation.h"
 #endif
@@ -162,7 +164,7 @@ void UsageFault_Handler(void)
 void SVC_Handler(void)
 {
   /* USER CODE BEGIN SVCall_IRQn 0 */
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_DIAGNOSTICS)
   g_target_runtime_irq_entries[0]++;
 #endif
 
@@ -178,7 +180,7 @@ void SVC_Handler(void)
 void DebugMon_Handler(void)
 {
   /* USER CODE BEGIN DebugMonitor_IRQn 0 */
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_DIAGNOSTICS)
   g_target_runtime_irq_entries[1]++;
 #endif
 
@@ -194,7 +196,7 @@ void DebugMon_Handler(void)
 void PendSV_Handler(void)
 {
   /* USER CODE BEGIN PendSV_IRQn 0 */
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_DIAGNOSTICS)
   g_target_runtime_irq_entries[2]++;
 #endif
 
@@ -210,7 +212,7 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_DIAGNOSTICS)
   g_target_runtime_irq_entries[3]++;
 #endif
 
@@ -251,7 +253,7 @@ void ADC1_2_IRQHandler(void)
   realtime_motor_io_adc_irq_enter();
 #if defined(BLDC_G431_TIMING_ENTRY)
   g431_runtime_timing_irq_enter(DWT->CYCCNT);
-#elif defined(BLDC_G431_OBSERVE_ENTRY)
+#elif defined(BLDC_G431_DIAGNOSTICS)
   uint32_t timing_request = g_target_runtime_compute_request;
   bool timing_ready = (g_target_runtime_compute_sequence & 1U) == 0U &&
       g_target_runtime_compute_result.state == OBSERVE_COMPUTE_PROBE_COMPLETE &&
@@ -276,7 +278,7 @@ void ADC1_2_IRQHandler(void)
   if (g_target_runtime_timing_active != 0U) {
     g431_runtime_timing_irq_exit(DWT->CYCCNT, timing_entry_permitted());
   }
-#elif defined(BLDC_G431_OBSERVE_ENTRY)
+#elif defined(BLDC_G431_DIAGNOSTICS)
   if (timing_window) {
     uint32_t timing_end = DWT->CYCCNT;
     g431_irq_timing_irq_exit(timing_end, target_runtime_timing_permitted());
@@ -299,7 +301,7 @@ void TIM1_BRK_TIM15_IRQHandler(void)
   uint32_t update_irq_enabled = TIM1->DIER & TIM_DIER_UIE;
   /* 保留新到 UIF，避免通用 HAL 在两次读取间吞掉下一次更新。 */
   CLEAR_BIT(TIM1->DIER, TIM_DIER_UIE);
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_DIAGNOSTICS)
   g_target_runtime_irq_entries[5]++;
 #endif
 
@@ -336,7 +338,7 @@ void TIM1_UP_TIM16_IRQHandler(void)
 void SPI1_IRQHandler(void)
 {
   /* USER CODE BEGIN SPI1_IRQn 0 */
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_DIAGNOSTICS)
   g_target_runtime_irq_entries[6]++;
 #endif
   /* 私有有限长度 SSI 事务独占 SPI1，中断内不得进入 HAL 的等待收尾路径。 */
@@ -356,12 +358,12 @@ void SPI1_IRQHandler(void)
 void TIM6_DAC_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM6_DAC_IRQn 0 */
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_DIAGNOSTICS)
   g_target_runtime_irq_entries[7]++;
 #endif
 #if defined(BLDC_G431_TIMING_ENTRY)
   timing_entry_guard_irq();
-#elif defined(BLDC_G431_OBSERVE_ENTRY)
+#elif defined(BLDC_G431_RUNTIME_ENTRY)
   target_runtime_guard_irq();
 #else
   target_validation_guard_irq();

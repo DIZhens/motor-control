@@ -6,26 +6,24 @@
 
 #include "main.h"
 #include "tim.h"
-#include "usart.h"
 #include "motor.h"
 #include "control_runtime.h"
-#include "vofa.h"
-#include "motor_vofa.h"
+#include "target_vofa.h"
 #include "realtime_motor_io.h"
 #include "hardware_trip.h"
 #include "position_observation.h"
 #include "bus_observation.h"
 #include "cordic_math.h"
+#if defined(BLDC_G431_DIAGNOSTICS)
 #include "irq_timing.h"
 #include "controller_profile.h"
 #include "../platform/realtime_motor_io_diagnostic.h"
+#endif
 
 #define CYCLES_PER_US (170U)
 #define SAMPLE_MIN_US (75U)
 #define SAMPLE_MAX_US (125U)
 #define PUBLICATION_DIVIDER (100U)
-#define TELEMETRY_PERIOD_MS (10U)
-#define RX_FRAGMENT_TIMEOUT_MS (100U)
 #define FINITE_RUN_MAX_CYCLES (1500000U * CYCLES_PER_US)
 #define FINITE_RUN_MAX_DISPLACEMENT (2.0f)
 
@@ -34,11 +32,14 @@ typedef struct {
     MotorSnapshot snapshot; /* 与协议无关的完整业务快照及其有效性。 */
     uint32_t incorporated_guard_faults; /* 已纳入 Motor 快照的故障位，用于识别尚未合并的监视原因。 */
     bool has_sample; /* 是否已有真实采样；启动阶段的初始快照为 false。 */
+#if defined(BLDC_G431_DIAGNOSTICS)
     bool compute_probe_permitted; /* ADC 同拍确认 IDLE/OFF、控制配置关闭且无故障；后台仍须复核心跳和 MOE。 */
     bool stage_probe_permitted; /* 当拍只允许隔离试具的无功率计时，不授予真实控制许可。 */
+#endif
 } RuntimePublication;
 
 volatile uint32_t g_target_runtime_guard_faults;
+#if defined(BLDC_G431_DIAGNOSTICS)
 volatile uint32_t g_target_runtime_irq_entries[8];
 volatile uint32_t g_target_runtime_current_request;
 volatile uint32_t g_target_runtime_current_sequence;
@@ -47,6 +48,7 @@ volatile uint32_t g_target_runtime_compute_request;
 volatile uint32_t g_target_runtime_compute_sequence;
 volatile ObserveComputeComparisonResult g_target_runtime_compute_result;
 volatile uint32_t g_target_runtime_stage_request;
+#endif
 volatile TargetRuntimeRunStatus g_target_runtime_run_status;
 
 /* 启动阶段在时基开启前写入；运行后仅由 sample_ready 更新 Motor。 */
@@ -54,7 +56,7 @@ static Motor s_motor;
 static ControlRuntime s_control_runtime;
 static G431CordicMath s_cordic_math;
 #if defined(BLDC_G431_FINITE_RUN)
-#if !defined(BLDC_G431_OBSERVE_ENTRY)
+#if !defined(BLDC_G431_RUNTIME_ENTRY)
 #error BLDC_G431_FINITE_RUN requires the runtime Core entry
 #endif
 /* 仅本板固定空载包络：名义电流换算、符号与定向候选承接已存实物记录。
@@ -82,9 +84,9 @@ static const ControlRuntimeConfig s_control_config = {
         true, { 1.0f, -1.0f, -1.0f } }, 100U, 5.0f,
     /* 仅此无功率观察构建：启动校零前须断开电池、三相及外部注入源。 */
     true,
-    /* 极对数、方向和电角度偏置尚未实测，保持电角度未配置、未确认。 */
+    /* 此 Observe 构建不装配已验证的电角映射，保持电角度未配置、未确认。 */
     { 0U, 0, 0.0f, 0.0f, 0.0f }, false,
-    /* 实机增益、角度与时序尚未验收；当前装配保持控制链及功率许可关闭。 */
+    /* Observe 仅提供无功率观察，不承接 Run 的控制参数或功率许可。 */
     { 0 }, g431_cordic_sincos, &s_cordic_math
 };
 #endif
@@ -99,24 +101,18 @@ static uint32_t s_last_guard_cycles;
 static uint32_t s_publication_divider;
 static bool s_attempted;
 static bool s_has_sample;
+static bool s_cordic_ready;
+#if defined(BLDC_G431_DIAGNOSTICS)
 /* 诊断采集不参与 Motor 生命周期；ADC 是其唯一运行期写者。 */
 static ObserveCurrentCapture s_current_capture;
 static uint32_t s_current_request_seen;
 
 /* 计时诊断只由后台写入，ADC 与 guard 不修改实例或结果。 */
 static ObserveComputeComparison s_compute_probe;
-static bool s_cordic_ready;
 static uint32_t s_stage_request_seen;
 static uint32_t s_compute_request_seen;
 static bool s_compute_stop_this_service; /* 同轮收到 Stop 后，即使 ADC 已消费也不接受计时请求。 */
-
-/* 解析器和正在发送的整帧仅由后台维护；发送完成前不改写帧内容。 */
-static VofaParser s_parser;
-static uint8_t s_tx_frame[VOFA_TELEMETRY_FRAME_SIZE];
-static size_t s_tx_cursor;
-static size_t s_tx_length;
-static uint32_t s_last_telemetry_ms;
-static uint32_t s_last_rx_ms;
+#endif
 
 static void restore_interrupts(uint32_t primask)
 {
@@ -130,6 +126,7 @@ static bool finite_float(float value)
     return (value >= -FLT_MAX) && (value <= FLT_MAX);
 }
 
+#if defined(BLDC_G431_DIAGNOSTICS)
 /* 只由 ADC 所有者读取实时对象；许可变化须立即发布，不能沿用 100 Hz 的旧母线值。 */
 static bool compute_probe_adc_permitted(bool has_sample)
 {
@@ -195,6 +192,7 @@ bool target_runtime_timing_permitted(void)
         (CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) != 0U &&
         (DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) != 0U;
 }
+#endif
 
 static void publish(ControlTime now, bool has_sample)
 {
@@ -204,8 +202,10 @@ static void publish(ControlTime now, bool has_sample)
     control_runtime_snapshot(&s_control_runtime, now, has_sample, &next.snapshot);
     next.incorporated_guard_faults = s_motor.faults;
     next.has_sample = has_sample;
+#if defined(BLDC_G431_DIAGNOSTICS)
     next.compute_probe_permitted = compute_probe_adc_permitted(has_sample);
     next.stage_probe_permitted = stage_budget_adc_permitted(has_sample);
+#endif
     s_publication_sequence++;
     __DMB();
     s_publication = next;
@@ -232,6 +232,30 @@ static bool read_publication(RuntimePublication *out)
         }
     }
     return false;
+}
+
+bool target_runtime_read_snapshot(MotorSnapshot *snapshot)
+{
+    RuntimePublication publication;
+    uint32_t faults;
+    uint32_t last_sample_cycles;
+    uint32_t now_cycles;
+
+    if (snapshot == NULL || !read_publication(&publication)) {
+        return false;
+    }
+    faults = g_target_runtime_guard_faults;
+    last_sample_cycles = s_last_sample_cycles;
+    now_cycles = DWT->CYCCNT;
+    /* 完整旧快照不等于当前健康；统一在交接边界收紧所有后台消费者的资格。 */
+    if ((faults & ~publication.incorporated_guard_faults) != 0U
+        || (faults & TARGET_RUNTIME_FAULT_CLOCK) != 0U
+        || (publication.has_sample
+            && (uint32_t)(now_cycles - last_sample_cycles) > SAMPLE_MAX_US * CYCLES_PER_US)) {
+        memset(&publication.snapshot, 0, sizeof(publication.snapshot));
+    }
+    *snapshot = publication.snapshot;
+    return true;
 }
 
 static bool take_command(MotorCommand *command, bool *rejected)
@@ -299,6 +323,7 @@ static void monitor_finite_run(const MotorCommand *command, bool has_command)
     }
 }
 
+#if defined(BLDC_G431_DIAGNOSTICS)
 static void publish_current_capture(void)
 {
     g_target_runtime_current_sequence++;
@@ -363,6 +388,7 @@ static bool capture_current(const PhaseCurrentObservation *current,
     }
     return changed;
 }
+#endif
 
 static void sample_ready(void *context, const PhaseCurrentObservation *current)
 {
@@ -373,14 +399,18 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     bool rejected;
     bool command_available;
     bool business_changed;
+#if defined(BLDC_G431_DIAGNOSTICS)
     bool stage_prepared = false;
     uint32_t stage_request;
+#endif
     bool power_disabled = (TIM1->BDTR & TIM_BDTR_MOE) == 0U;
 
     (void)context;
+#if defined(BLDC_G431_DIAGNOSTICS)
     if (g_target_irq_timing_active != 0U) {
         g431_irq_timing_observe_enter(now_cycles);
     }
+#endif
     if (s_has_sample && (((uint32_t)(now_cycles - s_last_sample_cycles)
         < SAMPLE_MIN_US * CYCLES_PER_US)
         || ((uint32_t)(now_cycles - s_last_sample_cycles)
@@ -405,6 +435,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
         faults |= TARGET_RUNTIME_FAULT_UNEXPECTED_POWER;
     }
     command_available = take_command(&command, &rejected);
+#if defined(BLDC_G431_DIAGNOSTICS)
     if (!s_control_config.control.enabled) {
         stage_request = g_target_runtime_stage_request;
         if (command_available && (g_target_stage_budget_active != 0U
@@ -433,11 +464,13 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
             }
         }
     }
+#endif
     /* Observe先执行隔离试具，再推进OFF观察；Run直接推进唯一正式实例。 */
     business_changed = control_runtime_step(&s_control_runtime, current->observation_time,
         current, power_disabled,
         faults, rejected ? NULL : &command, command_available);
     monitor_finite_run(rejected ? NULL : &command, command_available);
+#if defined(BLDC_G431_DIAGNOSTICS)
     /* 同拍更新健康快照，主机复核完整窗口时不沿用此前的100Hz旧状态。 */
     if (!s_control_config.control.enabled) {
         business_changed |= capture_current(current, power_disabled,
@@ -445,6 +478,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
         business_changed |= compute_probe_adc_permitted(true) != s_publication.compute_probe_permitted;
         business_changed |= stage_budget_adc_permitted(true) != s_publication.stage_probe_permitted;
     }
+#endif
     s_publication_divider++;
     if (business_changed || (s_publication_divider >= PUBLICATION_DIVIDER)) {
         if (s_publication_divider >= PUBLICATION_DIVIDER) {
@@ -452,9 +486,11 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
         }
         publish(current->observation_time, true);
     }
+#if defined(BLDC_G431_DIAGNOSTICS)
     if (g_target_irq_timing_active != 0U) {
         g431_irq_timing_observe_exit(DWT->CYCCNT);
     }
+#endif
 }
 
 static void trip_notify(void *context)
@@ -513,10 +549,13 @@ void target_runtime_start(void)
         return;
     }
     s_attempted = true;
+#if defined(BLDC_G431_DIAGNOSTICS)
     g431_irq_timing_init();
     /* 每个异常槽位只有该 handler 写入，嵌套 IRQ 不会覆盖另一路计数。 */
     memset((void *)g_target_runtime_irq_entries, 0, sizeof(g_target_runtime_irq_entries));
+#endif
     s_cordic_ready = g431_cordic_math_init(&s_cordic_math);
+#if defined(BLDC_G431_DIAGNOSTICS)
     if (!s_control_config.control.enabled) {
         observe_compute_comparison_init(&s_compute_probe);
         observe_controller_profile_init();
@@ -533,8 +572,9 @@ void target_runtime_start(void)
         s_current_request_seen = 0U;
         publish_current_capture();
     }
+#endif
     motor_init(&s_motor);
-    vofa_parser_init(&s_parser);
+    target_vofa_init();
     realtime_motor_io_safe_off();
     /* 先建立快照所需的实例，即使后端装配失败也能发布明确FAULT。 */
     if (!control_runtime_init(&s_control_runtime, &s_motor, &s_control_config)
@@ -586,6 +626,7 @@ void target_runtime_start(void)
     restore_interrupts(primask);
 }
 
+#if defined(BLDC_G431_DIAGNOSTICS)
 /* 后台单写计时结果；外部通过版本号读取冻结的一致副本。 */
 static void publish_compute_probe(void)
 {
@@ -694,93 +735,65 @@ static void service_compute_probe(void)
         publish_compute_probe();
     }
 }
+#endif
 
-/* 后台只向实时边界提交长度受限且内容完整的命令。 */
-static void enqueue(const VofaCommand *request, bool rejected)
+TargetRuntimeSubmitResult target_runtime_submit_command(const MotorCommand *command)
 {
     uint32_t primask = __get_PRIMASK();
+    bool rejected = command == NULL;
+    bool stop;
+    TargetRuntimeSubmitResult result;
 
-    __disable_irq();
-    if (!rejected && (request->type == VOFA_COMMAND_STOP)) {
-        s_compute_stop_this_service = true;
-        s_command_pending = false;
-        s_stop_pending = true;
-    } else if (rejected || s_command_pending || s_stop_pending) {
-        s_reject_pending = true;
-    } else {
-        MotorCommand command;
-
-        if (motor_vofa_command(request, &command)) {
-            s_pending_command = command;
-            __DMB();
-            s_command_pending = true;
-        } else {
-            s_reject_pending = true;
+    if (!rejected) {
+        switch (command->type) {
+        case MOTOR_COMMAND_START_VELOCITY:
+        case MOTOR_COMMAND_UPDATE_VELOCITY:
+        case MOTOR_COMMAND_STOP:
+        case MOTOR_COMMAND_CLEAR_FAULT:
+            break;
+        default:
+            rejected = true;
+            break;
         }
     }
+    stop = !rejected && command->type == MOTOR_COMMAND_STOP;
+
+    __disable_irq();
+    if (stop) {
+#if defined(BLDC_G431_DIAGNOSTICS)
+        s_compute_stop_this_service = true;
+#endif
+        s_command_pending = false;
+        s_stop_pending = true;
+        result = TARGET_RUNTIME_SUBMIT_QUEUED;
+    } else if (rejected || s_command_pending || s_stop_pending) {
+        s_reject_pending = true;
+        result = rejected ? TARGET_RUNTIME_SUBMIT_REJECTED : TARGET_RUNTIME_SUBMIT_BUSY;
+    } else {
+        s_pending_command = *command;
+        __DMB();
+        s_command_pending = true;
+        result = TARGET_RUNTIME_SUBMIT_QUEUED;
+    }
     restore_interrupts(primask);
+#if defined(BLDC_G431_DIAGNOSTICS)
     /* Stop 可能已被高优先级 ADC 消费并清掉 pending；在同一后台直接取消诊断。 */
-    if (!rejected && (request->type == VOFA_COMMAND_STOP)
-        && observe_compute_comparison_abort(&s_compute_probe, OBSERVE_COMPUTE_PROBE_FAILURE_ABORTED)) {
+    if (stop && observe_compute_comparison_abort(&s_compute_probe,
+        OBSERVE_COMPUTE_PROBE_FAILURE_ABORTED)) {
         observe_controller_profile_freeze(false);
         publish_compute_probe();
     }
+#endif
+    return result;
 }
 
 void target_runtime_service(void)
 {
-    uint32_t now_ms = HAL_GetTick();
-    uint32_t uart_status = USART1->ISR;
-    uint32_t errors = uart_status & (USART_ISR_PE | USART_ISR_FE | USART_ISR_NE | USART_ISR_ORE);
-
+#if defined(BLDC_G431_DIAGNOSTICS)
     s_compute_stop_this_service = false;
-    if ((s_parser.length != 0U) && !s_parser.discarding
-        && ((uint32_t)(now_ms - s_last_rx_ms) >= RX_FRAGMENT_TIMEOUT_MS)) {
-        s_parser.length = 0U;
-        s_parser.discarding = true;
-    }
-    if (errors != 0U) {
-        USART1->ICR = errors; /* PE/FE/NE/ORE 的状态位与清除位位置一一对应。 */
-        s_parser.length = 0U;
-        s_parser.discarding = true;
-    }
-    if ((uart_status & USART_ISR_RXNE_RXFNE) != 0U) {
-        VofaCommand request;
-        VofaParseResult result = vofa_parser_feed(&s_parser, (uint8_t)USART1->RDR, &request);
-
-        s_last_rx_ms = now_ms;
-        if (result == VOFA_PARSE_COMMAND) {
-            enqueue(&request, false);
-        } else if (result == VOFA_PARSE_REJECTED) {
-            enqueue(NULL, true);
-        }
-    }
-    if (((uint32_t)(now_ms - s_last_telemetry_ms) >= TELEMETRY_PERIOD_MS)
-        && (s_tx_cursor == s_tx_length)) {
-        RuntimePublication snapshot;
-
-        s_last_telemetry_ms = now_ms;
-        if (read_publication(&snapshot)) {
-            VofaTelemetry telemetry;
-            uint32_t faults = g_target_runtime_guard_faults;
-            uint32_t last_sample_cycles = s_last_sample_cycles;
-            uint32_t now_cycles = DWT->CYCCNT;
-
-            /* ADC 停滞后仍可能读到完整旧快照，此时不能发布为当前有效状态。 */
-            if (((faults & ~snapshot.incorporated_guard_faults) != 0U)
-                || ((faults & TARGET_RUNTIME_FAULT_CLOCK) != 0U)
-                || (snapshot.has_sample
-                    && ((uint32_t)(now_cycles - last_sample_cycles)
-                        > SAMPLE_MAX_US * CYCLES_PER_US))) {
-                memset(&snapshot.snapshot, 0, sizeof(snapshot.snapshot));
-            }
-            motor_vofa_telemetry(&snapshot.snapshot, &telemetry);
-            s_tx_length = vofa_encode_telemetry(&telemetry, s_tx_frame, sizeof(s_tx_frame));
-            s_tx_cursor = 0U;
-        }
-    }
-    if ((s_tx_cursor < s_tx_length) && ((USART1->ISR & USART_ISR_TXE_TXFNF) != 0U)) {
-        USART1->TDR = s_tx_frame[s_tx_cursor++];
-    }
+#endif
+    target_vofa_service(HAL_GetTick());
+#if defined(BLDC_G431_DIAGNOSTICS)
     if (!s_control_config.control.enabled) { service_compute_probe(); }
+#endif
 }

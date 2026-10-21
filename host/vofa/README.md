@@ -31,7 +31,8 @@ Observe只观察并拒绝启动，Run允许原板固定空载范围内的有限�
 本流程仅用于当前G431、2804电机、原三相及MT6701接线、固定空载条件，
 不适用于任意电机或持续运行。Run固定参数和保护量级以
 [Runtime装配](../../firmware/targets/BLDC_G431/runtime/README.md#有限运行入口)为准。
-核对Keil Target为`BLDC_G431_Run`，产物位于`build/run/`；编译、烧录和供电切换分开完成。
+核对主工程`BLDC_control V1.uvprojx`的唯一Target为`BLDC_G431_Run`，产物位于`build/run/`；
+Observe在独立`BLDC_G431_Validation.uvprojx`中。编译、烧录和供电切换分开完成。
 验收镜像SHA256从Target验证页取得，不用Observe或旧台架镜像套用此流程。
 
 1. OUTPUT关闭时断开ST-Link的3V3，保留SWD/GND；原三相/编码器已接，撤去外部注入，
@@ -74,6 +75,7 @@ Observe只观察并拒绝启动，Run允许原板固定空载范围内的有限�
 
 ## 首次无功率反馈验收
 
+该流程用于独立验证工程中的Observe，不是每次Run试验的前置回归。
 保持电池与电机三相断开、稳压电源 OUTPUT 关闭，由已确认的单一 3V3 来源提供逻辑供电；
 编码器保持原 SSI 接线。先烧录已完成离线检查的 Observe 镜像，再连接串口。
 

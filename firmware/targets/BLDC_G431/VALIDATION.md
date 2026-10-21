@@ -1,12 +1,66 @@
-# G431 台架验证
+# G431 实现与验证边界
 
-`validation/` 通过 HCC 使用 Platform，提供默认 OBSERVE、功率关闭的台架入口；
-它不是正式 Motor / ControlRuntime。旧功率包与保护注入命令仍要求断开电机三相；
-新增有限电压开环命令按[专用流程](validation/OPEN_LOOP.md)连接电机。
-本页汇总当前有限验收、历史证据归属和复用入口，不表示有带电操作排队。
+当前交付是固定 G431 板、2804 电机及 MT6701 原接线下的有限空载 FOC 控制基线。
+正式工程 `MDK-ARM/BLDC_control V1.uvprojx` 只保留 `BLDC_G431_Run`；观察、计时和旧台架
+位于 `MDK-ARM/BLDC_G431_Validation.uvprojx`，共享核心源码。构建、模块职责和资源归属见
+[runtime/README.md](runtime/README.md)，现有 UART / VOFA 操作见
+[Host 说明](../../../host/vofa/README.md#有限-run-操作)。
 
-本页汇总 Keil 台架、默认关断观察、有限正式 Run 与专用无功率计时入口；构建及执行边界见
-[runtime/README.md](runtime/README.md)。各入口的镜像与验收证据不互相替代。
+`validation/` 台架经 HCC 使用 Platform，不是正式 Motor / ControlRuntime。
+旧功率包与保护注入要求电机三相断开；有限开环仅按[专用流程](validation/OPEN_LOOP.md)接电机。
+本页是证据索引，不是待执行的带电操作队列。下方逐次记录中的“当前”“下一步”只指当时的镜像和阶段。
+
+## 当前能力与证据矩阵
+
+| 能力 | 已有证据 | 当前限制 |
+| --- | --- | --- |
+| 默认关断与启动门控 | Run 逻辑供电校验；真实 ARM 装配模型覆盖反馈、校零及初始化失败 | 上电不自动启转；未就绪拒绝，校零失败不自动重采 |
+| FOC 电流内环 / 速度外环 | 20 kHz PWM / 10 kHz 电流 / 1 kHz 速度；正式 Run 正反有限实测 | 固定标定和低速空载范围，电流单位为名义 A |
+| UART 正向启动、设速、Stop | [140 帧及命令记录](validation/evidence/runtime/uart-run.json)、[曲线](validation/evidence/runtime/uart-run.svg)；检查点 `afc931b` | `+60→+40 rpm→Stop`；Stop 撤销功率，不保证主动减速 |
+| UART 反向及 MCU 独立时限 | [203 帧及停机首因](validation/evidence/runtime/uart-negative-limit.json)、[曲线](validation/evidence/runtime/uart-negative-limit.svg)；检查点 `30e4a9c` | `−60→−40 rpm`，首 RUN 至 IDLE 约 1.4999 s；调速不续期，无主机 Stop |
+| 命令交接与一致性观测 | Run / Observe 模型，正式 UART 实物记录 | 单普通请求槽、Stop 优先；最近结果不是逐请求可靠应答 |
+| 保护与时序 | 原 Platform 保护实测、故障模型、独立守卫和正式 Run 停机读回 | 正式 Run 故障注入、2 圈触界及完整 ISR WCET 尚无实物验收 |
+| 性能与长期能力 | 既有台架速度曲线和电阻量级交叉检查 | 原 15 rpm 峰值初筛失败保留；持续运行、带载、独立电流精度、持久标定和故障恢复未完成 |
+| 自研协议 / FreeRTOS | 既有模块边界及[协议草案](../../../interface/PROTOCOL_DESIGN.md) | 尚未接入；后续按纯编解码、UART 联调、后台任务集成推进，CAN 实物再后续 |
+
+以上两次正式 Run 实物记录属于 HEX
+`0e73f54e03ceaa9b21f3ae7cfc305c1ca50ecc9577613cc47f974d54fd2eee76`。
+源码整理或新构建不会把旧证据改写成新镜像已实测。未受影响的功能证据继续保留；
+受影响的命令交接、后台通信与实时路径分别用针对性检查确认，不重跑无关底层波形。
+本页后续保留各轮测量条件、失败首因与镜像，读者不必依赖未分发的本地日志判断上述边界。
+
+## 收尾构建：正式入口隔离与有限复测通过
+
+主工程只包含 Run；验证工程承接 Observe、Timing 和旧台架，引用相同的 Platform、Motor 和
+算法源码。Run 使用独立的运行入口宏，诊断源码、请求邮箱及 IRQ 测量钩子不进入正式构建；
+ADC 完整退出截止、TIM6 心跳/有限时长守卫、故障锁存、校零和 CORDIC 均保留。
+后台 UART 寄存器访问与 VOFA 解析/发送分别移至 `target_uart`、`target_vofa`，通过完整
+Motor 命令及有界一致快照与 `target_runtime` 交接；交接成功不等于逐请求业务应答。
+
+四个 Keil Target 全量构建均为零错误、零警告。新 Run 的 Code48508 / RO928 / RW312 /
+ZI7832，静态 RAM 合计 8144 B，包含既有主栈和堆；旧实测镜像为 24328 B，减少的诊断状态
+没有改作 FreeRTOS 内存。AXF/MAP 确认正式保护仍链接、专项诊断符号不存在。
+12 组 Run、46 组 Observe、Core IRQ 的验证/Run 两种构建 10/11 项、107 项 Platform、
+644 项保护快照、26 项母线 DMA、19 项候选工具及16组 Timing 入口检查通过。
+它们验证实际 ARM 源码或主机工具，不代表电气正确性和 WCET。
+
+冻结 Run HEX 为 `745b74e453e61e8c4532e70f2f23591ed2fc33930921014311a95c05340345e6`，
+加载 49448 B。逻辑供电安装、原生校验与独立 Flash 读回一致；4096 点零偏 READY、
+80 帧均为有效 IDLE，六路关闭、启动次数0、guard与时序首因均为空，未发送运动命令。
+
+操作者确认原12 V／0.20 A、ST-Link 3V3断开、原三相和编码器固定空载、无外部注入，
+RST后静止形成本启动零偏。仅执行一次 `start:60`、约0.406秒后 `speed:40`、约0.906秒后
+`stop`，无固定准备倒计时、反向、自动重试或Clear。200帧全部有效位511、故障0；
+其中40帧目标60、50帧目标40、110帧IDLE。两段速度均值46.404／38.211 rpm含起步及调速
+过渡，不是稳态性能验收；遥测母线11.903..12.042 V，没有新增万用表或电源电流读数。
+
+停机后Motor为IDLE、目标0、已处理3条命令、Runtime OFF；接受启动1次、active0、
+limit_reason0、净位移+0.638977圈。六路LOW/MOE=0、guard0、88 B时序首因全零，
+冻结零偏未改变，独立Flash再次读回匹配；操作者报告无异常。
+[收尾构建及完整200帧证据](validation/evidence/runtime/closure.json)分别保存软件检查与实物范围。
+反向及独立1.5秒关断的实物证据继续绑定下节旧镜像，不改写为本镜像补测；本轮模型覆盖守卫交接。
+本轮没有扩展参数或解除有限运行策略，也未补测正式RUN故障注入、2圈实物触界、持续运行或WCET。
+完整日志、冻结产物及单次现场脚本保留在本地 `validation/local-evidence/20261021-baseline-close-01/`。
 
 ## 正式 Run 补验：反向调速及独立时限通过
 
@@ -78,7 +132,7 @@ Stop 后IDLE、目标0、流程OFF，正常冻结零偏保留；净位移记录+
 反向及有限时长补验见本页上节；独立电流精度、持久标定、
 故障恢复和速度纹波优化仍未完成。自研UART协议与FreeRTOS继续按后续增量接入。
 
-## 统计精简复测：正向完整运行，速度峰值仍待改善
+## 历史台架：统计精简复测，速度峰值仍待改善
 
 有限电流/速度台架的窗口统计改为逐拍累加及平方误差峰值比较，在输出关断后的既有
 终态发布点一次求均值和开方。使用独立32字节累加器，保持所有窗口样本、结果ABI和
@@ -109,8 +163,8 @@ Kp/Ki=0.001/0.004，全部功率和运动边界保持。12.12 V仅历史DMM参�
 
 [完整曲线](validation/evidence/rotor-speed/statistics-lean.svg)与
 [复测证据](validation/evidence/rotor-speed/statistics-lean.json)保留镜像身份和限制。
-下一步接通正式Motor及现有UART/VOFA的有限闭环操作，不以速度峰值优化阻塞基础功能；
-正式RUN许可、反向、独立电流精度和持久标定仍分别验收。协议/FreeRTOS按后续阶段推进。
+该轮之后已接通正式 Motor 及现有 UART / VOFA，见本页顶部正式 Run 记录。
+本轮台架结果保留原镜像归属，速度峰值、独立电流精度和持久标定仍分别验收。
 
 ## 首次时序故障历史：完整 ADC 中断退出越过截止
 
@@ -808,7 +862,7 @@ SVPWM比较7、FOC Runtime13、Target集成64、提交诊断15、Platform87组�
 计算32、电流27项测试。它们不替代未通过的实际截止。
 
 [失败读数、候选及源码身份](validation/evidence/stage-budget/summary.json)与
-[执行边界](runtime/README.md#无功率提交预算诊断)保留测量归属。下一步应先定位整链
+[执行边界](runtime/README.md#历史无功率提交预算诊断)保留测量归属。下一步应先定位整链
 41.8 µs 计算段的主要成本，再决定计算组织与采样/提交安排；当前没有进入带电 FOC 的
 时序依据。电流增益/极性对照可独立准备，既有未受影响台架证据继续有效。
 
@@ -853,7 +907,7 @@ Observe 全量构建 0 Error / 0 Warning，加载 61908 字节，RW+ZI=23984 字
 静态主链 864 字节且含未知回调，不构成最坏栈证明。旧台架重建同样无错误警告，HEX
 仍为 `efdc97e3…`，没有烧录。完整身份与验证见本轮
 [统计、源码身份和限制](validation/evidence/controller-profile/summary.json)。执行接口见
-[runtime 说明](runtime/README.md#后台无功率计算计时)。下一步应以无探针正式流水线核对
+[runtime 说明](runtime/README.md#历史后台无功率计算计时)。下一步应以无探针正式流水线核对
 stage 前段预算，优先处理已量出的校验、相量准备及回算成本；保留电流增益/极性与电角度
 实物确认门槛，不因这次局部提速开放功率。
 
@@ -895,7 +949,7 @@ MOE=0，时基持续前进，未发送功率命令。
 实际控制仍使用默认软件后端、`control.enabled=false`，Start 仍拒绝；本轮不开放 FOC。
 [对照摘要、完整统计与源码身份](validation/evidence/cordic-comparison/summary.json)保留双后端
 各段总样本、clean 样本、IRQ 进入数及误差。执行接口和限制见
-[runtime 说明](runtime/README.md#后台无功率计算计时)。离线检查通过：电角度 15、计时
+[runtime 说明](runtime/README.md#历史后台无功率计算计时)。离线检查通过：电角度 15、计时
 19、硬件适配 9、Target 集成 56、直接 FOC Runtime 模型 8 组；主机对照工具 24、
 共享电流工具 26 项替身测试。外设替身不代替上述实体精度与 cycle 读数。
 
@@ -1052,7 +1106,7 @@ VOFA+ 已使用 JustFloat 接收十通道。[手动转轴截图](validation/evid
 本轮不证明速度精度、完整 ISR WCET 或 FOC。新增实测步骤见
 [VOFA 操作说明](../../../host/vofa/README.md#首次无功率反馈验收)，不因此重复旧 PWM 抓图。
 
-## 当前验收（2026-10-18）
+## 历史基础台架验收（2026-10-18）
 
 当前时序候选 HEX SHA256：
 `8b7fc787ff174fda0ddda3f206a0578941b767bb97af823bc090551c3f491c33`。
@@ -1097,7 +1151,11 @@ Keil 全量 Rebuild 为 0 Error / 0 Warning，台架 ARM 模型 176 项通过。
 旧基础波形镜像覆盖 28588 字节，完整身份见 [公开基础照片索引](validation/evidence/20261018-baseline/index.json)。
 [精选基础照片](validation/evidence/20261018-baseline/README.md)保留原来源、读数与哈希。
 
-## 进入正式控制前的门槛
+## 历史台架进入正式控制前的检查表
+
+以下保留无电机 PWM 阶段的检查边界，不是当前正式 Run 全部未完成的清单。
+后续电流环、标定与有限 Run 的证据按本页顶部矩阵及逐次记录分别判定；
+动态功率能力、精确测量和 WCET 未因有限试转而补记通过。
 
 | 边界 | 仍需完成 |
 | --- | --- |
@@ -1187,7 +1245,8 @@ ARM 模型依赖 ARM Compiler 5、Python `unicorn` / `pyelftools`；默认 `D:/k
 主机历史收尾为逻辑 27、保护 113、PWM 62 项，电流 5、候选 16、时序 20 个 unittest 方法（含子用例）；
 统计口径不同，不合计成“硬件测试数量”。历史现场使用旧工具，不追认为修正后的工具已经上板。
 
-正式工程为 `MDK-ARM/BLDC_control V1.uvprojx`，新增源码同步工程成员并全量 Rebuild。
+上述台架入口现位于 `MDK-ARM/BLDC_G431_Validation.uvprojx`；
+日常正式入口为 `MDK-ARM/BLDC_control V1.uvprojx` 的 Run。新增源码同步相应工程成员并 Rebuild。
 核对 guard、stage/enable/safe-off、Trip 最终地址；使用同次 AXF/MAP 获取布局，先核对芯片与 Flash/HEX。
 烧录与带电测试分开；连续采集使用 HOTPLUG 并核对 S_HALT=0，halt/reset/download 诊断不混入连续证据。
 

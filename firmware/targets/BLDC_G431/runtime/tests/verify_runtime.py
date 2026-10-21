@@ -67,14 +67,23 @@ def read_image(path: Path) -> tuple:
         return segments, initializers, symbols
 
 
-project = ET.parse(TARGET / "MDK-ARM/BLDC_control V1.uvprojx").getroot()
+project_name = "BLDC_control V1.uvprojx" if OPTIONS.finite_run else "BLDC_G431_Validation.uvprojx"
+project = ET.parse(TARGET / "MDK-ARM" / project_name).getroot()
 target_name = "BLDC_G431_Run" if OPTIONS.finite_run else "BLDC_G431_Observe"
 observe = next(target for target in project.findall("./Targets/Target")
                if target.findtext("TargetName") == target_name)
+assert {info.get("name") for info in project.findall(".//RTE//targetInfo")} <= {
+    target.findtext("TargetName") for target in project.findall("./Targets/Target")}
+for target in project.findall("./Targets/Target"):
+    for member in target.findall("./Groups/Group/Files/File"):
+        assert (TARGET / "MDK-ARM" / member.findtext("FilePath").replace("\\", "/")).is_file()
 defines = observe.findtext("./TargetOption/TargetArmAds/Cads/VariousControls/Define")
-assert "BLDC_G431_OBSERVE_ENTRY" in defines
+assert "BLDC_G431_RUNTIME_ENTRY" in defines
+assert ("BLDC_G431_DIAGNOSTICS" in defines) != OPTIONS.finite_run
+assert ("BLDC_G431_OBSERVE_ENTRY" in defines) != OPTIONS.finite_run
 assert ("BLDC_G431_FINITE_RUN" in defines) == OPTIONS.finite_run
 if OPTIONS.finite_run:
+    assert [target.findtext("TargetName") for target in project.findall("./Targets/Target")] == [target_name]
     assert observe.findtext("./TargetOption/TargetCommonOption/OutputDirectory") == "build\\run\\"
     assert observe.findtext("./TargetOption/TargetCommonOption/OutputName") == target_name
 assert observe.findtext("./TargetOption/TargetArmAds/Cads/Optim") == "4"
@@ -89,6 +98,14 @@ for group in observe.findall("./Groups/Group"):
     else:
         assert policy in (None, "2"), group.findtext("GroupName")
 assert hot_groups <= {group.findtext("GroupName") for group in observe.findall("./Groups/Group")}
+runtime_group = next(group for group in observe.findall("./Groups/Group")
+                     if group.findtext("GroupName") == "Application/User/Runtime")
+runtime_sources = {member.findtext("FileName") for member in runtime_group.findall("./Files/File")}
+assert {"target_runtime.c", "target_vofa.c", "target_uart.c", "cordic_math.c"} <= runtime_sources
+if OPTIONS.finite_run:
+    assert runtime_sources == {"target_runtime.c", "target_vofa.c", "target_uart.c", "cordic_math.c"}
+    assert not {"Application/User/Validation", "Application/User/Timing"} & {
+        group.findtext("GroupName") for group in observe.findall("./Groups/Group")}
 passed(target_name + "入口/产物独立，仅对Runtime、Motor和Control三个组采用速度优化")
 
 
@@ -108,21 +125,16 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                      TARGET / "Drivers/CMSIS/Device/ST/STM32G4xx/Include",
                      TARGET / "Drivers/CMSIS/Include"]
     command = [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3", "-Otime",
-               "--split_sections", "-g", "-DSTM32G431xx", "-DBLDC_G431_OBSERVE_ENTRY",
-               "-DCONTROL_CURRENT_PROFILE"]
+               "--split_sections", "-g", "-DSTM32G431xx", "-DBLDC_G431_RUNTIME_ENTRY"]
     if OPTIONS.finite_run:
         command.append('-DBLDC_G431_FINITE_RUN')
+    else:
+        command += ['-DBLDC_G431_DIAGNOSTICS', '-DBLDC_G431_OBSERVE_ENTRY', '-DCONTROL_CURRENT_PROFILE']
     for path in include_paths:
         command += ["-I", str(path)]
     objects = []
-    for source in [TESTS / "model.c", TARGET / "runtime/target_runtime.c",
-                   TARGET / "runtime/current_capture.c",
-                   TARGET / "runtime/compute_probe.c",
-                   TARGET / "runtime/compute_comparison.c",
-                   TARGET / "runtime/irq_timing.c",
-                   TARGET / "runtime/controller_profile.c",
-                   TARGET / "runtime/stage_budget.c",
-                   TARGET / "runtime/stage_budget_runtime.c",
+    sources = [TESTS / "model.c", TESTS / "handoff_model.c", TARGET / "runtime/target_runtime.c",
+                   TARGET / "runtime/target_vofa.c", TARGET / "runtime/target_uart.c",
                    REPOSITORY / "firmware/app/motor/motor.c",
                    REPOSITORY / "firmware/app/motor/control_runtime.c",
                    REPOSITORY / "control/position_estimator.c",
@@ -132,17 +144,30 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                    REPOSITORY / "control/current_controller.c",
                    REPOSITORY / "control/speed_controller.c",
                    REPOSITORY / "firmware/app/communication/motor_vofa.c",
-                   REPOSITORY / "firmware/app/communication/vofa.c"]:
+                   REPOSITORY / "firmware/app/communication/vofa.c"]
+    if not OPTIONS.finite_run:
+        sources += [TARGET / "runtime" / name for name in ["current_capture.c", "compute_probe.c",
+                    "compute_comparison.c", "irq_timing.c", "controller_profile.c", "stage_budget.c",
+                    "stage_budget_runtime.c"]]
+    for source in sources:
         obj = temporary / (source.stem + ".o")
         run_checked(command + ["-c", str(source), "-o", str(obj)], temporary)
         objects.append(str(obj))
     executable = temporary / "model.axf"
     run_checked(
         [str(COMPILER / "armlink.exe"), "--cpu=Cortex-M4.fp", "--scatter", str(scatter),
-         "--entry=model_start", "--keep=model.o(*)", "-o", str(executable), *objects],
+         "--entry=model_start", "--keep=model.o(*)", "--keep=handoff_model.o(*)",
+         "-o", str(executable), *objects],
         temporary,
     )
     segments, initializers, symbols = read_image(executable)
+    if OPTIONS.finite_run:
+        forbidden = [name for name in symbols if name.startswith(("g_target_runtime_compute",
+            "g_target_runtime_current", "g_target_runtime_stage", "g_target_irq_timing",
+            "g_observe_controller_profile", "observe_compute", "observe_current_capture",
+            "observe_controller_profile", "g431_stage_budget", "g431_irq_timing"))]
+        assert not forbidden, forbidden
+        passed("Run模型未编译或链接观察诊断、计时和私有控制副本")
 
     class Model:
         def __init__(self, settings: dict | None = None, start: bool = True,
@@ -179,22 +204,24 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             self.current_formats = [{1: "B", 2: "H", 4: "I"}[size] for size in sizes]
             self.angle_offsets = struct.unpack(
                 "<5I", self.cpu.mem_read(self.symbols["model_angle_offsets"], 20))
-            self.capture_offsets = struct.unpack(
-                "<10I", self.cpu.mem_read(self.symbols["model_capture_offsets"], 40))
-            capture_sizes = struct.unpack(
-                "<3I", self.cpu.mem_read(self.symbols["model_capture_field_sizes"], 12))
-            self.capture_size = capture_sizes[0]
-            self.capture_formats = [{1: "B", 2: "H", 4: "I"}[size] for size in capture_sizes[1:]]
-            self.compute_offsets = struct.unpack(
-                "<13I", self.cpu.mem_read(self.symbols["model_compute_offsets"], 52))
-            self.compute_timing_offsets = struct.unpack(
-                "<5I", self.cpu.mem_read(self.symbols["model_compute_timing_offsets"], 20))
-            self.controller_profile_layout = struct.unpack(
-                "<2I", self.cpu.mem_read(self.symbols["model_controller_profile_layout"], 8))
+            if not OPTIONS.finite_run:
+                self.capture_offsets = struct.unpack(
+                    "<10I", self.cpu.mem_read(self.symbols["model_capture_offsets"], 40))
+                capture_sizes = struct.unpack(
+                    "<3I", self.cpu.mem_read(self.symbols["model_capture_field_sizes"], 12))
+                self.capture_size = capture_sizes[0]
+                self.capture_formats = [{1: "B", 2: "H", 4: "I"}[size] for size in capture_sizes[1:]]
+                self.compute_offsets = struct.unpack(
+                    "<13I", self.cpu.mem_read(self.symbols["model_compute_offsets"], 52))
+                self.compute_timing_offsets = struct.unpack(
+                    "<5I", self.cpu.mem_read(self.symbols["model_compute_timing_offsets"], 20))
+                self.controller_profile_layout = struct.unpack(
+                    "<2I", self.cpu.mem_read(self.symbols["model_controller_profile_layout"], 8))
             self.runtime_offsets = struct.unpack(
                 "<8I", self.cpu.mem_read(self.symbols["model_runtime_offsets"], 32))
-            self.stage_budget_layout = struct.unpack(
-                "<2I", self.cpu.mem_read(self.symbols["model_stage_budget_layout"], 8))
+            if not OPTIONS.finite_run:
+                self.stage_budget_layout = struct.unpack(
+                    "<2I", self.cpu.mem_read(self.symbols["model_stage_budget_layout"], 8))
             for name, value in (settings or {}).items():
                 self.write(name, value)
             if start:

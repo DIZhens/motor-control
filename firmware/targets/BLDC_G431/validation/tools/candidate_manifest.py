@@ -28,7 +28,7 @@ def digest(path):
 
 def source_paths(target):
     """Freeze project members, headers/configuration and all host entry points."""
-    project = target / "MDK-ARM/BLDC_control V1.uvprojx"
+    project = target / "MDK-ARM/BLDC_G431_Validation.uvprojx"
     require(project.is_file(), "Target project missing")
     paths = {project, *target.glob("*.ioc")}
     for member in ET.parse(project).findall(".//FilePath"):

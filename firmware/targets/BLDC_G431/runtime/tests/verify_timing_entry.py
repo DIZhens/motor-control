@@ -5,6 +5,7 @@ import os
 import struct
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 
 from elftools.elf.elffile import ELFFile
 from unicorn import (Uc, UcError, UC_ARCH_ARM, UC_MODE_MCLASS, UC_MODE_THUMB,
@@ -34,6 +35,19 @@ def checked(arguments, directory):
 
 def passed(name):
     CASES.append(name)
+
+
+project = ET.parse(TARGET / "MDK-ARM/BLDC_G431_Validation.uvprojx")
+targets = project.findall("./Targets/Target")
+assert {target.findtext("TargetName") for target in targets} == {
+    "BLDC_control V1", "BLDC_G431_Observe", "BLDC_G431_Timing"}
+timing = next(target for target in targets if target.findtext("TargetName") == "BLDC_G431_Timing")
+defines = timing.findtext("./TargetOption/TargetArmAds/Cads/VariousControls/Define").split(",")
+assert "BLDC_G431_TIMING_ENTRY" in defines and "BLDC_G431_RUNTIME_ENTRY" not in defines
+assert timing.findtext("./TargetOption/TargetCommonOption/OutputDirectory") == "build\\timing\\"
+assert {info.get("name") for info in project.findall(".//RTE//targetInfo")} <= {
+    target.findtext("TargetName") for target in targets}
+passed("独立验证工程保留三个既有入口，Timing宏和产物路径不变且RTE引用有效")
 
 
 with tempfile.TemporaryDirectory(prefix="g431-timing-entry-") as directory:

@@ -7,7 +7,7 @@ from verify_platform import (Model, ROOT, compile_image, CR1, SR, CNT, DIER, CR2
                              DWT_CYCCNT, DIR, GATE)
 
 
-def run(image):
+def run(image, runtime=False):
     cases = 0
     for entry in ["platform_model_core_up", "platform_model_core_break"]:
         for break_flag in [0, 1 << 7, 1 << 8]:
@@ -70,7 +70,17 @@ def run(image):
     assert m.word("model_core_dma_hal_calls") == 1 and m.word("model_core_unexpected_irqs") == 0
     assert (m.get(SR), m.get(DIER), m.word("model_control_time")) == before and not m.moe()
     cases += 1
-    print(f"G431 real Core IRQ ownership: {cases} cases PASS")
+    if runtime:
+        m = Model(image)
+        m.call("TIM6_DAC_IRQHandler")
+        assert m.word("model_core_guard_calls") == 1
+        assert m.word("model_core_tim6_hal_calls") == 1 and m.word("model_core_dac_hal_calls") == 2
+        assert m.word("model_core_unexpected_irqs") == 0 and not m.moe()
+        assert not any(name.startswith(("g_target_runtime_compute", "g_target_runtime_irq_entries",
+            "g_target_irq_timing", "g431_irq_timing")) for name in m.symbols)
+        cases += 1
+    label = "Run" if runtime else "Validation"
+    print(f"G431 real Core IRQ ownership ({label}): {cases} cases PASS")
     print("Core/Platform ARM code with faithful UPDATE/BREAK HAL subset; no board, NVIC latency or electrical proof.")
 
 
@@ -78,3 +88,7 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="g431-core-irq-") as temporary:
         run(compile_image(Path(temporary), [ROOT / "Core/Src/stm32g4xx_it.c",
             Path(__file__).with_name("core_irq_model.c")], ["PLATFORM_MODEL_CORE_IRQ"]))
+    with tempfile.TemporaryDirectory(prefix="g431-run-core-irq-") as temporary:
+        run(compile_image(Path(temporary), [ROOT / "Core/Src/stm32g4xx_it.c",
+            Path(__file__).with_name("core_irq_model.c")], ["PLATFORM_MODEL_CORE_IRQ",
+            "BLDC_G431_RUNTIME_ENTRY", "BLDC_G431_FINITE_RUN"]), runtime=True)

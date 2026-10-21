@@ -35,6 +35,71 @@ def verify(Model, symbols, passed):
         tick(m);assert m.word('model_enable_count')==0
         tick(m);assert m.motor()[0]==RUN and m.word('model_enable_count')==1
 
+    def submit(m, command_type=0, target=0.0, invalid=False):
+        m.write('model_handoff_command_type', command_type)
+        m.write('model_handoff_target', target, 'f')
+        m.write('model_handoff_null', int(invalid))
+        m.call('model_handoff_submit')
+        return m.word('model_handoff_submit_result')
+
+    def snapshot(m, null=False):
+        m.write('model_handoff_null', int(null))
+        m.call('model_handoff_read')
+        size = m.word('model_handoff_snapshot_size')
+        data = bytes(m.cpu.mem_read(symbols['model_handoff_snapshot'], size))
+        return m.word('model_handoff_read_result'), data
+
+    m = ready()
+    assert submit(m, 0, 60.0) == 0
+    # 邮箱已复制完整请求，后台随后复用原对象不能改写待启动目标。
+    m.write('model_handoff_target', 80.0, 'f')
+    m.call('model_handoff_change_source')
+    tick(m, 3)
+    assert m.motor()[0] == RUN and m.motor()[4] == 60.0
+    assert submit(m, 1, 40.0) == 0
+    assert submit(m, 1, 50.0) == 1
+    tick(m)
+    assert m.motor()[2] == 1 and m.motor()[4] == 40.0
+    tick(m)
+    assert m.motor()[2] == 6 and m.motor()[4] == 40.0
+    assert submit(m, 1, 30.0) == 0
+    assert submit(m, 2) == 0
+    assert submit(m, 0, 60.0) == 1
+    assert submit(m, invalid=True) == 2
+    before = m.motor()[3]
+    tick(m, 5)
+    assert m.motor()[0:2] == (IDLE, 0) and m.motor()[4] == 0.0
+    assert m.motor()[3] == before + 1 and m.motor()[2] == 1
+    assert m.word('model_enable_count') == 1
+    assert submit(m, 99) == 2
+    tick(m)
+    assert m.motor()[2] == 6 and m.word('model_enable_count') == 1
+    passed('MotorCommand交接复制完整请求，BUSY保留旧目标，Stop覆盖并退休后到普通/非法事件')
+
+    m = ready()
+    ok, healthy = snapshot(m)
+    offsets = struct.unpack('<8I', m.cpu.mem_read(symbols['model_handoff_snapshot_offsets'], 32))
+    assert ok == 1 and all(healthy[offset] == 1 for offset in offsets[2:])
+    assert snapshot(m, null=True) == (0, healthy)
+    sequence = m.word('s_publication_sequence')
+    m.write('s_publication_sequence', sequence | 1)
+    assert snapshot(m) == (0, healthy)
+    m.write('s_publication_sequence', sequence)
+    cycles = m.memory_word(DWT)
+    m.memory_write(DWT, cycles + 125 * 170 + 1)
+    ok, stale = snapshot(m)
+    assert ok == 1 and stale == bytes(len(stale))
+    m.memory_write(DWT, cycles)
+    m.write('g_target_runtime_guard_faults', 4)
+    ok, pending_fault = snapshot(m)
+    assert ok == 1 and pending_fault == bytes(len(pending_fault))
+    m.write('g_target_runtime_guard_faults', 32)
+    tick(m)
+    ok, clock_fault = snapshot(m)
+    assert ok == 1 and clock_fault == bytes(len(clock_fault))
+    assert m.motor()[0] == FAULT and m.word('model_enable_count') == 0
+    passed('快照交接三次有界读取失败不写输出，ADC超龄/未合入守卫/时钟异常统一失效')
+
     m=Model({'model_cordic_ok':0})
     assert m.motor()[0:2]==(FAULT,1) and m.word('model_enable_count')==0
     passed('Run所选CORDIC装配失败锁存启动故障且保持关断')

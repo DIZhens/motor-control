@@ -8,10 +8,12 @@
 #include "hardware_trip.h"
 #include "position_observation.h"
 #include "bus_observation.h"
-#include "current_capture.h"
 #include "cordic_math.h"
+#if defined(BLDC_G431_DIAGNOSTICS)
+#include "current_capture.h"
 #include "irq_timing.h"
 #include "controller_profile.h"
+#endif
 
 #include <stddef.h>
 
@@ -108,6 +110,7 @@ const uint32_t model_angle_offsets[] = {
 const uint32_t model_observation_counter_offset = offsetof(ControlRuntime, observation_counter);
 const uint32_t model_velocity_offset = offsetof(ControlRuntime, position_estimator)
     + offsetof(PositionEstimator, velocity_rpm);
+#if defined(BLDC_G431_DIAGNOSTICS)
 const uint32_t model_capture_offsets[] = {
     offsetof(ObserveCurrentCaptureResult, request_sequence),
     offsetof(ObserveCurrentCaptureResult, state),
@@ -145,6 +148,7 @@ const uint32_t model_compute_timing_offsets[] = {
 const uint32_t model_controller_profile_layout[] = {
     sizeof(ObserveControllerProfileResult), offsetof(ObserveControllerProfileResult, timing)
 };
+#endif
 /* 集成检查只读真实观察实例；不借用隔离试具的 RUN/标定状态。 */
 const uint32_t model_runtime_offsets[] = {
     offsetof(ControlRuntime, phase),
@@ -158,9 +162,11 @@ const uint32_t model_runtime_offsets[] = {
     offsetof(ControlRuntime, current_time_available), offsetof(ControlRuntime, last_current_time),
     offsetof(ControlRuntime, observation_counter)
 };
+#if defined(BLDC_G431_DIAGNOSTICS)
 const uint32_t model_stage_budget_layout[] = {
     sizeof(G431StageBudgetResult), offsetof(G431StageBudgetResult, rows)
 };
+#endif
 ControlRuntime model_unpermitted_runtime;
 Motor model_unpermitted_motor;
 uint32_t model_unpermitted_init_ok;
@@ -200,9 +206,11 @@ bool g431_cordic_sincos(void *context, float turns, float *sine, float *cosine)
     if (model_cordic_guard_after_call == model_cordic_calls) {
         g_target_runtime_guard_faults |= 4U;
     }
+#if defined(BLDC_G431_DIAGNOSTICS)
     if (model_cordic_irq_after_call == model_cordic_calls) {
         g_target_runtime_irq_entries[model_cordic_irq_slot & 7U]++;
     }
+#endif
     if (!math->initialized || model_cordic_runtime_ok == 0U) {
         return false;
     }
@@ -436,12 +444,15 @@ void model_angle_command_start(void)
 void model_sample(void)
 {
     PhaseCurrentObservation current = { 0 };
+#if defined(BLDC_G431_DIAGNOSTICS)
     bool measure;
     uint32_t timing_request;
 
     /* 正式 ADC IRQ 入口包装不在此替身内，显式补上其单写计数槽。 */
     g_target_runtime_irq_entries[0]++;
+#endif
     DWT->CYCCNT += model_tick_cycles;
+#if defined(BLDC_G431_DIAGNOSTICS)
     /* 主后台对照先完成，再接受同身份IRQ窗口，避免插桩统计与后台计时互相干扰。 */
     timing_request = g_target_runtime_compute_result.state == OBSERVE_COMPUTE_PROBE_COMPLETE &&
         g_target_runtime_compute_result.request_sequence == g_target_runtime_compute_request
@@ -452,6 +463,7 @@ void model_sample(void)
         g431_irq_timing_irq_enter(DWT->CYCCNT, timing_request,
             target_runtime_timing_permitted());
     }
+#endif
     model_control_time += model_current_time_step;
     current.phase_b_a = model_current_b;
     current.phase_c_a = model_current_c;
@@ -461,20 +473,26 @@ void model_sample(void)
     if (s_sample_handler != NULL) {
         model_in_callback = 1U;
         model_callback_count++;
+#if defined(BLDC_G431_DIAGNOSTICS)
         if (g_target_irq_timing_active != 0U) {
             /* 用假DWT锚点补上未链接的Core/Platform包装，真实Observe边界来自正式Target。 */
             g431_irq_timing_platform_enter(DWT->CYCCNT);
             g431_irq_timing_consumer_enter(DWT->CYCCNT);
         }
+#endif
         s_sample_handler(s_sample_context, &current);
+#if defined(BLDC_G431_DIAGNOSTICS)
         if (g_target_irq_timing_active != 0U) {
             g431_irq_timing_consumer_exit(DWT->CYCCNT);
         }
+#endif
         model_in_callback = 0U;
     }
+#if defined(BLDC_G431_DIAGNOSTICS)
     if (measure) {
         g431_irq_timing_irq_exit(DWT->CYCCNT, target_runtime_timing_permitted());
     }
+#endif
 }
 
 void model_notify(void)
@@ -492,6 +510,8 @@ void model_service(void)
 
 void model_guard(void)
 {
+#if defined(BLDC_G431_DIAGNOSTICS)
     g_target_runtime_irq_entries[1]++;
+#endif
     target_runtime_guard_irq();
 }

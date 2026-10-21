@@ -1,28 +1,32 @@
 # G431 Runtime 入口
 
-`BLDC_G431_Observe` 在现有 Platform 上装配公共 Motor、编码器速度观测和 UART / VOFA。
-当前装配的 `control.enabled=false`，只执行观察与诊断，所有 Start 均拒绝进入 RUN。
-`BLDC_G431_Run` 则装配本板有限空载控制配置，通过相同的公共 Motor / ControlRuntime、
-UART 和 VOFA 执行启停与调速。它仍上电关断，必须显式 Start；独立电流精度标定、
-持续运行与故障恢复均未完成。新增 Run 候选不改变 Observe 的拒绝启动语义。
-本文除下列“有限运行入口”外的观察与诊断说明均指 Observe；实际验收范围统一见
+`BLDC_G431_Run` 是日常开发的正式入口，装配公共 Motor / ControlRuntime、Platform 和
+UART / VOFA，执行固定硬件、空载条件下的有限启停与调速。上电始终关断，必须显式 Start。
+独立电流精度、持续运行与故障恢复尚未完成；实测镜像、证据及限制统一见
 [Target 验证页](../VALIDATION.md)。
+
+`BLDC_G431_Observe` 只用于观察与诊断，装配 `control.enabled=false` 并拒绝所有 Start。
+它与专项 Timing、旧台架入口均在独立验证工程，不能用其配置替代 Run 的运行许可。
+本页先说明当前正式入口；后半部分单独保留验证入口与冻结历史诊断的解释。
 
 ## 构建与入口
 
-打开 `../MDK-ARM/BLDC_control V1.uvprojx`：
+主工程为 `../MDK-ARM/BLDC_control V1.uvprojx`，其中只保留 `BLDC_G431_Run`。
+独立验证工程为 `../MDK-ARM/BLDC_G431_Validation.uvprojx`：
 
-| Keil Target | 入口 | 输出 |
-| --- | --- | --- |
-| `BLDC_control V1` | 原 `validation/target_validation.c`，保持原台架工具 ABI | `BLDC_control V1/` |
-| `BLDC_G431_Observe` | 本目录 `target_runtime.c` + `app/motor`、`app/communication`、`control` | `build/observe/` |
-| `BLDC_G431_Run` | 同一正式 Runtime，增加 `BLDC_G431_FINITE_RUN` 板级有限装配 | `build/run/` |
-| `BLDC_G431_Timing` | 本目录 `timing_entry.c` + `runtime_timing.c`，专用无功率计时 | `build/timing/` |
+| 工程 | Keil Target | 入口与用途 | 输出 |
+| --- | --- | --- | --- |
+| 主工程 | `BLDC_G431_Run` | `target_runtime.c`，正式有限控制装配 | `build/run/` |
+| 验证工程 | `BLDC_G431_Observe` | 相同 Runtime，关闭控制并编入专用诊断 | `build/observe/` |
+| 验证工程 | `BLDC_G431_Timing` | `timing_entry.c` / `runtime_timing.c`，无功率计时 | `build/timing/` |
+| 验证工程 | `BLDC_control V1` | `validation/target_validation.c`，保留旧台架 ABI | `BLDC_control V1/` |
 
-选择 Target 后使用 Rebuild。CLI 示例（`UV4.exe` 路径按本机安装调整）：
+选择 Target 后使用 Keil Rebuild。仓库根目录的 CLI 等价命令如下；工具路径按本机安装调整，
+日志使用绝对路径。这些命令仅构建，不连接 ST-Link 或烧录：
 
 ```powershell
-& 'D:\keil5\UV4\UV4.exe' -r 'firmware\targets\BLDC_G431\MDK-ARM\BLDC_control V1.uvprojx' -t BLDC_G431_Observe -o "$env:TEMP\g431-observe-build.log"
+& 'D:\keil5\UV4\UV4.exe' -r 'firmware\targets\BLDC_G431\MDK-ARM\BLDC_control V1.uvprojx' -t BLDC_G431_Run -j0 -o "$env:TEMP\g431-run-build.log"
+& 'D:\keil5\UV4\UV4.exe' -r 'firmware\targets\BLDC_G431\MDK-ARM\BLDC_G431_Validation.uvprojx' -t BLDC_G431_Observe -j0 -o "$env:TEMP\g431-observe-build.log"
 ```
 
 Observe / Run 的 `Control`、`Application/User/Motor`、`Application/User/Runtime` 三个组显式使用
@@ -30,14 +34,13 @@ ARMCC `-O3 -Otime`，其余组保留原继承配置。按速度优化使短数�
 `#pragma Otime` 不能替代本机编译器的翻译单元内联策略。没有开启 fast-math 或改写
 有限值检查、除法和归一化公式。正式 Runtime 与私有同源副本采用相同策略。
 核对实际链接对象的编译记录及机器码，不按目录中残留的同名 `.o` 推断当前镜像。
-相关 ARM 模型显式使用 `-Otime`；模型与无插桩实测仍分别判定，当前提交预算未通过。
+相关 ARM 模型显式使用 `-Otime`；模型、历史计时和当前镜像的实测分别判定。
 
-Observe / Run 使用 `BLDC_G431_OBSERVE_ENTRY` 选择同一 Core 入口；仅 Run 再定义
-`BLDC_G431_FINITE_RUN`。Timing 使用 `BLDC_G431_TIMING_ENTRY`。
-`main()` 和 IRQ 的 USER CODE 选择互斥入口。四个 Target 共享 CubeMX 配置及 Platform，
-不改生成区，不同时绑定两个 consumer。Timing 专属组在另外两个 Target 中排除，
-Timing 中排除旧 Runtime、Communication 和 Validation 组。
-烧录是独立的现场步骤；编译不自动连接 ST-Link 或下载镜像。
+Observe / Run 用 `BLDC_G431_RUNTIME_ENTRY` 选择同一 Core 装配入口；Run 再定义
+`BLDC_G431_FINITE_RUN`，Observe 用 `BLDC_G431_DIAGNOSTICS` 编入实验钩子，并保留
+`BLDC_G431_OBSERVE_ENTRY` 兼容标记。Run 不编入专项诊断邮箱或中断测量钩子。
+Timing 使用 `BLDC_G431_TIMING_ENTRY`。`main()` 和 IRQ 的 USER CODE 选择互斥入口。
+两份工程共用 CubeMX 配置、Platform、Motor 和控制算法源，不复制实现或同时绑定两个 consumer。
 
 ## 有限运行入口
 
@@ -88,7 +91,8 @@ VOFA连接、Run单次命令、校零失败后的现场复位及Observe区别见
 
 TIM1 载波保持 20 kHz；RCR=3 使三相 preload 每100 µs在指定谷底同时生效。
 每个slot仅采首个峰值，电流环10 kHz，速度环每10个样本更新一次即1 kHz。
-Platform的SSI/母线采集及Runtime观测读取也按10个样本分频，保持1 kHz。
+Platform 的 SSI / 母线实际采集为 1 kHz。Run 每个 100 µs fast tick 读取完整缓存，
+只在新采集时间戳到达时更新估计；Observe 仍按 10 个样本分频读取。
 测量到下一有效更新约75 µs；若以随后100 µs电压保持区间的中心作为逆Park参考，
 名义施加角预测为125 µs。电流PI dt为100 µs、速度PI dt为1 ms。
 当前Observe控制配置仍关闭；这些时序参数不构成电流增益/角度标定或功率许可。
@@ -98,19 +102,51 @@ Platform的SSI/母线采集及Runtime观测读取也按10个样本分频，保�
 
 - 装配先 safe-off，再核对时钟、绑定 sample / trip、arm position / bus / realtime / protection，
   最后启动持续运行的 Drive Timing；这不等于功率使能。装配失败保持 FAULT 和关断。
-- Target 保留硬件装配、板级时序/采样检查、独立守卫、邮箱临界区和 UART 字节收发。
+- `target_runtime.c` 保留硬件装配、板级时序/采样检查、独立守卫、命令交接临界区与快照发布。
   ADC sample callback 调用 Motor 内部 `control_runtime_step()`；该实时边界是运行期
   Motor、观测缓存和估计器的唯一写者。故障和 Stop 优先，随后更新反馈并消费其余完整命令。
   Stop 优先于普通排队请求，并丢弃更早的待处理命令。
 - TIM6 每 50 µs 检查独立 DWT 时钟和采样心跳；间隔超过 125 µs 锁存故障并 safe-off。
   最迟在后续一次 TIM6 检查发现；它不是完整 ISR WCET 或未来带载控制截止证明。
-- 后台以不等待的寄存器轮询收发 USART1，每次至多一字节；44 字节发送缓存完成前不被
-  新快照覆盖。遥测来自有界重试的一致性 publication，不把 UART 放入 ADC 回调。
+- `target_vofa.c` 拥有后台接收行、片段超时、VOFA 命令映射与遥测发送缓存；通过协议无关的
+  完整 `MotorCommand` 提交和一致性 `MotorSnapshot` 读取与实时装配交接。
+  `target_uart.c` 封装 USART1 寄存器轮询及硬件错误，不解释 Motor 语义。
+  后台每次至多收、发各一字节，44 字节帧发送完毕前不被新快照覆盖；UART 不进入 ADC 回调。
 - 实时侧 publication 保存协议无关的 `MotorSnapshot`；后台经 `motor_vofa` 映射到
   原十通道格式。publication 按 100 Hz 或命令/故障/反馈有效性变化生成，后台约 100 Hz
-  编码。当前可发布状态、结果、目标零值、控制时间、有效母线电压与机械速度；Id/Iq 无效。
+  编码。Run 可发布活动目标、控制时间、母线、机械速度和有效的名义 Id/Iq；Observe 的
+  目标保持零、Id/Iq 无效。旧快照失效资格仍由 Runtime 判断，不交给协议编码器猜测。
 
-## 编码器反馈
+`MotorSnapshot.command_result` 是最近一次处理结果，不具有逐请求关联或可靠应答语义。
+后续自研协议需另外完成事务标识、排队/拒绝结果和实际执行结果的关联，不能把提交成功解释为
+已经启转。此处不提前建立协议框架或 RTOS 包装层。
+
+## 后续 FreeRTOS 的接入边界
+
+当前为裸机后台轮询，尚无 RTOS 内核或任务。后续只迁移后台通信、遥测与维护；
+电流环、速度环仍在硬件同步 ADC 边界执行，保持 Motor / ControlRuntime 单写者，不改成独立任务。
+控制 ISR 不等待任务、队列或互斥锁，不调用内核 API。
+
+| 资源 | 当前所有者与后续约束 |
+| --- | --- |
+| TIM1 / ADC | 20 kHz PWM、10 kHz 电流采样与控制，速度环整数分频至 1 kHz |
+| TIM6 | 独立 nominal 50 µs 关断守卫；不得在移植时直接改作 HAL / 内核时基 |
+| SPI1 IRQ | MT6701 异步位置采集；向实时消费者发布完整观测，不写控制状态 |
+| USART1 | 当前后台字节轮询；协议阶段再实现有界接收/发送缓冲与 DMA 适配 |
+| SysTick / SVC / PendSV | 当前 Core / HAL 处理；集成内核时明确唯一 handler、HAL tick 和内核 tick 归属 |
+| 中断优先级 | 集成时核对控制抢占关系及使用内核通知的通信 IRQ 约束，不仅复制示例配置 |
+| RAM / 栈 | 收尾构建 Run 的 RW+ZI 为 8144 / 32768 B，已含 4 KiB 主栈及既有堆；任务栈尚未分配 |
+
+上表来自诊断隔离后的同次 MAP；旧实测 Run 的 RW+ZI 为 24328 B。腾出的空间尚未分配给
+FreeRTOS，任务栈、内核堆、通信缓冲和嵌套中断栈必须共同预算。
+构建占用与静态调用图都不能证明最坏栈深度。
+
+## Observe 反馈与校零配置
+
+以下两节说明验证工程的 Observe 装配；Run 的极对数、方向、偏置与
+校零点数以“有限运行入口”为准。Observe 故意不确认控制标定，不表示整项目仍未完成有限 FOC。
+
+### 编码器反馈
 
 当前仅支持 Platform 提供的周期单圈位置，每 10 个 fast tick 读取一次 latest observation。
 只在采集时间戳前进时更新纯 C `PositionEstimator`，以实际采集间隔计算最近周期差，
@@ -128,7 +164,7 @@ Platform的SSI/母线采集及Runtime观测读取也按10个样本分频，保�
 
 ControlRuntime 已接入纯 C 电角度映射与短时预测：缓存合法原始机械位置，以其采集时间
 计算年龄，在每个同步 fast tick 更新角度。极对数、方向和偏置通过数值检查后，还需
-装配方独立确认实际标定。当前 Target 的该确认标志为 false、参数为空，电角度始终无效。
+装配方独立确认实际标定。Observe 的该确认标志为 false、参数为空，电角度始终无效。
 采样时间重复、跳拍或回退时清位置与角度历史、重置观测分频，异常拍不消费新位置。
 位置失效后恢复需要两份新的合法观测；单纯预测超时只撤销角度，仍保留尚新鲜的速度。
 
@@ -136,7 +172,7 @@ ControlRuntime 已接入纯 C 电角度映射与短时预测：缓存合法原�
 仍需在实际控制前验收。电角度方向确认后，速度反馈也按该方向统一坐标；未确认时保留
 当前编码器坐标。仅电角度配置不能开放功率或有效 Id/Iq，还需独立的电流和时序确认。
 
-## 无功率电流零偏
+### 无功率电流零偏
 
 当前 Observe 构建的启动校零许可仅适用于电机母线电源、电机三相及外部注入源均已断开的现场条件。
 该许可不是硬件检测结果，不能照搬为正式带电入口的通用启动策略。
@@ -157,7 +193,7 @@ READY 后只校正，不重新学习；正常 RUN 与 Stop 保留冻结偏置，
 可移植电流 PI、速度 PI、Park 和 SVPWM 已接入公共 Runtime，当前装配仍关闭控制配置；
 最新构建和已完成的无功率诊断实测身份见 Target 验证页；这不开放实际控制链。
 
-## 受门控的控制链
+## 公共受门控控制链
 
 `ControlRuntimeConfig.control` 装配电流/速度 PI、慢环分频、母线范围、相电流阈值和电压作用
 时延。数值参数与三项实物确认分别检查：电流增益/方向、电角度、采样/调制时序均可信，
@@ -177,12 +213,15 @@ Stop 清目标、待启动请求和两环积分，保留正常冻结零偏；任
 `actuation_prediction_time_s` 由装配显式提供，不能从“下一周期”推定准确物理延迟。
 速度 PI 只跟踪自身 Iq 限值，电流 PI 跟踪调制器电压限幅；实际电压饱和下的级联动态仍需整体验收。
 
-当前 G431 控制配置为零、运行许可关闭，Target 仍把意外 MOE 视为故障；模型中的合法使能
-不表示这个实机入口已开放。三角函数、PI、SVPWM 及提交必须满足 Platform 给出的本 slot
+Observe 的控制配置为零、运行许可关闭，仍把意外 MOE 视为故障；Run 使用前述有限装配。
+三角函数、PI、SVPWM 及提交必须满足 Platform 给出的本 slot
 绝对截止；当前首峰采样到下一有效谷底约 75 µs，另留 10 µs 事务预留，实际可用预算还须
 扣除 ADC 和入口开销，不能沿用旧半周约 15 µs 的窗口。模型与编译不证明实机执行预算。
 
 ## 历史后台无功率计算计时
+
+本节及下一节保留旧 50 µs 候选的工具语义与结果解释，不是正式 Run 的日常操作。
+历史工具仍按其冻结镜像、布局和许可检查，不能用于新镜像直接发诊断请求。
 
 `compute_probe.h/.c` 调用正式电流预处理、电角度、速度 PI 与电流 PI；
 `compute_comparison.h/.c` 为软件 sin/cos 和 G431 CORDIC 各持有一份独立算法状态。
@@ -197,8 +236,10 @@ Stop 清目标、待启动请求和两环积分，保留正常冻结零偏；任
 开启 CORDIC 并生成时钟初始化，但本机模式库不配置计算功能。适配器启动时一次配置
 COSINE、6 cycles、scale 0、两个 32 位输入输出；每拍显式写角度和模长，读 cos 后读 sin。
 有界等待、重入或配置异常均拒绝，外设失败隔离到 MCU 重启，不静默回退软件。
-当前 G431 装配已显式选择该后端，但电角度物理确认和控制许可仍关闭，正常观察不计算
-未标定角度；只有下述隔离试具执行合成控制计算。共享栈由 `.ioc` 配置为 4 KB，再生成 startup，
+Observe 装配显式选择该后端，但电角度物理确认和控制许可关闭，正常观察不计算
+未标定角度；历史诊断由下述隔离试具执行合成计算。Run 也使用真实 CORDIC 后端，
+`cordic_math` 因而属于正式 Target 数学适配，不是可随诊断删除的测量程序。
+共享栈由 `.ioc` 配置为 4 KB，再生成 startup，
 用于容纳新增后台调用链、函数指针回调与中断嵌套；静态调用图仍不能证明最坏栈占用。
 
 主机只向 `g_target_runtime_compute_request` 写一次非零新身份。后台是实例、身份消费和
@@ -388,7 +429,7 @@ UART 错误、超长/非法行和 100 ms 未完成片段均丢弃至下一 LF；
 已在途的 UART 帧是过去的快照，接收端还需留意数据是否持续更新。当前故障恢复未实现，
 Clear 不会清锁存；独立 guard 原因可在 Watch 中查看 `g_target_runtime_guard_faults`。
 
-## 离线验证与下一步
+## 离线验证与证据复用
 
 从仓库根目录，使用 [开发依赖](../../../../DEVELOPMENT.md#44-本地验证依赖) 中的 Python：
 
@@ -401,10 +442,19 @@ python control/tests/verify_position_estimator.py
 python control/tests/verify_current_measurement.py
 python control/tests/verify_electrical_angle.py
 python control/tests/verify_speed_controller.py
+python firmware/targets/BLDC_G431/runtime/tests/verify_cordic_math.py
+python firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run
+python firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py
+python firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py
+```
+
+上列是各自独立的模块与装配检查，按修改影响选择，不要求每次全跑。
+专项诊断改变时再执行相应检查；旧 50 µs 探针保持冻结用途：
+
+```powershell
 python firmware/targets/BLDC_G431/runtime/tests/verify_current_capture_model.py
 python firmware/targets/BLDC_G431/runtime/tests/test_current_capture_tool.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_compute_probe_model.py
-python firmware/targets/BLDC_G431/runtime/tests/verify_cordic_math.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_controller_profile.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_irq_timing.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_stage_budget.py
@@ -413,8 +463,6 @@ python firmware/targets/BLDC_G431/runtime/tests/verify_runtime_timing.py
 python firmware/targets/BLDC_G431/runtime/tests/verify_timing_entry.py
 python firmware/targets/BLDC_G431/runtime/tests/test_runtime_timing_tool.py
 python firmware/targets/BLDC_G431/runtime/tests/test_compute_probe_tool.py
-python firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py
-python firmware/targets/BLDC_G431/runtime/tests/verify_foc_runtime.py
 ```
 
 测试编译并执行实际 ARM C，覆盖默认关断、完整命令、Stop 优先、错误丢弃、启动失败、
@@ -435,9 +483,10 @@ ADC 丢失、旧快照失效、低优先级代码被 ADC 抢占的交错，以�
 单地址一次写、应答丢失不补发和采后复核。模型不代替 UART 链路、
 实机速度精度或 ISR WCET；软件与实机结论分别记录在 Target 验证页。
 既有 UART、手转反馈、逻辑供电零偏及后台计算计时各有有限实测；软件/CORDIC 对照的
-当前执行身份和范围见验证页。20 / 10 / 1 kHz 下已完成同一次 ADC 回调中同源 Runtime
-计算与真实 HCC 提交的有限无功率集成窗口；使用隔离合成输入，正式 RUN 仍未验收。
-后续继续电流增益/方向对照，再按实际时序和实物结果安排受控电角度标定及 FOC。
+各次执行身份和范围见验证页。20 / 10 / 1 kHz 下的合成输入计算与真实 HCC 提交计时，
+以及后来的正式 Run 正反向 UART 有限实测，是两类不同证据；前者不能替代后者，
+后者也不证明完整 WCET 或全部保护。当前控制基线收尾后，下一能力增量按
+自研 UART 协议编解码、UART 联调、FreeRTOS 后台集成推进；电流精度和性能保留独立验收。
 各轮镜像与实测范围、既有台架证据仍从
 [VALIDATION.md](../VALIDATION.md) 进入，按具体修改影响选择复测。
 

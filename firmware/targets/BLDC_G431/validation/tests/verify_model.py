@@ -45,7 +45,7 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
         "LR_IROM1 0x08000000 0x00020000 {\n"
         " ER_IROM1 0x08000000 0x00020000 { .ANY (+RO) }\n"
         " RW_IRAM1 0x20000000 0x00008000 { .ANY (+RW +ZI) }\n}\n", encoding="utf-8")
-    settings = ET.parse(root / "MDK-ARM/BLDC_control V1.uvprojx").find(".//Cads/VariousControls")
+    settings = ET.parse(root / "MDK-ARM/BLDC_G431_Validation.uvprojx").find(".//Cads/VariousControls")
     command = [str(compiler / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3",
                "--split_sections", "-g"]
     for include in settings.findtext("IncludePath").split(";"):

@@ -11,7 +11,7 @@
 #include "position_observation_internal.h"
 #include "realtime_motor_io_config.h"
 #include "realtime_motor_io_internal.h"
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_DIAGNOSTICS)
 #include "irq_timing.h"
 #endif
 #include "realtime_motor_io_diagnostic.h"
@@ -732,7 +732,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     observation_time = s_slot_time;
     restore_interrupts(primask);
 
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_DIAGNOSTICS)
     if (g_target_irq_timing_active != 0U) {
         g431_irq_timing_platform_enter(s_callback_start_cycles);
     }
@@ -770,7 +770,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     s_stage_window_open = (s_callback_epoch == s_actuation_epoch)
         && staging_time_available();
     restore_interrupts(primask);
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_DIAGNOSTICS)
     if (g_target_irq_timing_active != 0U) {
         g431_irq_timing_consumer_enter(DWT->CYCCNT);
     }
@@ -778,7 +778,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     s_consumer_entry_cycles = DWT->CYCCNT;
     s_sample_ready_handler(s_sample_ready_context, &observation);
     s_consumer_exit_cycles = DWT->CYCCNT;
-#if defined(BLDC_G431_OBSERVE_ENTRY)
+#if defined(BLDC_G431_DIAGNOSTICS)
     if (g_target_irq_timing_active != 0U) {
         g431_irq_timing_consumer_exit(DWT->CYCCNT);
     }

@@ -31,10 +31,12 @@ CAN 实物联调、Qt Host、位置环、标准 Modbus / CANopen 栈及 F405 同
 
 ## 实现与验证入口
 
-现有工程包含 G431 和 F405 M0 的 Platform、公共硬件能力合同及台架验证入口。G431 正式 Run 已完成有限空载 UART 正反向启动、调速、显式 Stop 和独立时限关断，Observe 保持默认关断并拒绝启动。持续运行、独立电流精度标定、故障恢复、自研协议和 FreeRTOS 尚未完成，具体实测范围见 Target 验证页。上述展示范围是交付目标。
+当前 G431 控制基线使用公共 Motor / ControlRuntime，已取得有限空载 UART 正反向启动、调速、显式 Stop 和独立 1.5 秒关断的实物证据。实测绑定固定板卡、电机、接线和镜像，不代表持续运行、全部保护或性能验收。独立电流精度、持久标定、故障恢复、自研协议与 FreeRTOS 尚未完成，具体证据和限制见 Target 验证页。
+
+日常开发打开 `firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1.uvprojx`，唯一正式 Target 为 `BLDC_G431_Run`。观察、专项计时和旧台架另存于同目录 `BLDC_G431_Validation.uvprojx`，共享核心源码；它们不是不同的应用版本。F405 M0 保留独立实现与验证范围。
 
 - [固件入口](firmware/README.md)：Target、公共应用与构建边界。
-- [G431 Runtime 入口](firmware/targets/BLDC_G431/runtime/README.md)：Observe / 有限 Run 构建、UART 和执行边界。
+- [G431 Runtime 入口](firmware/targets/BLDC_G431/runtime/README.md)：正式构建、运行边界、模块职责与验证工程。
 - [G431 验证结果与剩余门槛](firmware/targets/BLDC_G431/VALIDATION.md)：G431 验收结论、镜像与证据的唯一汇总入口。
 - [F405 M0 说明](firmware/targets/ODRIVE_V36_405_M0/README.md)：独立的实现和验证范围。
 - [Host 入口](host/README.md)：V1 的 VOFA 资料职责与后续 Qt Host。

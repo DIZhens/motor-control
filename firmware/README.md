@@ -4,12 +4,12 @@ MCU 电机控制固件。
 
 ## 实现边界
 
-两个 Target 默认保留各自的 `validation/` 台架程序；G431 的 `BLDC_G431_Observe` 默认关断入口调用公共 Motor、反馈和 VOFA，拒绝启动。另有 `BLDC_G431_Run` 装配同一正式 ControlRuntime 的有限空载配置，已完成现有 UART 的正反启停、调速及独立时限关断实测；独立电流精度、故障恢复与持续运行仍未完成。公共 HCC 头文件已经定义，不等于全部 Target 实现和实机验收均已完成。各 Target 验收结论由对应验证入口维护，本页不重复候选镜像和实测项目。
+G431 的正式工程只有 `BLDC_G431_Run`，装配公共 Motor / ControlRuntime 的有限空载配置；现有 UART 的正反启停、调速及独立时限关断已有实物证据。观察、计时与旧台架保留在独立验证工程，共享 Platform、Motor 与控制算法，不复制业务实现。独立电流精度、故障恢复与持续运行仍未完成。公共 HCC 已定义不等于全部 Target 已完成实现或实机验收；各 Target 验收结论由对应验证入口维护。
 
 | 区域 | 职责与当前入口 | 验证或实现边界 |
 | --- | --- | --- |
 | `platform_contract/` | 实时电流/驱动、位置、母线、ControlTime 和可选 Hardware Trip 的能力合同 | 逐个 Target 核对实现、失败语义与物理验收 |
-| `targets/BLDC_G431/` | Platform、单次命令台架与验证工具 | [G431 验证结果与剩余门槛](targets/BLDC_G431/VALIDATION.md) |
+| `targets/BLDC_G431/` | 正式 Run 装配、Platform、独立验证工程与工具 | [G431 验证结果与剩余门槛](targets/BLDC_G431/VALIDATION.md) |
 | `targets/ODRIVE_V36_405_M0/` | Platform 与功率关闭观测入口 | [F405 M0 说明](targets/ODRIVE_V36_405_M0/README.md)；不属于当前 V1 同功能验收 |
 | `app/` | Motor 生命周期、受门控实时控制链、VOFA 编解码和快照映射 | 模型与实物分别验收，故障恢复尚未实现 |
 
@@ -19,7 +19,7 @@ Motor 内部有限静态定向核心及其尚未装配的执行边界见 [Motor 
 
 展示目标还包含自研 UART 协议与 FreeRTOS 后台任务；两者尚未实现，先完成控制基线，再分别集成。RTOS 的调度与中断适配属于 Target，协议编解码不依赖 RTOS，FOC 保持硬件同步实时执行。长期边界见 [总体架构](../ARCHITECTURE.md)，协议待定设计见 [协议草案](../interface/PROTOCOL_DESIGN.md)。
 
-控制基线推进 G431、一台电机和 MT6701 的 FOC 电流内环与速度外环，以 UART 对接现成 VOFA 工具。Observe / Run 的构建与限制见 [G431 runtime](targets/BLDC_G431/runtime/README.md)。CAN 实物接入、位置环、标准 Modbus / CANopen 栈和 F405 同功能验收在后续范围。
+控制基线使用 G431、一台电机和 MT6701 的 FOC 电流内环与速度外环，以 UART 对接现成 VOFA 工具。正式构建、验证工程及限制见 [G431 runtime](targets/BLDC_G431/runtime/README.md)。CAN 实物接入、位置环、标准 Modbus / CANopen 栈和 F405 同功能验收在后续范围。
 
 ## 长期结构
 
