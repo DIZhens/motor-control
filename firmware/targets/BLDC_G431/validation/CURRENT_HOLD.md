@@ -187,11 +187,23 @@ stop_reason可能变为2，不能覆盖或重新解释原始失败。既有冻�
 高于14 V、未来时间和超过5 ms年龄。无效publication中的0 V是失败占位值，不能当作
 实际欠压；应结合采集原因判断。电压策略、采样分频与拒绝条件均未放宽。
 
-配套48字节Target私有采集记录与母线publication使用同一个双缓冲index：原因0/1/2/3/4
-分别为成功、HAL起动失败、EOS转换数量不符、VREFINT为零和ADC错误，另存HAL状态、
+配套48字节Target私有采集记录与母线publication使用同一个双缓冲index：原因0/1/2/3/4/5/6
+分别为成功、HAL起动失败、旧EOS转换数量不符、VREFINT为零、ADC错误、DMA交付不完整
+或raw越界、DMA错误，另存HAL状态、
 已读rank数、VBUS/VREFINT原始码和ADC错误/状态/ISR/IER/CR。两次独立读取须核对时戳；
 只在已读rank≥1/≥2时解释本序列的VBUS/VREFINT原始码，未采到的字段可能残留上一序列。
 健康采样不执行故障记录复制，私有诊断不扩充公共BusObservation合同。
+
+母线regular三rank改由DMA1_Channel1按normal模式一次搬运3个halfword。TC、剩余计数0及
+DMA ready同时成立才发布；不读DR、不按实时EOS推断rank，半传输中断关闭。每10次
+同步电流callback启动一次的1 kHz节奏保持。DMA与ADC均为抢占优先级1，避免publication
+writer互相抢占；arm时校验DMA配置与两个优先级。静态配置由CubeMX载入保存并生成，
+包括DMA时钟、handle连接、IRQ及main中的初始化顺序。
+
+起动失败、ADC/DMA错误、不完整交付、非法raw或VREFINT零均发布invalid并锁存采集失败，
+后续tick不自动重启DMA；需要重新启动才能恢复。该路径不调用会停止injected采样的
+`HAL_ADC_Stop_DMA`，功率撤销继续由既有控制/保护路径承担。公共观测、控制增益、采样/
+提交时序和功率门限保持；单次复测使用+60 rpm原参数，不因更换镜像重跑旧波形。
 
 ```powershell
 .\.venv\Scripts\python.exe -B -X utf8 firmware/targets/BLDC_G431/validation/tools/rotor_speed_once.py --output <新的候选目录>

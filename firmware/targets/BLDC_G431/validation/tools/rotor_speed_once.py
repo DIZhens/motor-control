@@ -96,7 +96,8 @@ def read_bus_failure(session,tag,request=None):
     if not math.isfinite(result['voltage_v']):result['voltage_v']=None
     result['failed_conditions']=[name for bit,name in [(1,'unavailable'),(2,'invalid'),(4,'nonfinite'),(8,'undervoltage'),
         (16,'overvoltage'),(32,'future_timestamp'),(64,'stale')] if result['failure_mask']&bit]
-    result['acquisition_cause']={0:'ok',1:'start_failed',2:'rank_mismatch',3:'vref_zero',4:'adc_error'}.get(result['acquisition.cause'],'unknown')
+    result['acquisition_cause']={0:'ok',1:'start_failed',2:'rank_mismatch',3:'vref_zero',4:'adc_error',
+        5:'dma_incomplete',6:'dma_error'}.get(result['acquisition.cause'],'unknown')
     result['diagnostic_matches_publication']=bool(result['publication_available'] and result['diagnostic_available']
         and result['observation_time']==result['acquisition.observation_time'])
     result['vbus_raw_captured']=bool(result['diagnostic_available'] and result['acquisition.rank_count']>=1)

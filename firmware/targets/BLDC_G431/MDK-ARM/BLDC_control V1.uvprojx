@@ -460,6 +460,11 @@
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32g4xx_hal_msp.c</FilePath>
             </File>
+            <File>
+              <FileName>dma.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\dma.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -1640,6 +1645,11 @@
               <FileName>stm32g4xx_hal_msp.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32g4xx_hal_msp.c</FilePath>
+            </File>
+            <File>
+              <FileName>dma.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\dma.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -2884,6 +2894,11 @@
               <FileName>stm32g4xx_hal_msp.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32g4xx_hal_msp.c</FilePath>
+            </File>
+            <File>
+              <FileName>dma.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\dma.c</FilePath>
             </File>
           </Files>
         </Group>

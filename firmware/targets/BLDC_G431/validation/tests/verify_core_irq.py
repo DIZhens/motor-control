@@ -64,6 +64,12 @@ def run(image):
     assert m.word("model_core_spi_hal_calls") == m.word("model_core_unexpected_irqs") == 0
     assert (m.get(SR), m.get(DIER), m.word("model_control_time")) == before and not m.moe()
     cases += 1
+    m = Model(image)
+    before = (m.get(SR), m.get(DIER), m.word("model_control_time"))
+    m.call("DMA1_Channel1_IRQHandler")
+    assert m.word("model_core_dma_hal_calls") == 1 and m.word("model_core_unexpected_irqs") == 0
+    assert (m.get(SR), m.get(DIER), m.word("model_control_time")) == before and not m.moe()
+    cases += 1
     print(f"G431 real Core IRQ ownership: {cases} cases PASS")
     print("Core/Platform ARM code with faithful UPDATE/BREAK HAL subset; no board, NVIC latency or electrical proof.")
 

@@ -156,5 +156,16 @@ class Tests(unittest.TestCase):
             self.assertIsNone(result['voltage_v']);self.assertEqual(result['voltage_bits'],0x7fc00000)
             self.assertEqual(result['failed_conditions'],['nonfinite'])
 
+    def test_dma_failure_cause_decode_is_read_only(self):
+        with TemporaryDirectory() as tmp:
+            s=FakeSession(tmp)
+            for cause,label in [(5,'dma_incomplete'),(6,'dma_error')]:
+                raw=bytearray(speed.BUS_SIZE);struct.pack_into('<4I',raw,0,2,2,2,1)
+                struct.pack_into('<I',raw,40,1);struct.pack_into('<I',raw,56,cause);s.raw_bus=bytes(raw)
+                result=speed.read_bus_failure(s,label,2)
+                self.assertEqual(result['acquisition_cause'],label)
+                self.assertTrue(result['matches_terminal_request']);self.assertFalse(result['vbus_raw_captured'])
+            self.assertEqual(s.writes,[])
+
 
 if __name__=='__main__':unittest.main(verbosity=1)

@@ -26,7 +26,9 @@ static volatile uint32_t s_active_publication_index;
 static volatile bool s_publication_available;
 static volatile bool s_armed;
 static volatile bool s_sequence_active;
+static volatile bool s_failed;
 static volatile ControlTime s_sequence_observation_time;
+static __ALIGNED(4) volatile uint16_t s_dma_samples[ADC1_REGULAR_SEQUENCE_LENGTH];
 
 static uint32_t s_acquisition_divider_count;
 static uint32_t s_regular_rank_index;
@@ -54,8 +56,8 @@ static bool convert_vbus(float *out_voltage_v)
 }
 
 /*
- * ADC IRQ 只写 inactive slot，最后用单个 index 切换 publication。
- * fast ISR 与 regular ADC callback 共用 ADC1_2 IRQ，不会并发写同一个 slot。
+ * DMA1_Channel1与ADC1_2使用相同抢占优先级，两个writer不能互相抢占。
+ * 只写inactive slot，最后用单个index同时切换观测与采集诊断。
  */
 static void publish_observation(const BusObservation *observation,
     G431BusAcquisitionCause cause, HAL_StatusTypeDef status)
@@ -95,13 +97,21 @@ static void publish_invalid_observation(ControlTime observation_time,
 
 bool bus_observation_arm(void)
 {
-    if (s_armed || s_sequence_active) {
+    DMA_HandleTypeDef *dma = hadc1.DMA_Handle;
+    if (s_armed || s_sequence_active || dma == NULL || dma->Instance != DMA1_Channel1
+        || dma->Init.Request != DMA_REQUEST_ADC1 || dma->Init.Direction != DMA_PERIPH_TO_MEMORY
+        || dma->State != HAL_DMA_STATE_READY || dma->Init.Mode != DMA_NORMAL || dma->Init.MemInc != DMA_MINC_ENABLE
+        || dma->Init.PeriphInc != DMA_PINC_DISABLE
+        || dma->Init.PeriphDataAlignment != DMA_PDATAALIGN_HALFWORD
+        || dma->Init.MemDataAlignment != DMA_MDATAALIGN_HALFWORD
+        || NVIC_GetPriority(DMA1_Channel1_IRQn) != 1U || NVIC_GetPriority(ADC1_2_IRQn) != 1U) {
         return false;
     }
 
     s_active_publication_index = 0U;
     s_publication_available = false;
     s_sequence_active = false;
+    s_failed = false;
     s_sequence_observation_time = 0U;
     s_acquisition_divider_count = 0U;
     s_regular_rank_index = 0U;
@@ -114,7 +124,7 @@ bool bus_observation_arm(void)
 
 /*
  * 后台读取时用极短临界区阻止 ADC writer 抢占。
- * fast ISR 与 writer 同属 ADC1_2 IRQ，因此 fast path 不需要等待 writer。
+ * ADC与DMA writer同抢占优先级，不会互相抢占；后台读取用短临界区复制完整slot。
  */
 bool bus_observation_get_latest(BusObservation *out_observation)
 {
@@ -162,7 +172,7 @@ void bus_observation_fast_tick(ControlTime fast_tick_time)
 {
     HAL_StatusTypeDef status;
 
-    if (!s_armed) {
+    if (!s_armed || s_failed) {
         return;
     }
 
@@ -178,63 +188,80 @@ void bus_observation_fast_tick(ControlTime fast_tick_time)
 
     s_sequence_observation_time = fast_tick_time;
     s_regular_rank_index = 0U;
+    s_vbus_raw = 0U;
+    s_vrefint_raw = 0U;
     s_sequence_active = true;
 
-    status = HAL_ADC_Start_IT(&hadc1);
+    status = HAL_ADC_Start_DMA(&hadc1, (uint32_t *)s_dma_samples, ADC1_REGULAR_SEQUENCE_LENGTH);
     if (status != HAL_OK) {
+        s_failed = true;
         s_sequence_active = false;
         publish_invalid_observation(fast_tick_time, G431_BUS_ACQUISITION_START_FAILED, status);
+    } else {
+        /* 只交付整组TC；半传输不能生成母线publication，也不需要额外IRQ。 */
+        __HAL_DMA_DISABLE_IT(hadc1.DMA_Handle, DMA_IT_HT);
     }
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     BusObservation observation;
-    uint32_t raw;
-    bool end_of_sequence;
+    uint32_t remaining;
 
     if ((hadc != &hadc1) || !s_sequence_active) {
         return;
     }
 
-    raw = HAL_ADC_GetValue(&hadc1);
-    end_of_sequence = (__HAL_ADC_GET_FLAG(&hadc1, ADC_FLAG_EOS) != 0U);
-
-    if (s_regular_rank_index == ADC1_VBUS_RANK_INDEX) {
-        s_vbus_raw = raw;
-    } else if (s_regular_rank_index == ADC1_VREFINT_RANK_INDEX) {
-        s_vrefint_raw = raw;
-    }
-
-    s_regular_rank_index++;
-    if (!end_of_sequence) {
+    /* DMA TC保证三个halfword已入RAM；不再读DR或用实时EOS推断当前rank。 */
+    remaining = __HAL_DMA_GET_COUNTER(hadc1.DMA_Handle);
+    __DMB();
+    s_regular_rank_index = remaining <= ADC1_REGULAR_SEQUENCE_LENGTH ? ADC1_REGULAR_SEQUENCE_LENGTH - remaining : 0U;
+    if (s_regular_rank_index >= 1U) { s_vbus_raw = s_dma_samples[ADC1_VBUS_RANK_INDEX]; }
+    if (s_regular_rank_index >= 2U) { s_vrefint_raw = s_dma_samples[ADC1_VREFINT_RANK_INDEX]; }
+    if (remaining != 0U || hadc1.DMA_Handle->State != HAL_DMA_STATE_READY) {
+        s_failed = true;
+        s_sequence_active = false;
+        publish_invalid_observation(s_sequence_observation_time, G431_BUS_ACQUISITION_DMA_INCOMPLETE, HAL_ERROR);
         return;
     }
-
-    if (s_regular_rank_index != ADC1_REGULAR_SEQUENCE_LENGTH) {
+    if (hadc1.ErrorCode != HAL_ADC_ERROR_NONE || (hadc1.Instance->ISR & ADC_FLAG_OVR) != 0U) {
+        HAL_ADC_ErrorCallback(&hadc1);
+        return;
+    }
+    if (s_vbus_raw > 4095U || s_vrefint_raw > 4095U || s_dma_samples[2] > 4095U) {
+        s_failed = true;
         s_sequence_active = false;
-        publish_invalid_observation(s_sequence_observation_time, G431_BUS_ACQUISITION_RANK_MISMATCH, HAL_OK);
+        publish_invalid_observation(s_sequence_observation_time, G431_BUS_ACQUISITION_DMA_INCOMPLETE, HAL_ERROR);
         return;
     }
 
     observation.observation_time = s_sequence_observation_time;
     observation.acquisition_valid = convert_vbus(&observation.voltage_v);
 
-    s_sequence_active = false;
+    s_failed = !observation.acquisition_valid;
     publish_observation(&observation, observation.acquisition_valid ? G431_BUS_ACQUISITION_OK
         : G431_BUS_ACQUISITION_VREF_ZERO, HAL_OK);
+    s_sequence_active = false;
 }
 
 void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
 {
     ControlTime observation_time;
+    uint32_t remaining;
 
     if ((hadc != &hadc1) || !s_sequence_active) {
         return;
     }
 
     observation_time = s_sequence_observation_time;
+    remaining = __HAL_DMA_GET_COUNTER(hadc1.DMA_Handle);
+    __DMB();
+    s_regular_rank_index = remaining <= ADC1_REGULAR_SEQUENCE_LENGTH ? ADC1_REGULAR_SEQUENCE_LENGTH - remaining : 0U;
+    if (s_regular_rank_index >= 1U) { s_vbus_raw = s_dma_samples[0]; }
+    if (s_regular_rank_index >= 2U) { s_vrefint_raw = s_dma_samples[1]; }
+    s_failed = true;
     s_sequence_active = false;
 
-    publish_invalid_observation(observation_time, G431_BUS_ACQUISITION_ADC_ERROR, HAL_ERROR);
+    publish_invalid_observation(observation_time, (hadc1.ErrorCode & HAL_ADC_ERROR_DMA) != 0U
+        ? G431_BUS_ACQUISITION_DMA_ERROR : G431_BUS_ACQUISITION_ADC_ERROR, HAL_ERROR);
 }
