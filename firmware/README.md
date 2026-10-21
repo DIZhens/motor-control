@@ -4,7 +4,7 @@ MCU 电机控制固件。
 
 ## 实现边界
 
-两个 Target 默认保留各自的 `validation/` 台架程序；G431 增加单独选择的 `BLDC_G431_Observe` 默认关断入口，调用公共 Motor、反馈和 VOFA 模块。公共 ControlRuntime 已接入受门控的速度/电流控制链与跨拍启停；当前 G431 装配关闭该控制配置，实物标定、实时预算及功率闭环仍待验收。公共 HCC 头文件已经定义，不等于全部 Target 实现和实机验收均已完成。各 Target 验收结论由对应验证入口维护，本页不重复候选镜像和实测项目。
+两个 Target 默认保留各自的 `validation/` 台架程序；G431 的 `BLDC_G431_Observe` 默认关断入口调用公共 Motor、反馈和 VOFA，拒绝启动。另有 `BLDC_G431_Run` 装配同一正式 ControlRuntime 的有限空载配置，已完成现有 UART 的正向启停与调速实测；反向、独立电流精度与持续运行仍未完成。公共 HCC 头文件已经定义，不等于全部 Target 实现和实机验收均已完成。各 Target 验收结论由对应验证入口维护，本页不重复候选镜像和实测项目。
 
 | 区域 | 职责与当前入口 | 验证或实现边界 |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ Motor 内部有限静态定向核心及其尚未装配的执行边界见 [Motor 
 
 展示目标还包含自研 UART 协议与 FreeRTOS 后台任务；两者尚未实现，先完成控制基线，再分别集成。RTOS 的调度与中断适配属于 Target，协议编解码不依赖 RTOS，FOC 保持硬件同步实时执行。长期边界见 [总体架构](../ARCHITECTURE.md)，协议待定设计见 [协议草案](../interface/PROTOCOL_DESIGN.md)。
 
-控制基线推进 G431、一台电机和 MT6701 的 FOC 电流内环与速度外环，以 UART 对接现成 VOFA 工具。默认关断入口的构建与限制见 [G431 runtime](targets/BLDC_G431/runtime/README.md)，随后接入受控闭环。CAN 实物接入、位置环、标准 Modbus / CANopen 栈和 F405 同功能验收在后续范围。
+控制基线推进 G431、一台电机和 MT6701 的 FOC 电流内环与速度外环，以 UART 对接现成 VOFA 工具。Observe / Run 的构建与限制见 [G431 runtime](targets/BLDC_G431/runtime/README.md)。CAN 实物接入、位置环、标准 Modbus / CANopen 栈和 F405 同功能验收在后续范围。
 
 ## 长期结构
 

@@ -7,7 +7,7 @@
 ## PC 设置与速率
 
 PC 使用现成 VOFA+，上行选择 JustFloat 数据引擎，下行选择 Str / ASCII 命令。
-G431 Observe 集成为 UART 115200 bit/s、8N1，遥测约 100 Hz；44 字节帧在该速率下占用
+G431 Observe / Run 集成为 UART 115200 bit/s、8N1，遥测约 100 Hz；44 字节帧在该速率下占用
 4400 byte/s，即 8N1 单向带宽约 38.2%。串口实测结论见对应 Target 验证页。
 发送和接收在后台处理，不阻塞 fast-control ISR；遥测来自 Motor 一致性只读快照。
 

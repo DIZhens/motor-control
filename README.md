@@ -31,10 +31,10 @@ CAN 实物联调、Qt Host、位置环、标准 Modbus / CANopen 栈及 F405 同
 
 ## 实现与验证入口
 
-现有工程包含 G431 和 F405 M0 的 Platform、公共硬件能力合同及台架验证入口。G431 已有有限闭环台架记录，正式 Motor / UART 观察入口仍默认关断并拒绝启动；其闭环许可、标定与实时预算尚未完成。自研协议和 FreeRTOS 尚未实现，具体实测范围见 Target 验证页。上述展示范围是交付目标。
+现有工程包含 G431 和 F405 M0 的 Platform、公共硬件能力合同及台架验证入口。G431 正式 Run 已完成有限空载 UART 正向启动、调速和 Stop，Observe 保持默认关断并拒绝启动。反向、持续运行、独立电流精度标定、自研协议和 FreeRTOS 尚未完成，具体实测范围见 Target 验证页。上述展示范围是交付目标。
 
 - [固件入口](firmware/README.md)：Target、公共应用与构建边界。
-- [G431 默认关断入口](firmware/targets/BLDC_G431/runtime/README.md)：独立构建、UART 和当前执行边界。
+- [G431 Runtime 入口](firmware/targets/BLDC_G431/runtime/README.md)：Observe / 有限 Run 构建、UART 和执行边界。
 - [G431 验证结果与剩余门槛](firmware/targets/BLDC_G431/VALIDATION.md)：G431 验收结论、镜像与证据的唯一汇总入口。
 - [F405 M0 说明](firmware/targets/ODRIVE_V36_405_M0/README.md)：独立的实现和验证范围。
 - [Host 入口](host/README.md)：V1 的 VOFA 资料职责与后续 Qt Host。

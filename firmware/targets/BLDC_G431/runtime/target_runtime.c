@@ -26,6 +26,8 @@
 #define PUBLICATION_DIVIDER (100U)
 #define TELEMETRY_PERIOD_MS (10U)
 #define RX_FRAGMENT_TIMEOUT_MS (100U)
+#define FINITE_RUN_MAX_CYCLES (1500000U * CYCLES_PER_US)
+#define FINITE_RUN_MAX_DISPLACEMENT (2.0f)
 
 /* 同一实时边界生成的发布内容，供后台一致性读取。 */
 typedef struct {
@@ -45,12 +47,33 @@ volatile uint32_t g_target_runtime_compute_request;
 volatile uint32_t g_target_runtime_compute_sequence;
 volatile ObserveComputeComparisonResult g_target_runtime_compute_result;
 volatile uint32_t g_target_runtime_stage_request;
+volatile TargetRuntimeRunStatus g_target_runtime_run_status;
 
 /* 启动阶段在时基开启前写入；运行后仅由 sample_ready 更新 Motor。 */
 static Motor s_motor;
 static ControlRuntime s_control_runtime;
 static G431CordicMath s_cordic_math;
-/* 3000 rpm 只用于位置差分排歧，不构成电机运行许可；当前没有使能路径。 */
+#if defined(BLDC_G431_FINITE_RUN)
+#if !defined(BLDC_G431_OBSERVE_ENTRY)
+#error BLDC_G431_FINITE_RUN requires the runtime Core entry
+#endif
+/* 仅本板固定空载包络：名义电流换算、符号与定向候选承接已存实物记录。
+ * 静态1.236V/0.394名义A约3.14Ω，与独立绕组Rs约3.1Ω相符；不声称精度标定。
+ * 时序沿用已验证slot与同源控制链，当前候选仍须完成本构建有限验收。 */
+static const ControlRuntimeConfig s_control_config = {
+    /* 采集仍1kHz；每个fast tick读取已发布缓存，避免再分频引入近1ms消费延迟。 */
+    20000U, 2U, 1U, 30U, 100U, {300.0f, 0.005f},
+    {CURRENT_MEASUREMENT_PHASE_BC, 4096U, 0.10f, 0.05f,
+        true, {1.0f, -1.0f, -1.0f}}, 100U, 5.0f, true,
+    {7U, 1, 0.02444341778755188f, 0.002f, 300.0f}, true,
+    {true, true, true,
+        {0.5f, 0.5f, 300.0f, 300.0f, 50.0f, 1.5f, 0.2f, 1.8f/14.0f, 0.000125f},
+        {0.001f, 0.004f, 20.0f, 0.1f, 0.1f, 80.0f, 0.00125f},
+        10U, 10.0f, 14.0f, 0.65f, 0.000125f},
+    g431_cordic_sincos, &s_cordic_math
+};
+#else
+/* Observe的3000 rpm仅用于位置差分排歧，不构成电机运行许可。 */
 static const ControlRuntimeConfig s_control_config = {
     20000U, 2U, 10U, 100U, 100U, { 3000.0f, 0.01f },
     /* 名义值正向为 Shunt+→GND；电机相电流以桥→电机为正，B/C 均取反。
@@ -64,6 +87,7 @@ static const ControlRuntimeConfig s_control_config = {
     /* 实机增益、角度与时序尚未验收；当前装配保持控制链及功率许可关闭。 */
     { 0 }, g431_cordic_sincos, &s_cordic_math
 };
+#endif
 static volatile RuntimePublication s_publication;
 static volatile uint32_t s_publication_sequence;
 static volatile MotorCommand s_pending_command;
@@ -235,6 +259,46 @@ static bool take_command(MotorCommand *command, bool *rejected)
     return false;
 }
 
+/* ADC为业务写者；TIM6只在短临界区执行有限时长撤销和Stop交接。 */
+static void monitor_finite_run(const MotorCommand *command, bool has_command)
+{
+    volatile TargetRuntimeRunStatus *run = &g_target_runtime_run_status;
+    if (!s_control_config.control.enabled) { return; }
+    if (has_command && command != NULL && command->type == MOTOR_COMMAND_START_VELOCITY
+        && s_motor.command_result == MOTOR_COMMAND_RESULT_ACCEPTED
+        && s_control_runtime.phase == CONTROL_RUNTIME_START_QUIET) {
+        run->accepted_starts++;
+        run->limit_reason = 0U;
+        run->started_cycles = DWT->CYCCNT;
+        run->last_position_time = s_control_runtime.last_position_time;
+        run->last_position_turns = s_control_runtime.mechanical_position_turns;
+        run->displacement_turns = 0.0f;
+        run->active = 1U;
+    }
+    if (s_control_runtime.phase == CONTROL_RUNTIME_OFF || s_motor.faults != 0U) {
+        run->active = 0U;
+        return;
+    }
+    if (run->active && s_control_runtime.position_time_available
+        && run->last_position_time != s_control_runtime.last_position_time) {
+        float position = s_control_runtime.mechanical_position_turns;
+        float delta = position - run->last_position_turns;
+        if (delta > 0.5f) { delta -= 1.0f; }
+        if (delta < -0.5f) { delta += 1.0f; }
+        run->displacement_turns += delta;
+        run->last_position_turns = position;
+        run->last_position_time = s_control_runtime.last_position_time;
+        if (run->displacement_turns >= FINITE_RUN_MAX_DISPLACEMENT
+            || run->displacement_turns <= -FINITE_RUN_MAX_DISPLACEMENT) {
+            realtime_motor_io_safe_off();
+            g_target_runtime_guard_faults |= TARGET_RUNTIME_FAULT_RUN_MOTION;
+            motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_RUN_MOTION);
+            run->limit_reason = 2U;
+            run->active = 0U;
+        }
+    }
+}
+
 static void publish_current_capture(void)
 {
     g_target_runtime_current_sequence++;
@@ -341,42 +405,46 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
         faults |= TARGET_RUNTIME_FAULT_UNEXPECTED_POWER;
     }
     command_available = take_command(&command, &rejected);
-    stage_request = g_target_runtime_stage_request;
-    if (command_available && (g_target_stage_budget_active != 0U
-        || (stage_request != 0U && stage_request != s_stage_request_seen))
-        && (rejected || command.type != MOTOR_COMMAND_STOP)) {
-        /* 诊断期间只接受Stop；普通命令终止窗口后仍按拒绝事件交给真实Motor。 */
-        rejected = true;
-    }
-    if (stage_request != 0U && stage_request != s_stage_request_seen) {
-        s_stage_request_seen = stage_request;
-        if (g_target_stage_budget_active != 0U) {
-            g431_stage_budget_cancel(G431_STAGE_BUDGET_FAILURE_BUSY);
-        } else {
-            (void)g431_stage_budget_prepare(stage_request,
-                faults == 0U && !command_available && stage_budget_adc_permitted(true));
+    if (!s_control_config.control.enabled) {
+        stage_request = g_target_runtime_stage_request;
+        if (command_available && (g_target_stage_budget_active != 0U
+            || (stage_request != 0U && stage_request != s_stage_request_seen))
+            && (rejected || command.type != MOTOR_COMMAND_STOP)) {
+            /* 诊断期间只接受Stop；普通命令终止窗口后仍按拒绝事件交给真实Motor。 */
+            rejected = true;
         }
-        stage_prepared = true;
-    }
-    if (!stage_prepared && g_target_stage_budget_active != 0U) {
-        if (command_available || faults != 0U || !stage_budget_adc_permitted(true)) {
-            g431_stage_budget_cancel(command_available && !rejected
-                && command.type == MOTOR_COMMAND_STOP
-                ? G431_STAGE_BUDGET_FAILURE_ABORTED : G431_STAGE_BUDGET_FAILURE_NOT_READY);
-        } else {
-            (void)g431_stage_budget_step(current->observation_time, true);
+        if (stage_request != 0U && stage_request != s_stage_request_seen) {
+            s_stage_request_seen = stage_request;
+            if (g_target_stage_budget_active != 0U) {
+                g431_stage_budget_cancel(G431_STAGE_BUDGET_FAILURE_BUSY);
+            } else {
+                (void)g431_stage_budget_prepare(stage_request,
+                    faults == 0U && !command_available && stage_budget_adc_permitted(true));
+            }
+            stage_prepared = true;
+        }
+        if (!stage_prepared && g_target_stage_budget_active != 0U) {
+            if (command_available || faults != 0U || !stage_budget_adc_permitted(true)) {
+                g431_stage_budget_cancel(command_available && !rejected
+                    && command.type == MOTOR_COMMAND_STOP
+                    ? G431_STAGE_BUDGET_FAILURE_ABORTED : G431_STAGE_BUDGET_FAILURE_NOT_READY);
+            } else {
+                (void)g431_stage_budget_step(current->observation_time, true);
+            }
         }
     }
-    /* 隔离试具先到真实stage截止；原OFF观察位于诊断尾部，始终逐拍推进。
-     * 该尾部是诊断附加开销，不冒充正式RUN的完整ISR耗时。 */
+    /* Observe先执行隔离试具，再推进OFF观察；Run直接推进唯一正式实例。 */
     business_changed = control_runtime_step(&s_control_runtime, current->observation_time,
         current, power_disabled,
         faults, rejected ? NULL : &command, command_available);
+    monitor_finite_run(rejected ? NULL : &command, command_available);
     /* 同拍更新健康快照，主机复核完整窗口时不沿用此前的100Hz旧状态。 */
-    business_changed |= capture_current(current, power_disabled,
-        command_available && !rejected && (command.type == MOTOR_COMMAND_STOP));
-    business_changed |= compute_probe_adc_permitted(true) != s_publication.compute_probe_permitted;
-    business_changed |= stage_budget_adc_permitted(true) != s_publication.stage_probe_permitted;
+    if (!s_control_config.control.enabled) {
+        business_changed |= capture_current(current, power_disabled,
+            command_available && !rejected && (command.type == MOTOR_COMMAND_STOP));
+        business_changed |= compute_probe_adc_permitted(true) != s_publication.compute_probe_permitted;
+        business_changed |= stage_budget_adc_permitted(true) != s_publication.stage_probe_permitted;
+    }
     s_publication_divider++;
     if (business_changed || (s_publication_divider >= PUBLICATION_DIVIDER)) {
         if (s_publication_divider >= PUBLICATION_DIVIDER) {
@@ -410,6 +478,17 @@ void target_runtime_guard_irq(void)
     __disable_irq();
     last_sample_cycles = s_last_sample_cycles;
     now_cycles = DWT->CYCCNT;
+    if (s_control_config.control.enabled && g_target_runtime_run_status.active != 0U
+        && (uint32_t)(now_cycles - g_target_runtime_run_status.started_cycles) >= FINITE_RUN_MAX_CYCLES) {
+        /* 时长包括跨拍启动，Update不续期。先撤销功率，再交接普通Stop语义。
+         * 队列中的旧运动意图同时退休；ADC停滞时仍由心跳故障保持关断。 */
+        realtime_motor_io_safe_off();
+        g_target_runtime_run_status.active = 0U;
+        g_target_runtime_run_status.limit_reason = 1U;
+        s_command_pending = false;
+        s_reject_pending = false;
+        s_stop_pending = true;
+    }
     restore_interrupts(primask);
     if (now_cycles == s_last_guard_cycles) {
         g_target_runtime_guard_faults |= TARGET_RUNTIME_FAULT_CLOCK;
@@ -434,28 +513,32 @@ void target_runtime_start(void)
         return;
     }
     s_attempted = true;
-    observe_compute_comparison_init(&s_compute_probe);
     g431_irq_timing_init();
-    observe_controller_profile_init();
     /* 每个异常槽位只有该 handler 写入，嵌套 IRQ 不会覆盖另一路计数。 */
     memset((void *)g_target_runtime_irq_entries, 0, sizeof(g_target_runtime_irq_entries));
     s_cordic_ready = g431_cordic_math_init(&s_cordic_math);
-    g_target_runtime_stage_request = 0U;
-    s_stage_request_seen = 0U;
-    g431_stage_budget_init(g431_cordic_sincos, &s_cordic_math, stage_budget_stamp, NULL);
-    g_target_runtime_compute_request = 0U;
-    g_target_runtime_compute_sequence = 0U;
-    s_compute_request_seen = 0U;
-    g_target_runtime_compute_result = s_compute_probe.result;
-    observe_current_capture_init(&s_current_capture);
-    g_target_runtime_current_request = 0U;
-    g_target_runtime_current_sequence = 0U;
-    s_current_request_seen = 0U;
-    publish_current_capture();
+    if (!s_control_config.control.enabled) {
+        observe_compute_comparison_init(&s_compute_probe);
+        observe_controller_profile_init();
+        g_target_runtime_stage_request = 0U;
+        s_stage_request_seen = 0U;
+        g431_stage_budget_init(g431_cordic_sincos, &s_cordic_math, stage_budget_stamp, NULL);
+        g_target_runtime_compute_request = 0U;
+        g_target_runtime_compute_sequence = 0U;
+        s_compute_request_seen = 0U;
+        g_target_runtime_compute_result = s_compute_probe.result;
+        observe_current_capture_init(&s_current_capture);
+        g_target_runtime_current_request = 0U;
+        g_target_runtime_current_sequence = 0U;
+        s_current_request_seen = 0U;
+        publish_current_capture();
+    }
     motor_init(&s_motor);
     vofa_parser_init(&s_parser);
     realtime_motor_io_safe_off();
-    if (!control_runtime_init(&s_control_runtime, &s_motor, &s_control_config)) {
+    /* 先建立快照所需的实例，即使后端装配失败也能发布明确FAULT。 */
+    if (!control_runtime_init(&s_control_runtime, &s_motor, &s_control_config)
+        || (s_control_config.control.enabled && !s_cordic_ready)) {
         motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_STARTUP);
         publish(0U, false);
         return;
@@ -699,5 +782,5 @@ void target_runtime_service(void)
     if ((s_tx_cursor < s_tx_length) && ((USART1->ISR & USART_ISR_TXE_TXFNF) != 0U)) {
         USART1->TDR = s_tx_frame[s_tx_cursor++];
     }
-    service_compute_probe();
+    if (!s_control_config.control.enabled) { service_compute_probe(); }
 }

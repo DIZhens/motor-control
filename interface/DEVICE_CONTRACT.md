@@ -1,6 +1,6 @@
 # Device Contract
 
-本文件定义公共 Motor 与受门控 ControlRuntime 的设备语义。控制链及跨拍启停已实现，具体装配决定是否具备运行许可；当前 G431 Observe 关闭控制配置，仍拒绝启动。实物标定、执行预算及故障恢复尚未完成。公共业务 API 见 `firmware/app/motor/motor.h`，UART 表示见 [VOFA 协议](VOFA_PROTOCOL.md)。
+本文件定义公共 Motor 与受门控 ControlRuntime 的设备语义。控制链及跨拍启停已实现，具体装配决定是否具备运行许可；G431 Observe 关闭控制配置，仍拒绝启动。Run 使用本板有限空载配置，已完成正式 UART 正向启停与调速，其参数、实物依据及限制见 [Runtime 入口](../firmware/targets/BLDC_G431/runtime/README.md)。反向、独立电流精度标定、持续运行和故障恢复尚未完成。公共业务 API 见 `firmware/app/motor/motor.h`，UART 表示见 [VOFA 协议](VOFA_PROTOCOL.md)。
 
 ## 生命周期与请求
 
@@ -24,7 +24,8 @@ NaN / Infinity 或超出已配置目标范围时返回 BAD_TARGET；有锁存故
 普通拒绝保留原有 RUN 目标。模式和目标不能分开写入；更新只适用于当前模式，切换模式先回 IDLE。
 
 运行许可要求显式开启控制装配，电流增益/方向、电角度和实时采样/调制条件均已确认，且当拍
-电流、位置、预测角、母线和数值控制配置有效。当前 G431 没有这组实测许可，仍返回 NOT_READY。
+电流、位置、预测角、母线和数值控制配置有效。Observe 没有该运行许可，仍返回 NOT_READY；
+Run 的有限许可不扩大成其他硬件、精度或持续运行承诺。
 Start 接受时保持 IDLE 和零活动目标，完整待启动目标由 Runtime 保存；当拍 safe-off 清旧 epoch，
 下一拍 stage 中性 duty，再下一拍跨过更新边界、重新 stage 后才 enable。enable 成功才提交 RUN
 和活动目标。准备期间重复 Start 不覆盖旧请求，Update 仍为 WRONG_STATE，Stop 撤销准备流程。
@@ -34,7 +35,7 @@ ACCEPTED 不能作为功率已经使能的证明。
 
 ## 故障与有效性
 
-当前 G431 Observe 的锁存故障位在 `runtime/target_runtime.h` 定义：bit 0 装配失败、bit 1 电流采集无效、bit 2 实时采样间隔异常、bit 3 Hardware Trip 快照不可用或有保护 episode、bit 4 意外功率使能、bit 5 时钟条件错误。公共 `control_runtime.h` 另定义 bit 8 活动反馈失效、bit 9 控制计算/状态失败、bit 10 stage/enable 失败、bit 11 功率状态不符、bit 12 校正相电流超阈值。Hardware Trip 通知仅要求重新扫描，不能单凭通知建立新故障。
+G431 的锁存故障位在 `runtime/target_runtime.h` 定义：bit 0 装配失败、bit 1 电流采集无效、bit 2 实时采样间隔异常、bit 3 Hardware Trip 快照不可用或有保护 episode、bit 4 意外功率使能、bit 5 时钟条件错误；Run 另用 bit 6 表示有限净位移越界。公共 `control_runtime.h` 另定义 bit 8 活动反馈失效、bit 9 控制计算/状态失败、bit 10 stage/enable 失败、bit 11 功率状态不符、bit 12 校正相电流超阈值。Hardware Trip 通知仅要求重新扫描，不能单凭通知建立新故障。
 
 独立监视器可以先关断功率和锁存原因，Motor 在下一实时边界合并原因。ADC 停止时旧的 Motor publication 可能仍完整，但已不能代表当前状态；此时遥测清有效位，不能显示旧 IDLE 作为当前健康结论。尚未取得或已经失效的速度估计，以及未完成可信标定的 d/q 电流，均输出无效，不用有效的零值代替。
 
@@ -44,4 +45,4 @@ Start 必须分开；当前没有可用恢复流程，需要复位后重新装�
 
 ## 后续补齐边界
 
-当前 G431 进入硬件闭环前，还需完成电流增益/方向、编码器方向/极对数/电角度偏置，以及同一构建的采样窗口、执行预算和受控启停实测。数值模型不替代这些条件。参数只开放真实调试需要的最小集合，不预建对象字典或多协议框架。
+G431 Run 承接原板相序、电流符号、编码器方向/极对数/偏置的有限台架证据；正式 Motor / UART 已完成正向启停与调速，反向、时长边界实机触发及长期稳定性仍需补齐。独立电流幅值精度、持久标定及故障恢复另行补齐，数值模型不替代实物条件。参数只开放真实调试需要的最小集合，不预建对象字典或多协议框架。

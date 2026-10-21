@@ -1,9 +1,11 @@
-# G431 默认关断观察入口
+# G431 Runtime 入口
 
 `BLDC_G431_Observe` 在现有 Platform 上装配公共 Motor、编码器速度观测和 UART / VOFA。
 当前装配的 `control.enabled=false`，只执行观察与诊断，所有 Start 均拒绝进入 RUN。
-公共 Runtime 已有受门控的 FOC 控制链；当前实机电流、电角度和时序许可尚未确认。
-它为反馈与标定接入提供入口；实际验收范围统一见
+`BLDC_G431_Run` 则装配本板有限空载控制配置，通过相同的公共 Motor / ControlRuntime、
+UART 和 VOFA 执行启停与调速。它仍上电关断，必须显式 Start；独立电流精度标定、
+持续运行与故障恢复均未完成。新增 Run 候选不改变 Observe 的拒绝启动语义。
+本文除下列“有限运行入口”外的观察与诊断说明均指 Observe；实际验收范围统一见
 [Target 验证页](../VALIDATION.md)。
 
 ## 构建与入口
@@ -14,6 +16,7 @@
 | --- | --- | --- |
 | `BLDC_control V1` | 原 `validation/target_validation.c`，保持原台架工具 ABI | `BLDC_control V1/` |
 | `BLDC_G431_Observe` | 本目录 `target_runtime.c` + `app/motor`、`app/communication`、`control` | `build/observe/` |
+| `BLDC_G431_Run` | 同一正式 Runtime，增加 `BLDC_G431_FINITE_RUN` 板级有限装配 | `build/run/` |
 | `BLDC_G431_Timing` | 本目录 `timing_entry.c` + `runtime_timing.c`，专用无功率计时 | `build/timing/` |
 
 选择 Target 后使用 Rebuild。CLI 示例（`UV4.exe` 路径按本机安装调整）：
@@ -22,18 +25,61 @@
 & 'D:\keil5\UV4\UV4.exe' -r 'firmware\targets\BLDC_G431\MDK-ARM\BLDC_control V1.uvprojx' -t BLDC_G431_Observe -o "$env:TEMP\g431-observe-build.log"
 ```
 
-Observe 的 `Control`、`Application/User/Motor`、`Application/User/Runtime` 三个组显式使用
+Observe / Run 的 `Control`、`Application/User/Motor`、`Application/User/Runtime` 三个组显式使用
 ARMCC `-O3 -Otime`，其余组保留原继承配置。按速度优化使短数值检查能够内联；源内
 `#pragma Otime` 不能替代本机编译器的翻译单元内联策略。没有开启 fast-math 或改写
 有限值检查、除法和归一化公式。正式 Runtime 与私有同源副本采用相同策略。
 核对实际链接对象的编译记录及机器码，不按目录中残留的同名 `.o` 推断当前镜像。
 相关 ARM 模型显式使用 `-Otime`；模型与无插桩实测仍分别判定，当前提交预算未通过。
 
-`BLDC_G431_OBSERVE_ENTRY` 与 `BLDC_G431_TIMING_ENTRY` 分别只在对应 Target 定义；
-`main()` 和 IRQ 的 USER CODE 选择互斥入口。三者共享 CubeMX 配置及 Platform，
+Observe / Run 使用 `BLDC_G431_OBSERVE_ENTRY` 选择同一 Core 入口；仅 Run 再定义
+`BLDC_G431_FINITE_RUN`。Timing 使用 `BLDC_G431_TIMING_ENTRY`。
+`main()` 和 IRQ 的 USER CODE 选择互斥入口。四个 Target 共享 CubeMX 配置及 Platform，
 不改生成区，不同时绑定两个 consumer。Timing 专属组在另外两个 Target 中排除，
 Timing 中排除旧 Runtime、Communication 和 Validation 组。
 烧录是独立的现场步骤；编译不自动连接 ST-Link 或下载镜像。
+
+## 有限运行入口
+
+Run 使用既有实物记录中的 7 极对、编码器正方向和 0.0244434178 圈电角度偏置，
+B/C 电流在本启动零偏校正后取反、重构 A 相。静态记录的约 1.236 V / 0.394 名义 A
+对应约 3.14 Ω，与独立绕组测得的每相约 3.1 Ω 相符，因此用于受限功能试验；
+这没有完成独立电流幅值精度标定。相序、符号与电角度记录仍绑定原硬件和接线，不能换机照用。
+
+| 配置 | Run 的固定边界 |
+| --- | --- |
+| 频率 | PWM 20 kHz，电流环 10 kHz，速度环 1 kHz |
+| 异步观测 | SSI / 母线实际采集 1 kHz；每个 fast tick 读取完整缓存，仅新时间戳更新估计 |
+| 启动校零 | 健康 IDLE、MOE 关闭、编码器静止连续 100 拍，再采 4096 点；无外部电流注入 |
+| 速度目标 | 绝对值不超过 80 rpm；估计运动排歧上限 300 rpm |
+| 速度 PI | Kp=0.001，Ki=0.004，Iq 限幅 ±0.10 名义 A，Id=0 |
+| 电压 / 母线 | 调制利用系数为 1.8/14，母线允许 10..14 V；电压矢量请求不超过 1.8 V |
+| 软件相电流撤销 | 任一校正相绝对值超过 0.65 名义 A |
+| 独立有限时长 | 从 Start 被接受起最多 1.5 秒，调速不会续期；TIM6 先 safe-off，再交接 Stop |
+| 净位移 | 接受 Start 后按新编码器观测解绕累加；绝对值达到 2 圈立即关断并锁存 bit 6 |
+
+上电不自动启转，串口仍为 115200 / 8N1。`start:60\n`、`speed:40\n` 和 `stop\n`
+分别走真实 Motor 请求和实时边界，表中的 `\n` 表示实际 LF。启动仍跨两拍提交中性 duty，
+成功使能才进入 RUN；有效 Id/Iq 来自相同正式控制反馈。运行不执行 Observe 的隔离计算、
+提交预算或电流诊断窗口，后台只处理 UART 和一致性遥测。未重新定义 VOFA 通道。
+
+正常 Stop 与时长上限都撤销输出并进入 IDLE，不代表主动减速至零，停机后可能继续滑行。
+`clear` 仍不能恢复锁存故障或重启；故障后需现场确认并复位重装配。
+`g_target_runtime_run_status` 是停止后读取的 32 B 私有记录，保存接受次数、限制原因及净位移，
+不是可写命令邮箱或公共协议。TIM6 保留采样心跳守卫，Platform 保留原 slot 绝对截止与首因锁存。
+
+本入口已完成一次正式 UART 正向启停与调速实测，范围见 Target 验证页；反向与时长上限
+实机触发尚未验证。本入口只为固定空载台架的有限功能验收。烧录前使用逻辑供电检查默认关断；恢复母线供电后
+在默认关断状态重新启动一次，使零偏在本次供电条件下形成，再由操作者确认本轮参数。
+编译、HCC 替身模型及历史台架时序均不能冒充新 Run 镜像的实机验收或 WCET。
+原速度峰值误差筛选失败仍是性能项，不能写成满足全部性能指标。
+
+离线检查：
+
+```powershell
+.venv\Scripts\python.exe -B -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run
+.venv\Scripts\python.exe -B -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py
+```
 
 ## 实时频率与作用时刻
 

@@ -1,6 +1,7 @@
 """使用 HCC 替身和模拟 UART 寄存器，执行正式 G431 观察入口、Motor 与 VOFA。"""
 
 from pathlib import Path
+import argparse
 import math
 import os
 import struct
@@ -39,6 +40,9 @@ CAPTURE_NOT_READY, CAPTURE_ABORTED, CAPTURE_INVALID, CAPTURE_TIMING, CAPTURE_NUM
 STAGE_IDLE, STAGE_READY, STAGE_ACTIVE, STAGE_COMPLETE, STAGE_FAILED = range(5)
 STAGE_NOT_READY, STAGE_ABORTED, STAGE_BUSY, STAGE_CLOCK = range(1, 5)
 CASES = []
+PARSER = argparse.ArgumentParser(description=__doc__)
+PARSER.add_argument('--finite-run', action='store_true', help='同一正式Target装配的有限运行验证')
+OPTIONS = PARSER.parse_args()
 
 
 def passed(name: str) -> None:
@@ -64,8 +68,15 @@ def read_image(path: Path) -> tuple:
 
 
 project = ET.parse(TARGET / "MDK-ARM/BLDC_control V1.uvprojx").getroot()
+target_name = "BLDC_G431_Run" if OPTIONS.finite_run else "BLDC_G431_Observe"
 observe = next(target for target in project.findall("./Targets/Target")
-               if target.findtext("TargetName") == "BLDC_G431_Observe")
+               if target.findtext("TargetName") == target_name)
+defines = observe.findtext("./TargetOption/TargetArmAds/Cads/VariousControls/Define")
+assert "BLDC_G431_OBSERVE_ENTRY" in defines
+assert ("BLDC_G431_FINITE_RUN" in defines) == OPTIONS.finite_run
+if OPTIONS.finite_run:
+    assert observe.findtext("./TargetOption/TargetCommonOption/OutputDirectory") == "build\\run\\"
+    assert observe.findtext("./TargetOption/TargetCommonOption/OutputName") == target_name
 assert observe.findtext("./TargetOption/TargetArmAds/Cads/Optim") == "4"
 assert observe.findtext("./TargetOption/TargetArmAds/Cads/oTime") == "0"
 hot_groups = {"Application/User/Runtime", "Application/User/Motor", "Control"}
@@ -78,7 +89,7 @@ for group in observe.findall("./Groups/Group"):
     else:
         assert policy in (None, "2"), group.findtext("GroupName")
 assert hot_groups <= {group.findtext("GroupName") for group in observe.findall("./Groups/Group")}
-passed("Observe仅对Runtime、Motor和Control三个组显式采用速度优化，保留全局与硬件组继承策略")
+passed(target_name + "入口/产物独立，仅对Runtime、Motor和Control三个组采用速度优化")
 
 
 with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
@@ -99,6 +110,8 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     command = [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3", "-Otime",
                "--split_sections", "-g", "-DSTM32G431xx", "-DBLDC_G431_OBSERVE_ENTRY",
                "-DCONTROL_CURRENT_PROFILE"]
+    if OPTIONS.finite_run:
+        command.append('-DBLDC_G431_FINITE_RUN')
     for path in include_paths:
         command += ["-I", str(path)]
     objects = []
@@ -542,6 +555,12 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             self.receive(b"clear\n")
             self.sample()
             return self.frame()
+
+    if OPTIONS.finite_run:
+        from finite_run_cases import verify
+        verify(Model, symbols, passed)
+        print(f'PASS: {len(CASES)} ARM finite-Run Target cases; fake HCC/UART, no electrical or WCET proof.')
+        raise SystemExit(0)
 
     model = Model()
     assert model.motor() == (IDLE, 0, NONE, 0, 0.0)
