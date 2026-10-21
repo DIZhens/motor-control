@@ -2,7 +2,7 @@
 
 本文档是本仓库长期架构合同。它只记录需要长期遵守的职责、依赖方向、替换边界、状态所有权和安全语义；具体 API 以对应源码头文件和 `interface/` 合同为准。
 
-文中的 `Single-Motor Encoder Phase-Current FOC Profile V1` 定义长期硬件与实时能力边界，不等于一次交付必须实现本文所有模块、控制模式和通信方式。当前交付 V1 收敛为 G431 单电机、MT6701、FOC 电流内环和速度外环，以 UART 和现成 VOFA 工具完成观测与基本操作；Qt Host 与位置环后续再做。活动阶段的具体目标、期限和验收边界以本地 Git 检查点正文为准，见 `DEVELOPMENT.md`。
+文中的 `Single-Motor Encoder Phase-Current FOC Profile V1` 定义长期硬件与实时能力边界，不等于一次交付必须实现本文所有模块、控制模式和通信方式。展示目标包含 G431 单电机、MT6701、FOC 电流内环和速度外环、UART 自研协议及 FreeRTOS 后台集成；控制基线先使用现有 UART / VOFA。CAN 实物接入、Qt Host 与位置环后续再做。活动阶段的具体目标和验收边界以本地 Git 检查点正文为准，见 `DEVELOPMENT.md`。
 
 ## 1. 项目定位
 
@@ -199,6 +199,10 @@ Reference / Feedback 实时真值
 异步采集的 Position / Bus 等 Observation 可以有自己的采样节拍，但不得异步修改控制算法内部状态。ControlRuntime 在 fast tick 边界消费最新观测，根据 timing / freshness 更新 estimator，并把需要的角度等状态预测到当前控制时刻。
 
 控制时间由 PWM / ADC 等确定性硬件事件产生，不依赖普通后台任务延时。
+
+引入 FreeRTOS 后，sample-ready、控制计算和 PWM 提交仍在同一硬件同步实时边界执行，慢环继续整数分频；不为电流环、速度环建立独立任务。该高优先级控制 ISR 不调用 RTOS API、不等待队列或互斥锁。后台任务处理通信、遥测及非实时维护，通过有界命令交接和一致性 Snapshot 与 Motor 协作，保持实时状态单写者。
+
+Target 负责 RTOS 移植、静态资源和中断优先级配置，`control/`、公共 Motor 语义及协议编解码不依赖 FreeRTOS。Cortex-M 上调用 `FromISR` 的通信中断必须满足内核系统调用优先级限制；具体优先级在集成时核对，依据 [FreeRTOS Cortex-M 官方说明](https://freertos.org/Documentation/02-Kernel/03-Supported-devices/04-Demos/ARM-Cortex/RTOS-Cortex-M3-M4)。控制时基、HAL 时基与 RTOS tick 分开核对，不能互相替代。
 
 ### 4.3 Platform 与 Hardware Capability Contract
 
@@ -676,11 +680,15 @@ UART、USB CDC、TCP 可以自然复用字节流 framing；CAN 是帧式链路�
 
 第一阶段不预设 CANopen Object Dictionary，也不让旧协议对象编号反向定义新 Motor API。
 
+自研协议沿用上述边界，区分 Object、Command、Telemetry 和 Event。对象写入也要经过 Device / Motor 的权限、范围与状态判断；可写目标最终形成完整业务请求，不直接改 Runtime 目标、PI 状态或功率寄存器。请求关联与会话内重复检测属于通信事务语义，不改变 Motor 状态所有权，也不承诺跨复位恰好执行一次。
+
+协议设计中的字段、对象编号、缓存与 UART / CAN 映射在 [设计草案](interface/PROTOCOL_DESIGN.md)中讨论；草案不替代已生效的 Device Contract 或 VOFA 线格式。
+
 ## 7. Host
 
 Host 是第一方设备应用，不是通用上位机平台。
 
-以下是后续第一方 Qt Host 的技术基线与边界，不是当前交付 V1 的前置条件。V1 使用现成 VOFA 工具，配置、通道映射和操作说明由 `host/` 保存，设备语义仍由 `interface/` 定义。
+以下是后续第一方 Qt Host 的技术基线与边界，不是展示版本的前置条件。控制基线使用现成 VOFA；自研协议阶段先提供最小 PC 协议客户端与记录工具，VOFA 适配按实际需要接入。配置、通道映射和操作说明由 `host/` 保存，设备语义仍由 `interface/` 定义。
 
 首选技术基线：
 

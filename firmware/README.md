@@ -17,7 +17,9 @@ MCU 电机控制固件。
 两板验证结果互不替代；模型、静态检查、目标编译和实物验证分别记录。
 Motor 内部有限静态定向核心及其尚未装配的执行边界见 [Motor 说明](app/motor/README.md)。
 
-V1 只推进 G431、一台电机和 MT6701 的 FOC 电流内环与速度外环，以 UART 对接现成 VOFA 工具。默认关断入口的构建与限制见 [G431 runtime](targets/BLDC_G431/runtime/README.md)，随后接入反馈、标定和受控闭环。位置环、FreeRTOS、Modbus、CANopen 和 F405 同功能验收后续再做。
+展示目标还包含自研 UART 协议与 FreeRTOS 后台任务；两者尚未实现，先完成控制基线，再分别集成。RTOS 的调度与中断适配属于 Target，协议编解码不依赖 RTOS，FOC 保持硬件同步实时执行。长期边界见 [总体架构](../ARCHITECTURE.md)，协议待定设计见 [协议草案](../interface/PROTOCOL_DESIGN.md)。
+
+控制基线推进 G431、一台电机和 MT6701 的 FOC 电流内环与速度外环，以 UART 对接现成 VOFA 工具。默认关断入口的构建与限制见 [G431 runtime](targets/BLDC_G431/runtime/README.md)，随后接入受控闭环。CAN 实物接入、位置环、标准 Modbus / CANopen 栈和 F405 同功能验收在后续范围。
 
 ## 长期结构
 
