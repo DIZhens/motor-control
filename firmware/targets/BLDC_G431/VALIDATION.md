@@ -6,8 +6,9 @@
 [runtime/README.md](runtime/README.md)，历史控制基线的UART / VOFA操作见
 [Host 说明](../../../host/vofa/README.md#有限-run-操作)。
 
-当前Run已接入原生FreeRTOS和460800/8N1 UART DMA，关闭旧VOFA装配；新协议Server尚未接入，
-因此当前镜像只排空原始输入、不开放Host命令。旧实物启停记录继续绑定各自HEX，不改写为本轮运动验收。
+当前Run已接入原生FreeRTOS、460800/8N1 UART DMA及Core Protocol事务Server，关闭旧VOFA装配；
+对象和请求应答已有逻辑供电证据，Telemetry/Event发送与通信压力后续接入。旧实物启停记录
+继续绑定各自HEX，不改写为新协议镜像的运动验收。
 
 `validation/` 台架经 HCC 使用 Platform，不是正式 Motor / ControlRuntime。
 旧功率包与保护注入要求电机三相断开；有限开环仅按[专用流程](validation/OPEN_LOOP.md)接电机。
@@ -27,13 +28,52 @@
 | 自研协议编解码 | [协议合同](../../../interface/CORE_PROTOCOL_V1.md)、[P1 离线证据](validation/evidence/protocol/p1.json)；真实 ARM C 与 Python、30 个黄金帧对照 | 独立库，尚未接入Run；会话事务后续实现，离线库通过不等于实物通过 |
 | 内部命令与参数交接 | [P2构建和ARM证据](validation/evidence/protocol/p2.json)；ticket、Stop取消、Completion4、PI Staged/Active、1kHz观测和内部关断 | 尚无线上参数入口或会话去重；P2为离线交接验收，本轮启动检查不代替带电命令验收 |
 | FreeRTOS启动与时间域 | [P3构建、模型和实物证据](validation/evidence/protocol/p3.json)；TIM7 HAL、SysTick Kernel、静态任务/Mailbox、唯一异常入口、默认关断 | 启动负载证据；不代替协议负载、运动下调度压力或WCET证明 |
-| UART DMA字节流 | [P4构建、模型和实物证据](validation/evidence/protocol/p4.json)；512 B RX、130 B单帧TX、460800回环、覆盖/帧错误恢复、冻结TX关断 | 纯逻辑供电；无Server/事务/线上命令，未做50/250/500 Hz协议压力及运动负载 |
+| UART DMA字节流 | [P4构建、模型和实物证据](validation/evidence/protocol/p4.json)；512 B RX、130 B单帧TX、460800回环、覆盖/帧错误恢复、冻结TX关断 | 字节流证据不代替Server/事务、50/250/500 Hz协议压力或运动负载 |
+| Session/事务/线上对象 | [P5构建、模型和实物证据](validation/evidence/protocol/p5.json)；七对象、参数去重/原结果重放、Stop/Clear、Python客户端/JSONL | 纯逻辑供电；本轮未发送Start/Update，无Telemetry/Event或协议压力验收 |
 
 以上两次正式 Run 实物记录属于 HEX
 `0e73f54e03ceaa9b21f3ae7cfc305c1ca50ecc9577613cc47f974d54fd2eee76`。
 源码整理或新构建不会把旧证据改写成新镜像已实测。未受影响的功能证据继续保留；
 受影响的命令交接、后台通信与实时路径分别用针对性检查确认，不重跑无关底层波形。
 本页后续保留各轮测量条件、失败首因与镜像，读者不必依赖未分发的本地日志判断上述边界。
+
+## 会话事务与Python客户端：逻辑供电联调通过
+
+正式Run由唯一Communication任务持有Parser、Session、Sequence、普通/Stop在途及固定
+完成缓存4/终态FIFO4；通过准确ticket交给既有实时所有者。Stop取消未消费请求，已完成
+历史不改写；新拒绝也退休序号，重复处理中只提示IN_PROGRESS，完成后重放原终态。
+参数写仍由ADC权威应用，后台不改PI实例。20ms未完成、未知ticket/kind、损坏的索引/计数、
+响应FIFO溢出及不可恢复Transport错误锁内部故障，不作为普通BAD_REQUEST继续处理。
+这些故障/竞态由ARM模型验证，本轮没有另作实物故障注入。
+
+Run原生Rebuild零错误、零警告，Code63666/RO1058/RW444/ZI20468，静态RAM20912/32768 B；
+Server静态状态及编码工作区2576 B，不增加任务、动态分配或ISR协议计算。17组Server/Client
+模型、12组Codec（47922断言、30黄金帧）、19组Runtime交接通过。模型运行实际ARM Server、
+Codec、参数、交接和Motor，替代Transport、实时推进及C库复制；Python客户端对接同一模型，
+包括丢响应后原字节重发、总超时结果未知、新会话不重放旧Start及旧响应过滤。
+P4未受影响的DMA/Core/Kernel及独立Validation证据复用，不声称本轮重跑旧波形或全部工程。
+
+构建身份由204项正式源/配置及保守头文件闭包的规范化内容产生，短ID为
+`0x3df214f45eb49571`，完整摘要与输入清单保存在[P5证据](validation/evidence/protocol/p5.json)。
+HEX `18eefc3d5c8f97c2e7a6a5cd974f32dc984dd45742f98be71e1fe7f6f1092b54`
+已安装，原生校验及独立Flash读回64740 B匹配，DEVICE_INFO读到同一build ID。
+
+操作者确认OUTPUT关闭、仅ST-Link逻辑3V3、编码器与三相原接线保留，无电池或外部注入；
+USB串口共地、VCC不接、VOFA断开。25项实物请求/状态检查通过：七对象可读；重复PI写仅
+增加一次generation；内容冲突不替换原结果；后续写不改变缓存中的旧权威响应；长度、只读、
+版本/flags/未知消息及会话权限按合同拒绝。CRC坏帧、过期Stop片段和line break只恢复通信，
+片段未进入Motor。新会话保留参数并只读回状态，旧Session拒绝且不污染新序号。
+
+无会话Stop实际执行一次，重复应答没有再次进入Motor；健康IDLE的Clear返回真实ACCEPTED。
+Motor计数从0增至2，恰为Stop/Clear，接受Start仍为0；没有发送Start/Update。三次新的合法
+PI写使Staged generation从1增至4，最终值恢复Default 0.001/0.004，Active仍generation0且
+不在使用。停机读回IDLE、目标0、六路LOW/MOE0，guard/内部/Motor故障均0；FE、CRC、
+半帧超时和消息错误均留在通信统计。任务最小剩余栈Bootstrap690/768、Communication418/768、
+Telemetry281/384、Idle109/128 word，均超过25%，仅证明本轮请求负载。
+
+[Host操作说明](../../../host/protocol/README.md)提供显式连接、读写和JSONL记录器。
+本轮未启用线上Telemetry/Event，DEVICE_INFO暂不声明对应能力；默认遥测配置不代表采集
+链已验收。50/250/500 Hz压力、运动下调度与栈、WCET及新协议有限试转仍需单独验证。
 
 ## UART DMA：字节流、覆盖恢复及发送超时通过
 

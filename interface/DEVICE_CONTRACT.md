@@ -1,6 +1,6 @@
 # Device Contract
 
-本文件定义公共 Motor 与受门控 ControlRuntime 的设备语义。控制链及跨拍启停已实现，具体装配决定是否具备运行许可；G431 Observe 关闭控制配置，仍拒绝启动。Run 使用本板有限空载配置，已完成正式 UART 正反启停、调速及独立时限关断，其参数、实物依据及限制见 [Runtime 入口](../firmware/targets/BLDC_G431/runtime/README.md)。独立电流精度标定、持续运行和故障恢复尚未完成。公共业务 API 见 `firmware/app/motor/motor.h`，UART 表示见 [VOFA 协议](VOFA_PROTOCOL.md)。
+本文件定义公共 Motor 与受门控 ControlRuntime 的设备语义。控制链及跨拍启停已实现，具体装配决定是否具备运行许可；G431 Observe 关闭控制配置，仍拒绝启动。Run 使用本板有限空载配置，已有 UART 正反启停、调速及独立时限关断证据，各自绑定的镜像、参数和限制见 [Runtime 入口](../firmware/targets/BLDC_G431/runtime/README.md)。独立电流精度标定、持续运行和故障恢复尚未完成。公共业务 API 见 `firmware/app/motor/motor.h`，正式UART线格式见[Core Protocol V1](CORE_PROTOCOL_V1.md)，[VOFA协议](VOFA_PROTOCOL.md)保留验证构建的表示。
 
 ## 生命周期与请求
 
@@ -47,7 +47,7 @@ Start 必须分开；当前没有可用恢复流程，需要复位后重新装�
 
 ### 本阶段速度调参合同
 
-以下最小参数生命周期已接入正式Run的内部交接并完成ARM模型验证，尚未提供线上参数写入。
+以下最小参数生命周期通过正式Run的同一实时交接实现；线上及实机范围见[G431验证页](../firmware/targets/BLDC_G431/VALIDATION.md)。
 只开放速度PI的kp/ki，不修改PI数学、
 电流环配置、功率包络或Motor公共生命周期；Wire布局以[Core Protocol V1](CORE_PROTOCOL_V1.md)为准。
 
@@ -62,7 +62,7 @@ Start 必须分开；当前没有可用恢复流程，需要复位后重新装�
 推断某个请求已完成。内部Fail-closed保持现有safe-off和下一实时边界合入故障的所有权，不改变
 HCC；普通外部坏帧不派生新的运动命令、自动Stop或故障恢复。
 该内部锁存来源使用Target fault bit7，详细首因由后续COMMUNICATION_STATUS提供；
-此来源已接入Run的内部关断与ARM模型，尚未完成新镜像实物验证，不表示Clear获得新的恢复能力。
+此来源已接入Run的内部关断与ARM模型，并有逻辑供电下的故障锁存证据，不表示Clear获得新的恢复能力。
 
 ### 其他剩余边界
 

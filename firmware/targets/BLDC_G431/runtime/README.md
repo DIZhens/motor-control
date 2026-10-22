@@ -1,9 +1,10 @@
 # G431 Runtime 入口
 
 `BLDC_G431_Run` 是日常开发的正式入口，装配公共 Motor / ControlRuntime、Platform 和
-原生静态FreeRTOS后台。当前迁移增量关闭旧UART/VOFA入口，新协议Server接入前不开放Host命令。
-USART1已以460800/8N1接入RX Circular DMA及单帧TX DMA；当前Communication仅有限排空输入，
-不解释协议、不回应业务请求。Validation裸机入口仍保持115200，不能与Run混用串口设置。
+原生静态FreeRTOS后台。正式Run关闭旧UART/VOFA入口，使用Core Protocol V1。
+USART1以460800/8N1接入RX Circular DMA及单帧TX DMA；Communication唯一持有Codec、
+Session/事务Server，提供对象读写及完整命令应答。Telemetry/Event发送与通信压力尚未验收。
+Validation裸机入口仍保持115200，不能与Run混用串口设置。
 既有实测基线执行固定硬件、空载条件下的有限启停与调速；上电始终关断，必须显式Start。
 独立电流精度、持续运行与故障恢复尚未完成；实测镜像、证据及限制统一见
 [Target 验证页](../VALIDATION.md)。
@@ -28,6 +29,7 @@ USART1已以460800/8N1接入RX Circular DMA及单帧TX DMA；当前Communication
 日志使用绝对路径。这些命令仅构建，不连接 ST-Link 或烧录：
 
 ```powershell
+.\.venv\Scripts\python.exe firmware/targets/BLDC_G431/runtime/tools/generate_build_identity.py --manifest "$env:TEMP\g431-build-identity.json"
 & 'D:\keil5\UV4\UV4.exe' -r 'firmware\targets\BLDC_G431\MDK-ARM\BLDC_control V1.uvprojx' -t BLDC_G431_Run -j0 -o "$env:TEMP\g431-run-build.log"
 & 'D:\keil5\UV4\UV4.exe' -r 'firmware\targets\BLDC_G431\MDK-ARM\BLDC_G431_Validation.uvprojx' -t BLDC_G431_Observe -j0 -o "$env:TEMP\g431-observe-build.log"
 ```
@@ -99,14 +101,16 @@ Run已装配[SystemRuntime交接](../../../app/system_runtime/README.md)：非�
 内部可信性丢失立即safe-off并撤销Session逻辑资格，下一ADC把bit7合入Motor；
 首因与计数单独保存，不改变Clear或现有有限保护。API边界见`target_runtime.h`。
 
-当前这些新增请求入口仅由ARM模型消费；已接入原生FreeRTOS、遥测Mailbox及UART DMA，
-尚无新协议Server。原VOFA装配只保留在验证入口与兼容模型中，不是Run的第二个后台所有者。
-模型和构建不改写既有HEX实物记录；新镜像的实物验收按后续阶段单独说明。
+当前请求由唯一Communication任务的Server使用，`target_core_server.c`完成对象快照映射、
+准确ticket交接及协议无关Fail-closed连接；不从后台修改PI实例。原VOFA装配只保留在验证
+入口与兼容模型中，不是Run的第二个后台所有者。新协议已完成逻辑供电下对象/事务验证，
+模型和构建不改写既有HEX运动记录，未授予新的带电或持续运行验收。
 
 ```powershell
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run --exchange
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_system_runtime.py
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_uart_dma.py
+.\.venv\Scripts\python.exe -X utf8 firmware/app/communication/tests/verify_core_server.py
 ```
 
 任务职责、栈预算、四个独立时间域及异常归属见[RTOS集成合同](RTOS_INTEGRATION.md)。
@@ -120,8 +124,19 @@ ARM模型使用模拟MMIO与字节复制替身，另以生产C库的真实串口
 `tests/uart_transport_loopback.c`仅供逻辑供电临时镜像：替代后台service执行原始回环、
 有限暂停读取及故意冻结TX。它不含Motor命令、不加入任一正式工程，也不新增长期Target；
 实测完成恢复正式Run，故障测试不能作为业务恢复入口。
-正式P4尚无TX调用者，链接器可裁剪未使用的发送/统计API；完整TX路径由临时回环镜像
-引用并实测，不为保留符号添加业务调用。Server接入后再由正常引用保留相应API。
+正式Server通过正常引用保留TX/统计API，不使用强制keep或测试请求作为业务入口。
+
+## 构建身份
+
+修改正式Run源码、配置或依赖头文件后，先运行上面的`generate_build_identity.py`，再从Keil
+Rebuild；它只在内容变化时更新`firmware_build_identity.h`，不使用编译时间。正式工程成员、
+配置及保守头文件依赖闭包按仓库相对路径和去BOM/LF内容排序计算SHA256，取前64 bit为
+DEVICE_INFO的build ID，排除生成头本身以避免递归。条件分支头也纳入保守闭包，编译器系统
+头不入摘要，工具链版本另记；`--manifest`保存完整来源摘要，短ID不替代HEX/AXF核验。
+
+`--check`只核对身份是否过期，用于冻结和烧录前检查；直接Keil构建不会替代生成步骤。
+源改变后遗漏该步骤会被检查拒绝，不能把旧ID附会为新源码已验证。Python依赖安装见
+[开发规则](../../../../DEVELOPMENT.md#44-本地验证依赖)。
 
 ## 实时频率与作用时刻
 
@@ -154,8 +169,8 @@ Platform 的 SSI / 母线实际采集为 1 kHz。Run 每个 100 µs fast tick �
   目标保持零、Id/Iq 无效。旧快照失效资格仍由 Runtime 判断，不交给协议编码器猜测。
 
 `MotorSnapshot.command_result` 是最近一次处理结果，不具有逐请求关联或可靠应答语义。
-后续自研协议需另外完成事务标识、排队/拒绝结果和实际执行结果的关联，不能把提交成功解释为
-已经启转。此处不提前建立协议框架或 RTOS 包装层。
+自研协议通过独立ticket Completion关联实际结果，不能从这个最近值推断某请求已经完成，
+也不能把提交成功解释为已经启转。事务属于Communication，不增加Motor或控制ISR的协议状态。
 
 ## FreeRTOS 的接入边界
 
@@ -168,8 +183,8 @@ RTOS只承接后台通信、遥测与维护；
 控制 ISR 不等待任务、队列或互斥锁，不调用内核 API。
 
 Run的TIM7提供HAL tick，SysTick/PendSV/SVC由原始Port独占，TIM6独立守卫不变；
-USART1尚未接入DMA或新协议。优先级、栈及静态RAM预算集中见RTOS集成合同，
-本轮真实启动、高水位与默认关断证据见Target验证页。后续串口压力和有限运行工作点需要
+USART1由DMA Adapter独占，协议事务在Communication任务。优先级、栈及静态RAM预算见
+RTOS集成合同，真实启动、请求负载高水位及默认关断证据见Target验证页。串口压力和有限运行工作点需
 分别补验，空闲启动结果与静态调用图不能证明最坏栈深度。
 
 ## Observe 反馈与校零配置
@@ -516,8 +531,8 @@ ADC 丢失、旧快照失效、低优先级代码被 ADC 抢占的交错，以�
 既有 UART、手转反馈、逻辑供电零偏及后台计算计时各有有限实测；软件/CORDIC 对照的
 各次执行身份和范围见验证页。20 / 10 / 1 kHz 下的合成输入计算与真实 HCC 提交计时，
 以及后来的正式 Run 正反向 UART 有限实测，是两类不同证据；前者不能替代后者，
-后者也不证明完整 WCET 或全部保护。当前控制基线收尾后，下一能力增量按
-自研 UART 协议编解码、UART 联调、FreeRTOS 后台集成推进；电流精度和性能保留独立验收。
+后者也不证明完整WCET或全部保护。新协议请求应答与FreeRTOS后台另有逻辑供电证据，
+Telemetry/Event、通信压力及新协议运动分别验收；电流精度和性能保留独立范围。
 各轮镜像与实测范围、既有台架证据仍从
 [VALIDATION.md](../VALIDATION.md) 进入，按具体修改影响选择复测。
 

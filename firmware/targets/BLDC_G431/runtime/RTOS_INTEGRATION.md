@@ -64,8 +64,9 @@ Task notification1、栈检查2、max priorities4。只链接实际使用的Kern
 
 栈按实际MAP调用链及FPU上下文预留，word为4字节。静态调用链已知部分为Bootstrap304 B、
 Communication224 B、Telemetry296 B、Idle40 B，仍有间接调用/汇编未知量及硬件异常压栈。
-当前Run静态RAM为18336/32768 B，包含4 KiB主栈、原512 B C库堆保留区及512 B RX/130 B TX；
-无动态分配调用或FreeRTOS heap实现。后续协议缓存/FIFO还需继续预算。
+当前Run静态RAM为20912/32768 B，包含4 KiB主栈、原512 B C库堆保留区、512 B RX/130 B TX
+及2576 B Server静态状态/工作区；无动态分配调用或FreeRTOS heap实现。后续Event/Mailbox
+发送元数据还需继续预算，不扩大冻结的协议容量。
 不能把静态占用当作栈安全证明；长期任务实测最小剩余栈必须≥初始25%，Bootstrap删除前记录自身数值。
 
 调度器前：HAL/TIM7 tick、时钟和生成硬件初始化、最早safe-off、创建静态Bootstrap、启动
@@ -76,10 +77,11 @@ Completion、装配Motor保持关断、启动Drive Timing/TIM6、绑定事件Sin
 静态资源失败进入协议无关Fail-closed，不尝试重启调度器或电机。
 
 ADC只形成Completion与1 kHz速度调参publication，不发Task notification或Queue。
-Communication保留1ms超时唤醒，待Server加入后排空Completion；当前消费遥测Mailbox并有限
-排空UART原始输入，不开放串口命令、不消费尚无事务所有者的Completion。Motor装配和任务
-句柄就绪后，Bootstrap最后执行Transport初始化、事件绑定及RX DMA启动，再自删除；
-Protocol/Session初始化后续加入。物理控制时间仍来自PWM/ADC，HAL/RTOS tick不参与FOC dt。
+Communication保留1ms超时唤醒，有界服务Server/Completion、RX及终态发送；当前Telemetry
+Mailbox仍仅记录消费序号，线上样本后续接入。Motor装配和任务句柄就绪后，Bootstrap初始化
+唯一Server，再执行Transport初始化、事件绑定及RX DMA启动，最后自删除。Parser、Session、
+事务、参数映射和响应缓存都在Communication上下文，无ISR协议工作。物理控制时间仍来自
+PWM/ADC，HAL/RTOS tick不参与FOC dt，后台1ms睡眠上限不是调度延迟/WCET证明。
 
 ## 字节流与后台边界
 

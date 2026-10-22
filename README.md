@@ -31,7 +31,7 @@ CAN 实物联调、Qt Host、位置环、标准 Modbus / CANopen 栈及 F405 同
 
 ## 实现与验证入口
 
-当前 G431 控制基线使用公共 Motor / ControlRuntime，已取得有限空载 UART 正反向启动、调速、显式 Stop 和独立 1.5 秒关断的实物证据。实测绑定固定板卡、电机、接线和镜像，不代表持续运行、全部保护或性能验收。独立电流精度、持久标定、故障恢复、自研协议与 FreeRTOS 尚未完成，具体证据和限制见 Target 验证页。
+当前G431控制基线使用公共Motor / ControlRuntime，已取得有限空载UART正反向启动、调速、显式Stop和独立1.5秒关断的实物证据；原生FreeRTOS、UART DMA、会话事务及Python客户端另有逻辑供电证据。实测绑定固定板卡、电机、接线和镜像，不代表持续运行、全部保护或性能验收。Telemetry/Event与通信压力、独立电流精度、持久标定及故障恢复仍未验收，具体范围见Target验证页。
 
 日常开发打开 `firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1.uvprojx`，唯一正式 Target 为 `BLDC_G431_Run`。观察、专项计时和旧台架另存于同目录 `BLDC_G431_Validation.uvprojx`，共享核心源码；它们不是不同的应用版本。F405 M0 保留独立实现与验证范围。
 

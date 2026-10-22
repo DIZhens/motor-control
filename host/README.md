@@ -1,6 +1,6 @@
 # host
 
-PC 调试工具资料与第一方离线编解码库。目前尚无连接设备的第一方协议客户端。
+PC调试工具资料、第一方协议编解码库及最小串口客户端/请求记录器。
 
 ## 控制基线：UART 与 VOFA
 
@@ -21,10 +21,14 @@ VOFA 程序的本机位置与默认关断入口的首次串口设置见 [vofa/RE
 [protocol/codec.py](protocol/codec.py)已提供纯标准库编解码：CRC、COBS、帧、分片解析、
 固定请求/响应、对象、遥测和事件，与 C 端共用[固定黄金向量](../interface/test_vectors/core_protocol_v1.json)。
 离线验证命令与 API 边界见[通信库说明](../firmware/app/communication/README.md)。
-当前没有串口依赖、会话管理、请求关联、重试或数据记录器；这些按后续增量接入。
+[protocol/client.py](protocol/client.py)已接入显式Session、请求关联、原身份重试及JSONL记录；
+串口CLI、操作边界与离线测试见[protocol/README.md](protocol/README.md)。连续遥测、事件和
+50/250/500Hz压力验收后续接入，当前不把请求记录器当成实时采集链。
 设备语义和线格式在 `interface/` 定义，主机不因重连自动重放运动命令。
 
-VOFA JustFloat 与自研协议分别有自己的线上格式，不能把两种未封装字节流直接混发。先保留现有 VOFA 兼容模式，自研协议通过最小客户端联调；如需继续用 VOFA 画图，由 PC 端适配遥测，具体转发方式与模式切换在实现时确认。两种模式不同时争用一个串口，当前没有该适配器或自研协议客户端实现。
+VOFA JustFloat与自研协议分别有自己的线上格式，不能直接混发。VOFA保留于独立验证构建，
+正式Run使用自研协议客户端；如需VOFA画图，后续由PC适配遥测。两种工具不同时占用串口，
+当前没有该转发适配器。
 
 ## 后续 Qt Host
 

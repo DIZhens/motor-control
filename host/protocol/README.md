@@ -1,0 +1,54 @@
+# Core Protocol 客户端
+
+正式G431 Run使用460800/8N1、自研COBS/CRC二进制协议；VOFA只用于独立验证构建。
+Wire合同见[Core Protocol V1](../../interface/CORE_PROTOCOL_V1.md)，实物范围见
+[G431验证页](../../firmware/targets/BLDC_G431/VALIDATION.md)。
+
+## 连接与命令
+
+先按[开发依赖](../../DEVELOPMENT.md#44-本地验证依赖)安装`.venv`。串口按板上实际PB6/TX、
+PB7/RX连接，与VOFA及其他串口工具互斥。以下命令从仓库根目录运行；`inspect`只读，
+连接时显式新建Session并读回Snapshot、Staged及Active，不恢复旧目标或运动请求。
+
+```powershell
+.\.venv\Scripts\python.exe -m host.protocol --port COM5 inspect
+.\.venv\Scripts\python.exe -m host.protocol --port COM5 read 0x0003
+.\.venv\Scripts\python.exe -m host.protocol --port COM5 --log "$env:TEMP\g431-session.jsonl" inspect
+```
+
+`write-pi <kp> <ki>`整组写Staged，`telemetry <0|1> <50|250|500>`整组写遥测配置；
+设备只在健康IDLE/OFF接受，重复请求不再次增加generation。配置对象已可读写，当前尚无
+线上Telemetry/Event发送；不能把默认enabled当成采集链已验收。
+
+`start <rpm>`、`speed <rpm>`、`clear`对应完整业务请求；`stop`使用唯一允许的无会话Stop。
+这些是显式操作入口，本轮仅在逻辑供电下验证Stop/Clear，没有新镜像运动验收。实际运动
+仍需满足原固定空载台架、供电和有限包络，不能直接照示例启动。协议OK、Motor结果及
+Snapshot状态分别判断；Motor ACCEPTED不代表已经RUN，Stop不承诺主动减速至零。
+
+## 重试与记录
+
+[client.py](client.py)由单一所有者同步使用，一次只处理一个普通请求。响应按message、
+Session、Sequence和subject关联，过滤旧会话响应。普通请求每次等待100ms，最多重发两次，
+重发完整相同字节及身份；IN_PROGRESS不是终态。总超时表示结果未知，撤销本地会话资格，
+后续须显式建立新会话，不自动重连或恢复旧Start。串口写失败/部分写入不自动补发。
+客户端把pyserial读取等待收紧至最多5ms、写等待收紧至请求timeout，避免默认无限等待；
+自定义流同样须提供有界read/write，100ms是Host等待策略，不是硬实时保证。
+无会话Stop的序号从随机非保留值开始后单调递增，避免不同客户端总从1开始撞完成缓存；
+它是最佳努力通信路径，不能代替独立守卫或物理断电。
+
+连接同一已知Session时保留本实例序号；重连优先使用默认新随机ID，不手工复用另一实例
+遗失的旧ID。设备复位后Session消失，主机不能把上一启动的缓存结果当成当前状态。
+
+`JsonlLogger`新建文件并拒绝覆盖，记录发送字节/重试次数、接收帧身份及关联的解码结果，
+时间为Host单调秒；无效浮点保存为null并保留有效位。当前是请求应答记录器，不是P6的
+连续采集/序号缺口统计验收。目录须预先存在，重复运行选择新日志文件名。
+
+## 离线验证
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 firmware/app/communication/tests/verify_core_server.py
+```
+
+同一测试在真实ARM Server/Codec、Runtime交接和参数模型上运行Python Client，覆盖应答丢失
+后的原身份重发、重连不恢复Start、旧响应过滤及JSONL。Transport和实时推进是替身，
+另行实物验证串口，不代表吞吐、运动或WCET通过。

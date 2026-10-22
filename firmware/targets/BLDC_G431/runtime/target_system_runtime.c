@@ -6,6 +6,7 @@
 #include "system_runtime.h"
 #include "byte_stream_transport.h"
 #include "uart_dma_transport.h"
+#include "target_core_server.h"
 
 uint32_t system_runtime_target_hal_tick(void) { return HAL_GetTick(); }
 
@@ -64,6 +65,7 @@ static void transport_event(void *context, uint32_t events, bool from_interrupt)
 
 bool system_runtime_target_start_transport(void)
 {
+    target_core_server_start();
     return byte_stream_init() == BYTE_STREAM_OK
         && byte_stream_bind_event_sink(transport_event, NULL) == BYTE_STREAM_OK
         && byte_stream_start_rx() == BYTE_STREAM_OK;
@@ -71,18 +73,7 @@ bool system_runtime_target_start_transport(void)
 
 void system_runtime_target_communication_service(void)
 {
-    uint8_t bytes[128];
-    size_t count;
-    uint32_t epoch, batch;
-    ByteStreamResult result;
-    /* P4接通收发器但尚无Server，有限排空输入，不解释为命令或发送任何应答。 */
-    for (batch = 0U; batch < 4U; ++batch) {
-        result = byte_stream_read(bytes, sizeof(bytes), &count, &epoch);
-        if (result == BYTE_STREAM_EMPTY || result == BYTE_STREAM_HARDWARE_ERROR) { break; }
-        if (result == BYTE_STREAM_DISCONTINUITY) { continue; }
-        if (result != BYTE_STREAM_OK) { target_runtime_fail_closed(RUNTIME_INTERNAL_TRANSPORT); break; }
-        if (count < sizeof(bytes)) { break; }
-    }
+    target_core_server_service();
 }
 
 void g431_uart_transport_fail(bool timeout)

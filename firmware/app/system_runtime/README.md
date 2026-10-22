@@ -15,8 +15,9 @@ assert或栈溢出直接调用Target的协议无关关断，不等待ADC或队�
 
 任务优先级为Bootstrap 3、Communication 2、Telemetry 1、Idle 0，栈分别为
 768/768/384/128个32位word。Telemetry按20/4/2ms周期读取已有publication，覆盖Mailbox；
-Communication等待通知或1ms超时。当前唯一持有UART DMA Transport并有限排空原始输入，
-尚不消费Completion、不解释Host命令或发送业务应答；事务Server后续接入同一任务。
+Communication等待通知或1ms超时，唯一持有UART DMA、Parser/Session/事务Server；有界读取
+字节、消费准确ticket Completion并发送终态Response。Telemetry Mailbox目前仍仅记录消费
+序号，线上Telemetry/Event发送后续接入；控制与实时状态所有权保持不变。
 高水位每秒保存，静态容量和离线模型都不代替实机任务栈余量或调度延迟验收。
 
 ## 请求与完成
@@ -38,7 +39,7 @@ Completion为深度4的静态SPSC：ADC唯一生产，后台唯一消费。slot�
 取消仅以ticket匹配原事务，不能依赖其其他字段。PRECONDITION_FAILED表示尚未交给Motor。
 
 这些槽不替代通信事务管理。Session、请求去重、同身份重发、响应FIFO及20ms完成等待上限
-由后续Communication Server持有；当前还没有这部分实现。
+由[Communication Server](../communication/README.md#事务server)持有，不进入ADC或Motor。
 
 ## 参数生命周期
 
@@ -47,7 +48,7 @@ Completion为深度4的静态SPSC：ADC唯一生产，后台唯一消费。slot�
 应用时检查无故障IDLE、功率关闭和Runtime OFF，不能把两拍启动准备当成可写空闲。
 
 G431 Default为0.001/0.004，Staged generation从1开始；每个新的合法写整组替换并自然u32加1。
-非法写不改值或修订。当前尚无协议去重，内部重新提交本身就是新的请求。
+非法写不改值或修订。协议层同身份重发复用旧结果，不再次提交；内部重新提交本身仍是新请求。
 Motor接受Start后，实时所有者在START_QUIET安装当时Staged增益到真正的速度PI实例，再锁存
 Active及generation。Default静态配置、其他控制参数和数值公式保持；仅ACCEPTED不表示已RUN。
 拒绝Start不改Active；Stop/Fault撤销in_use并保留最后值，generation=0也可能是合法回绕后的修订。
@@ -69,12 +70,12 @@ G431的`target_runtime_fail_closed`在短临界区经原HCC立即safe-off、锁�
 不等待ADC、不调用内核或动态分配；后续Start/Update/参数写被拒绝，Session逻辑资格立即失效。
 ADC下一边界把bit7合入Motor；先前的其他故障和Profile历史保留，Clear仍不恢复。
 队列满、身份/计数不变量损坏、静态装配/调度内部失败属于此路径；外部坏帧、串口断续或
-Telemetry覆盖不属于内部故障。真正的Session与事务清理由后续Server响应锁存状态完成。
+Telemetry覆盖不属于内部故障。Session与事务由后台Server响应锁存状态清理，不从ADC访问协议对象。
 
 ## 当前装配与验证
 
 只有正式G431 Run链接本模块。Run已移除旧VOFA/UART源码装配，使用460800/8N1的DMA字节流，
-新协议接管前不开放串口命令；
+只开放Core Protocol完整请求，不自动探测VOFA；
 旧邮箱兼容代码仍供隔离控制模型使用，不能建立第二个后台所有者。
 Validation工程保持裸机旧入口，不链接本目录或FreeRTOS。
 
@@ -84,10 +85,12 @@ Validation工程保持裸机旧入口，不链接本目录或FreeRTOS。
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run --exchange
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_system_runtime.py
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_uart_dma.py
+.\.venv\Scripts\python.exe -X utf8 firmware/app/communication/tests/verify_core_server.py
 ```
 
 模型通过正式Run装配执行请求、参数、完成FIFO、发布和Fail-closed，HCC/MMIO是替身；
 不代表电气安全、ISR WCET、调度延迟或新镜像实物通过。任务模型执行实际Kernel/Port及任务代码，
 但在异常切换/任务阻塞处替代硬件上下文切换。UART Adapter另有真实串口回环、覆盖恢复及
-故意冻结TX的超时实测，临时测试镜像不加入正式工程；新协议Server尚未接入。证据与构建入口见
+故意冻结TX的超时实测，临时测试镜像不加入正式工程。Server/Client另有真实ARM事务模型及
+逻辑供电实物请求应答，本轮不作新镜像运动验收。证据与构建入口见
 [G431验证页](../../targets/BLDC_G431/VALIDATION.md)。

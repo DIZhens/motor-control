@@ -768,6 +768,31 @@
               <FileType>1</FileType>
               <FilePath>../runtime/uart_dma_transport.c</FilePath>
             </File>
+            <File>
+              <FileName>target_core_server.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/target_core_server.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Application/User/Communication</GroupName>
+          <Files>
+            <File>
+              <FileName>core_protocol.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../../../app/communication/core_protocol.c</FilePath>
+            </File>
+            <File>
+              <FileName>core_protocol_values.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../../../app/communication/core_protocol_values.c</FilePath>
+            </File>
+            <File>
+              <FileName>core_server.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../../../app/communication/core_server.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

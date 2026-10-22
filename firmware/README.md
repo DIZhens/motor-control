@@ -19,7 +19,7 @@ Motor 内部有限静态定向核心及其尚未装配的执行边界见 [Motor 
 协议无关ticket/Completion、参数生命周期和观测发布的当前边界见
 [SystemRuntime说明](app/system_runtime/README.md)。
 
-自研UART协议按纯Codec、实时交接、RTOS启动、UART DMA及事务逐项集成。Run已接入原生静态FreeRTOS和460800/8N1 DMA字节流，事务Server尚未接入，当前仅排空原始输入、不开放旧VOFA或新协议命令；实机范围见Target验证页。调度与中断适配属于Target，编解码不依赖RTOS，FOC保持硬件同步执行。长期边界见[总体架构](../ARCHITECTURE.md)，唯一Wire Contract见[Core Protocol V1](../interface/CORE_PROTOCOL_V1.md)。
+自研UART协议按纯Codec、实时交接、RTOS启动、UART DMA及事务逐项集成。Run已接入原生静态FreeRTOS、460800/8N1 DMA和会话事务Server，七个对象及请求应答已完成逻辑供电联调；旧VOFA不进入正式Run。Telemetry/Event发送及通信压力后续接入，新协议镜像尚无运动验收。调度与中断适配属于Target，Codec/Server不依赖RTOS，FOC保持硬件同步执行。长期边界见[总体架构](../ARCHITECTURE.md)，唯一Wire Contract见[Core Protocol V1](../interface/CORE_PROTOCOL_V1.md)。
 
 控制基线使用 G431、一台电机和 MT6701 的 FOC 电流内环与速度外环，以 UART 对接现成 VOFA 工具。正式构建、验证工程及限制见 [G431 runtime](targets/BLDC_G431/runtime/README.md)。CAN 实物接入、位置环、标准 Modbus / CANopen 栈和 F405 同功能验收在后续范围。
 
