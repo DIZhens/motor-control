@@ -106,7 +106,7 @@ uint32_t target_runtime_completion_high_water(void);
 
 /* 一次装配，默认关断；Run仅经完整Start请求执行受控启动，不提供保护注入。 */
 void target_runtime_start(void);
-/* 主循环至多收/发一个 UART 字节、计算一个诊断算例，不等待外设。 */
+/* 裸机验证兼容入口：至多收/发一个UART字节或计算一个诊断算例；RTOS Run不调用。 */
 void target_runtime_service(void);
 /* 复用已配置的 TIM6_DAC IRQ，仅处理 TIM6 update。 */
 void target_runtime_guard_irq(void);

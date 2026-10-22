@@ -8,7 +8,9 @@
 #include "tim.h"
 #include "motor.h"
 #include "control_runtime.h"
+#if !defined(BLDC_G431_FREERTOS)
 #include "target_vofa.h"
+#endif
 #include "realtime_motor_io.h"
 #include "hardware_trip.h"
 #include "position_observation.h"
@@ -815,7 +817,9 @@ void target_runtime_start(void)
     runtime_parameters_init(&s_parameters, s_control_config.control.speed.kp_a_per_rpm,
         s_control_config.control.speed.ki_a_per_rpm_s);
 #endif
+#if !defined(BLDC_G431_FREERTOS)
     target_vofa_init();
+#endif
     realtime_motor_io_safe_off();
     /* 先建立快照所需的实例，即使后端装配失败也能发布明确FAULT。 */
     if (!control_runtime_init(&s_control_runtime, &s_motor, &s_control_config)
@@ -1090,7 +1094,9 @@ void target_runtime_service(void)
 #if defined(BLDC_G431_DIAGNOSTICS)
     s_compute_stop_this_service = false;
 #endif
+#if !defined(BLDC_G431_FREERTOS)
     target_vofa_service(HAL_GetTick());
+#endif
 #if defined(BLDC_G431_DIAGNOSTICS)
     if (!s_control_config.control.enabled) { service_compute_probe(); }
 #endif

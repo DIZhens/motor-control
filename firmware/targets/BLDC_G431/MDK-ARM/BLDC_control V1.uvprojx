@@ -334,9 +334,9 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>USE_HAL_DRIVER,STM32G431xx,BLDC_G431_RUNTIME_ENTRY,BLDC_G431_FINITE_RUN</Define>
+              <Define>USE_HAL_DRIVER,STM32G431xx,BLDC_G431_RUNTIME_ENTRY,BLDC_G431_FINITE_RUN,BLDC_G431_FREERTOS</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../runtime;../../../app/motor;../../../app/communication;../../../app/system_runtime;../../../../control</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../runtime;../../../app/motor;../../../app/communication;../../../app/system_runtime;../../../../control;..\..\..\third_party\FreeRTOS\Source\include;..\..\..\third_party\FreeRTOS\Source\portable\RVDS\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -464,6 +464,11 @@
               <FileName>dma.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Core\Src\dma.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32g4xx_hal_timebase_tim.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\stm32g4xx_hal_timebase_tim.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -754,14 +759,9 @@
               <FilePath>../runtime/cordic_math.c</FilePath>
             </File>
             <File>
-              <FileName>target_vofa.c</FileName>
+              <FileName>target_system_runtime.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../runtime/target_vofa.c</FilePath>
-            </File>
-            <File>
-              <FileName>target_uart.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../runtime/target_uart.c</FilePath>
+              <FilePath>..\runtime\target_system_runtime.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -777,6 +777,11 @@
               <FileName>runtime_parameters.c</FileName>
               <FileType>1</FileType>
               <FilePath>../../../app/system_runtime/runtime_parameters.c</FilePath>
+            </File>
+            <File>
+              <FileName>system_runtime.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\app\system_runtime\system_runtime.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -972,17 +977,27 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Communication</GroupName>
+          <GroupName>Middlewares/FreeRTOS</GroupName>
           <Files>
             <File>
-              <FileName>vofa.c</FileName>
+              <FileName>tasks.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../app/communication/vofa.c</FilePath>
+              <FilePath>..\..\..\third_party\FreeRTOS\Source\tasks.c</FilePath>
             </File>
             <File>
-              <FileName>motor_vofa.c</FileName>
+              <FileName>queue.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../app/communication/motor_vofa.c</FilePath>
+              <FilePath>..\..\..\third_party\FreeRTOS\Source\queue.c</FilePath>
+            </File>
+            <File>
+              <FileName>list.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\third_party\FreeRTOS\Source\list.c</FilePath>
+            </File>
+            <File>
+              <FileName>port.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\third_party\FreeRTOS\Source\portable\RVDS\ARM_CM4F\port.c</FilePath>
             </File>
           </Files>
         </Group>

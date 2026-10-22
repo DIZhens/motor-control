@@ -11,7 +11,7 @@ G431 的正式工程只有 `BLDC_G431_Run`，装配公共 Motor / ControlRuntime
 | `platform_contract/` | 实时电流/驱动、位置、母线、ControlTime 和可选 Hardware Trip 的能力合同 | 逐个 Target 核对实现、失败语义与物理验收 |
 | `targets/BLDC_G431/` | 正式 Run 装配、Platform、独立验证工程与工具 | [G431 验证结果与剩余门槛](targets/BLDC_G431/VALIDATION.md) |
 | `targets/ODRIVE_V36_405_M0/` | Platform 与功率关闭观测入口 | [F405 M0 说明](targets/ODRIVE_V36_405_M0/README.md)；不属于当前 V1 同功能验收 |
-| `app/` | Motor 生命周期、受门控实时控制链、VOFA 编解码和快照映射 | 模型与实物分别验收，故障恢复尚未实现 |
+| `app/` | Motor生命周期、实时控制链、协议编解码、后台交接与静态任务 | 模型与实物分别验收，故障恢复尚未实现 |
 
 公共应用使用 HCC，不直接依赖某一 Target 的 HAL、调试邮箱或保护注入命令。
 两板验证结果互不替代；模型、静态检查、目标编译和实物验证分别记录。
@@ -19,7 +19,7 @@ Motor 内部有限静态定向核心及其尚未装配的执行边界见 [Motor 
 协议无关ticket/Completion、参数生命周期和观测发布的当前边界见
 [SystemRuntime说明](app/system_runtime/README.md)。
 
-展示目标还包含自研 UART 协议与 FreeRTOS 后台任务；两者尚未接入，按合同、纯Codec、实时交接、RTOS启动、UART DMA及事务逐项集成。调度与中断适配属于Target，编解码不依赖RTOS，FOC保持硬件同步执行。长期边界见[总体架构](../ARCHITECTURE.md)，唯一Wire Contract见[Core Protocol V1](../interface/CORE_PROTOCOL_V1.md)。
+自研UART协议按纯Codec、实时交接、RTOS启动、UART DMA及事务逐项集成。Run已接入原生静态FreeRTOS启动，当前不开放旧VOFA或新协议命令；DMA和事务Server尚未接入，实机范围见Target验证页。调度与中断适配属于Target，编解码不依赖RTOS，FOC保持硬件同步执行。长期边界见[总体架构](../ARCHITECTURE.md)，唯一Wire Contract见[Core Protocol V1](../interface/CORE_PROTOCOL_V1.md)。
 
 控制基线使用 G431、一台电机和 MT6701 的 FOC 电流内环与速度外环，以 UART 对接现成 VOFA 工具。正式构建、验证工程及限制见 [G431 runtime](targets/BLDC_G431/runtime/README.md)。CAN 实物接入、位置环、标准 Modbus / CANopen 栈和 F405 同功能验收在后续范围。
 
@@ -31,6 +31,7 @@ firmware/
 │   ├── motor/
 │   ├── communication/
 │   └── system_runtime/
+├── third_party/    原样供应源码及来源清单
 ├── platform_contract/
 └── targets/
 ```

@@ -8,9 +8,13 @@
 extern void SPI1_IRQHandler(void);
 extern void DMA1_Channel1_IRQHandler(void);
 extern void TIM6_DAC_IRQHandler(void);
+extern void TIM7_IRQHandler(void);
 static void (* volatile s_core_spi_vector)(void) = SPI1_IRQHandler;
 static void (* volatile s_core_dma_vector)(void) = DMA1_Channel1_IRQHandler;
 static void (* volatile s_core_guard_vector)(void) = TIM6_DAC_IRQHandler;
+static void (* volatile s_core_hal_tick_vector)(void) = TIM7_IRQHandler;
+TIM_HandleTypeDef htim7;
+volatile uint32_t model_core_tim7_hal_calls;
 
 volatile uint32_t model_core_hal_calls;
 volatile uint32_t model_core_hal_source;
@@ -31,6 +35,8 @@ void HAL_TIM_IRQHandler(TIM_HandleTypeDef *htim)
     (void)s_core_spi_vector;
     (void)s_core_dma_vector;
     (void)s_core_guard_vector;
+    (void)s_core_hal_tick_vector;
+    if (htim == &htim7) { model_core_tim7_hal_calls++; return; }
     if (htim == &htim6) {
         model_core_tim6_hal_calls++;
         return;

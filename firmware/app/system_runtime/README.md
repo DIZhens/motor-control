@@ -1,7 +1,23 @@
 # SystemRuntime
 
-本目录保存协议无关的后台到实时边界交接及参数值生命周期。它不解析字节、拥有Session，
-也不执行FOC或调用HAL/FreeRTOS。具体Target组合这些模块与Motor、ControlRuntime和保护入口。
+本目录保存协议无关的后台到实时边界交接、参数值生命周期及原生RTOS任务装配。
+它不解析字节、拥有Session或执行FOC。`runtime_exchange`、`runtime_parameters`保持纯C，
+不依赖HAL/FreeRTOS；`system_runtime`单独依赖native API，由具体Target选择链接。
+
+## 后台任务与启动
+
+`system_runtime_start`只由Run的main调用。先由Target核对调度器前HAL tick，再静态创建
+最高优先级Bootstrap并启动调度器。Bootstrap阻塞2个Kernel tick以核对调度后HAL与Kernel
+两个时基，创建单槽Queue Mailbox及Communication/Telemetry任务，然后通过链接期
+`system_runtime_target.h`完成板级Motor装配；此时长期任务优先级较低，尚不能处理业务。
+Bootstrap记录自身高水位后自删除，Idle内存由静态Hook提供。启动失败、调度器返回、
+assert或栈溢出直接调用Target的协议无关关断，不等待ADC或队列，不自动重启。
+
+任务优先级为Bootstrap 3、Communication 2、Telemetry 1、Idle 0，栈分别为
+768/768/384/128个32位word。Telemetry按20/4/2ms周期读取已有publication，覆盖Mailbox；
+Communication等待通知或1ms超时。当前只验证任务及最新值交接，Communication暂不消费
+Completion、不开放Host命令或发送UART；DMA Transport与事务Server接入后由它唯一持有。
+高水位每秒保存，静态容量和离线模型都不代替实机任务栈余量或调度延迟验收。
 
 ## 请求与完成
 
@@ -57,17 +73,18 @@ Telemetry覆盖不属于内部故障。真正的Session与事务清理由后续S
 
 ## 当前装配与验证
 
-只有正式G431 Run链接本模块。过渡期间保留旧VOFA邮箱，新增API不能用于建立第二个后台所有者；
-两路Stop在同一ADC边界排序。后续自研协议正式接管串口时移除旧VOFA装配。
-Validation工程保持裸机旧入口、不链接本模块或FreeRTOS。
+只有正式G431 Run链接本模块。Run已移除旧VOFA/UART源码装配，新协议接管前不开放串口命令；
+旧邮箱兼容代码仍供隔离控制模型使用，不能建立第二个后台所有者。
+Validation工程保持裸机旧入口，不链接本目录或FreeRTOS。
 
 仓库根目录运行真实ARM模型：
 
 ```powershell
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run --exchange
+.\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_system_runtime.py
 ```
 
 模型通过正式Run装配执行请求、参数、完成FIFO、发布和Fail-closed，HCC/MMIO是替身；
-不代表电气安全、ISR WCET、调度延迟或新镜像实物通过。当前串口仍是旧VOFA，
-新协议Server、UART DMA和FreeRTOS尚未接入。证据与构建入口见
+不代表电气安全、ISR WCET、调度延迟或新镜像实物通过。任务模型执行实际Kernel/Port及任务代码，
+但在异常切换/任务阻塞处替代硬件上下文切换；新协议Server和UART DMA尚未接入。证据与构建入口见
 [G431验证页](../../targets/BLDC_G431/VALIDATION.md)。

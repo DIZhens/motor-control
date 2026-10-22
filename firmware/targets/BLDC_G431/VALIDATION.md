@@ -3,8 +3,11 @@
 当前交付是固定 G431 板、2804 电机及 MT6701 原接线下的有限空载 FOC 控制基线。
 正式工程 `MDK-ARM/BLDC_control V1.uvprojx` 只保留 `BLDC_G431_Run`；观察、计时和旧台架
 位于 `MDK-ARM/BLDC_G431_Validation.uvprojx`，共享核心源码。构建、模块职责和资源归属见
-[runtime/README.md](runtime/README.md)，现有 UART / VOFA 操作见
+[runtime/README.md](runtime/README.md)，历史控制基线的UART / VOFA操作见
 [Host 说明](../../../host/vofa/README.md#有限-run-操作)。
+
+当前Run已进入原生FreeRTOS后台迁移，关闭旧VOFA装配；UART DMA和新协议Server尚未接入，
+因此当前镜像不开放Host命令。旧实物启停记录继续绑定各自HEX，不改写为本轮运动验收。
 
 `validation/` 台架经 HCC 使用 Platform，不是正式 Motor / ControlRuntime。
 旧功率包与保护注入要求电机三相断开；有限开环仅按[专用流程](validation/OPEN_LOOP.md)接电机。
@@ -21,14 +24,42 @@
 | 命令交接与一致性观测 | Run / Observe 模型，正式 UART 实物记录 | 单普通请求槽、Stop 优先；最近结果不是逐请求可靠应答 |
 | 保护与时序 | 原 Platform 保护实测、故障模型、独立守卫和正式 Run 停机读回 | 正式 Run 故障注入、2 圈触界及完整 ISR WCET 尚无实物验收 |
 | 性能与长期能力 | 既有台架速度曲线和电阻量级交叉检查 | 原 15 rpm 峰值初筛失败保留；持续运行、带载、独立电流精度、持久标定和故障恢复未完成 |
-| 自研协议编解码 | [协议合同](../../../interface/CORE_PROTOCOL_V1.md)、[P1 离线证据](validation/evidence/protocol/p1.json)；真实 ARM C 与 Python、30 个黄金帧对照 | 独立库，尚未接入 Run；会话事务、UART DMA 和 FreeRTOS 后续实现，离线库通过不等于实物通过 |
-| 内部命令与参数交接 | [P2构建和ARM证据](validation/evidence/protocol/p2.json)；ticket、Stop取消、Completion4、PI Staged/Active、1kHz观测和内部关断 | Run内部接口及模型已接入；尚无线上参数入口、会话去重或RTOS；新镜像尚未烧录，旧实物证据不改写 |
+| 自研协议编解码 | [协议合同](../../../interface/CORE_PROTOCOL_V1.md)、[P1 离线证据](validation/evidence/protocol/p1.json)；真实 ARM C 与 Python、30 个黄金帧对照 | 独立库，尚未接入Run；会话事务、UART DMA后续实现，离线库通过不等于实物通过 |
+| 内部命令与参数交接 | [P2构建和ARM证据](validation/evidence/protocol/p2.json)；ticket、Stop取消、Completion4、PI Staged/Active、1kHz观测和内部关断 | 尚无线上参数入口或会话去重；P2为离线交接验收，本轮启动检查不代替带电命令验收 |
+| FreeRTOS启动与时间域 | [P3构建、模型和实物证据](validation/evidence/protocol/p3.json)；TIM7 HAL、SysTick Kernel、静态任务/Mailbox、唯一异常入口、默认关断 | 纯逻辑供电IDLE；尚无UART DMA/协议负载、运动下调度压力或WCET证明 |
 
 以上两次正式 Run 实物记录属于 HEX
 `0e73f54e03ceaa9b21f3ae7cfc305c1ca50ecc9577613cc47f974d54fd2eee76`。
 源码整理或新构建不会把旧证据改写成新镜像已实测。未受影响的功能证据继续保留；
 受影响的命令交接、后台通信与实时路径分别用针对性检查确认，不重跑无关底层波形。
 本页后续保留各轮测量条件、失败首因与镜像，读者不必依赖未分发的本地日志判断上述边界。
+
+## 原生FreeRTOS：纯逻辑启动与静态任务通过
+
+Run手工集成STM32Cube FW_G4 V1.6.3的Kernel V10.3.1和RVDS/ARM_CM4F Port，供应源码未改。
+CubeMX只生成TIM7硬件时基及异常配置。四个原生Target均零错误、零警告；Run静态RAM为
+17400 / 32768 B，Validation保持裸机，Run不链接旧VOFA、CMSIS-RTOS或动态分配实现。
+11组任务ARM模型、19组交接、12组有限Run和46组Observe模型通过；Core IRQ三种入口
+11/12/12项通过。任务模型替代异常切换边界，因此实物启动另行核对。
+
+操作者确认OUTPUT关闭、先退压再仅由ST-Link提供逻辑3V3，原三相和编码器保留，无电池或
+外部注入。安装后原生校验及独立HOTPLUG读回53252 B匹配，HEX为
+`59b227d4995736cae7220bb73656c572b9c77fb264524a772a169b34cedc8b48`。
+调度器前HAL tick为4，Bootstrap读到HAL=6、Kernel=2后完成装配、自删除；之后任务数为3，
+Communication/Telemetry均在延时表，当前任务为Idle。两次读取之间HAL、Kernel和ControlTime
+持续推进，实际TIM7为1kHz，TIM6保留169/49分频配置及原守卫，NVIC与集成合同一致。
+
+| 任务 | 初始栈word | 本轮最小剩余word |
+| --- | --- | --- |
+| Bootstrap | 768 | 690（删除前） |
+| Communication | 768 | 723 |
+| Telemetry | 384 | 299 |
+| Idle | 128 | 109 |
+
+Motor保持IDLE、接受启动0次，六路LOW/MOE=0，guard和内部故障均为0，未发送运动命令。
+[P3证据](validation/evidence/protocol/p3.json)包含读回值、时基差值、任务与异常归属及镜像摘要。
+本轮只证明无通信负载的启动和后台交接；尚未验证UART DMA/协议压力、运动时的调度延迟、
+最坏栈或WCET，不替代旧控制镜像的带电功能证据。
 
 ## 收尾构建：正式入口隔离与有限复测通过
 

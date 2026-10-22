@@ -118,11 +118,13 @@ assert hot_groups <= {group.findtext("GroupName") for group in observe.findall("
 runtime_group = next(group for group in observe.findall("./Groups/Group")
                      if group.findtext("GroupName") == "Application/User/Runtime")
 runtime_sources = {member.findtext("FileName") for member in runtime_group.findall("./Files/File")}
-assert {"target_runtime.c", "target_vofa.c", "target_uart.c", "cordic_math.c"} <= runtime_sources
 if OPTIONS.finite_run:
-    assert runtime_sources == {"target_runtime.c", "target_vofa.c", "target_uart.c", "cordic_math.c"}
+    assert runtime_sources == {"target_runtime.c", "target_system_runtime.c", "cordic_math.c"}
+    assert 'BLDC_G431_FREERTOS' in defines
     assert not {"Application/User/Validation", "Application/User/Timing"} & {
         group.findtext("GroupName") for group in observe.findall("./Groups/Group")}
+else:
+    assert {"target_runtime.c", "target_vofa.c", "target_uart.c", "cordic_math.c"} <= runtime_sources
 passed(target_name + "入口/产物独立，仅对Runtime、Motor和Control三个组采用速度优化")
 
 
@@ -145,6 +147,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
         include_paths += [REPOSITORY / 'firmware/app/system_runtime']
     command = [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3", "-Otime",
                "--split_sections", "-g", "-DSTM32G431xx", "-DBLDC_G431_RUNTIME_ENTRY"]
+    # 本模型隔离控制边界并保留旧VOFA兼容试具，不模拟调度器；RTOS集成另验。
     if OPTIONS.finite_run:
         command.append('-DBLDC_G431_FINITE_RUN')
     else:
