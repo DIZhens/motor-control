@@ -46,6 +46,8 @@ typedef struct {
     float duty_c; /* C 相归一化平均 duty，[0, 1]。 */
     bool voltage_limited; /* 本拍电压请求经过二维圆限幅。 */
     bool integral_limited; /* 本拍至少一轴积分候选达到配置上限。 */
+    bool d_integral_limited; /* 仅复制现有d轴限幅判据，不改变计算。 */
+    bool q_integral_limited; /* 仅复制现有q轴限幅判据，不改变计算。 */
     bool valid; /* 调用方只允许使用有效结果；不代表功率许可。 */
 } CurrentControllerOutput;
 

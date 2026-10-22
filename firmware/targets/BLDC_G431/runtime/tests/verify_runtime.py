@@ -2,6 +2,8 @@
 
 from pathlib import Path
 import argparse
+import hashlib
+import json
 import math
 import os
 import struct
@@ -42,11 +44,26 @@ STAGE_NOT_READY, STAGE_ABORTED, STAGE_BUSY, STAGE_CLOCK = range(1, 5)
 CASES = []
 PARSER = argparse.ArgumentParser(description=__doc__)
 PARSER.add_argument('--finite-run', action='store_true', help='同一正式Target装配的有限运行验证')
+PARSER.add_argument('--exchange', action='store_true', help='仅验证Run的新ticket/参数/观测/Fail-closed交接')
+PARSER.add_argument('--report', type=Path, help='可选保存本次ARM模型来源与结果')
 OPTIONS = PARSER.parse_args()
+if OPTIONS.exchange and not OPTIONS.finite_run:
+    PARSER.error('--exchange必须与--finite-run一起使用')
 
 
 def passed(name: str) -> None:
     CASES.append(name)
+
+
+def save_report(sources):
+    if OPTIONS.report:
+        paths = sources + ([TESTS / 'runtime_exchange_cases.py'] if OPTIONS.exchange else [])
+        OPTIONS.report.parent.mkdir(parents=True, exist_ok=True)
+        OPTIONS.report.write_text(json.dumps(dict(
+            target='BLDC_G431_Run' if OPTIONS.finite_run else 'BLDC_G431_Observe',
+            exchange=OPTIONS.exchange, status='PASS', groups=CASES, hardware_access=False,
+            source_sha256={p.relative_to(REPOSITORY).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                           for p in paths}), ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
 
 def run_checked(arguments: list[str], directory: Path) -> None:
@@ -101,11 +118,13 @@ assert hot_groups <= {group.findtext("GroupName") for group in observe.findall("
 runtime_group = next(group for group in observe.findall("./Groups/Group")
                      if group.findtext("GroupName") == "Application/User/Runtime")
 runtime_sources = {member.findtext("FileName") for member in runtime_group.findall("./Files/File")}
-assert {"target_runtime.c", "target_vofa.c", "target_uart.c", "cordic_math.c"} <= runtime_sources
 if OPTIONS.finite_run:
-    assert runtime_sources == {"target_runtime.c", "target_vofa.c", "target_uart.c", "cordic_math.c"}
+    assert runtime_sources == {"target_runtime.c", "target_system_runtime.c", "cordic_math.c", "uart_dma_transport.c", "target_core_server.c"}
+    assert 'BLDC_G431_FREERTOS' in defines
     assert not {"Application/User/Validation", "Application/User/Timing"} & {
         group.findtext("GroupName") for group in observe.findall("./Groups/Group")}
+else:
+    assert {"target_runtime.c", "target_vofa.c", "target_uart.c", "cordic_math.c"} <= runtime_sources
 passed(target_name + "入口/产物独立，仅对Runtime、Motor和Control三个组采用速度优化")
 
 
@@ -124,8 +143,11 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                      REPOSITORY / "firmware/platform_contract",
                      TARGET / "Drivers/CMSIS/Device/ST/STM32G4xx/Include",
                      TARGET / "Drivers/CMSIS/Include"]
+    if OPTIONS.finite_run:
+        include_paths += [REPOSITORY / 'firmware/app/system_runtime']
     command = [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3", "-Otime",
                "--split_sections", "-g", "-DSTM32G431xx", "-DBLDC_G431_RUNTIME_ENTRY"]
+    # 本模型隔离控制边界并保留旧VOFA兼容试具，不模拟调度器；RTOS集成另验。
     if OPTIONS.finite_run:
         command.append('-DBLDC_G431_FINITE_RUN')
     else:
@@ -145,7 +167,10 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                    REPOSITORY / "control/speed_controller.c",
                    REPOSITORY / "firmware/app/communication/motor_vofa.c",
                    REPOSITORY / "firmware/app/communication/vofa.c"]
-    if not OPTIONS.finite_run:
+    if OPTIONS.finite_run:
+        sources += [REPOSITORY / 'firmware/app/system_runtime/runtime_exchange.c',
+                    REPOSITORY / 'firmware/app/system_runtime/runtime_parameters.c', TESTS / 'exchange_model.c']
+    else:
         sources += [TARGET / "runtime" / name for name in ["current_capture.c", "compute_probe.c",
                     "compute_comparison.c", "irq_timing.c", "controller_profile.c", "stage_budget.c",
                     "stage_budget_runtime.c"]]
@@ -157,6 +182,7 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     run_checked(
         [str(COMPILER / "armlink.exe"), "--cpu=Cortex-M4.fp", "--scatter", str(scatter),
          "--entry=model_start", "--keep=model.o(*)", "--keep=handoff_model.o(*)",
+         *( ["--keep=exchange_model.o(*)"] if OPTIONS.finite_run else [] ),
          "-o", str(executable), *objects],
         temporary,
     )
@@ -584,8 +610,12 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
             return self.frame()
 
     if OPTIONS.finite_run:
-        from finite_run_cases import verify
+        if OPTIONS.exchange:
+            from runtime_exchange_cases import verify
+        else:
+            from finite_run_cases import verify
         verify(Model, symbols, passed)
+        save_report(sources)
         print(f'PASS: {len(CASES)} ARM finite-Run Target cases; fake HCC/UART, no electrical or WCET proof.')
         raise SystemExit(0)
 
@@ -1532,5 +1562,6 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     passed("100us入口明确拒绝旧compute/stage诊断并冻结NOT_READY，不执行stage或enable")
 
     print(f"PASS: {len(CASES)} 组 Observe Runtime ARM 集成模型；实际100us采样配置，HCC/MMIO为替身")
+    save_report(sources)
     for name in CASES:
         print("  " + name)

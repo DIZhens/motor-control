@@ -7,7 +7,7 @@ from verify_platform import (Model, ROOT, compile_image, CR1, SR, CNT, DIER, CR2
                              DWT_CYCCNT, DIR, GATE)
 
 
-def run(image, runtime=False):
+def run(image, runtime=False, rtos=False):
     cases = 0
     for entry in ["platform_model_core_up", "platform_model_core_break"]:
         for break_flag in [0, 1 << 7, 1 << 8]:
@@ -79,7 +79,21 @@ def run(image, runtime=False):
         assert not any(name.startswith(("g_target_runtime_compute", "g_target_runtime_irq_entries",
             "g_target_irq_timing", "g431_irq_timing")) for name in m.symbols)
         cases += 1
-    label = "Run" if runtime else "Validation"
+    m = Model(image)
+    m.call('TIM7_IRQHandler')
+    assert m.word('model_core_tim7_hal_calls') == int(rtos)
+    assert m.word('model_control_time') == 0 and not m.moe()
+    cases += 1
+    if rtos:
+        assert not {'SVC_Handler', 'PendSV_Handler', 'SysTick_Handler'} & m.symbols.keys()
+    for entry,counter in [('DMA1_Channel2_IRQHandler','model_core_uart_rx_calls'),
+                          ('DMA1_Channel3_IRQHandler','model_core_uart_tx_calls'),
+                          ('USART1_IRQHandler','model_core_uart_calls')]:
+        m=Model(image);m.call(entry)
+        assert m.word(counter)==int(rtos) and m.word('model_core_unexpected_irqs')==0
+        assert m.word('model_control_time')==0 and not m.moe()
+        cases+=1
+    label = 'Run RTOS Core' if rtos else ("Run兼容试具" if runtime else "Validation")
     print(f"G431 real Core IRQ ownership ({label}): {cases} cases PASS")
     print("Core/Platform ARM code with faithful UPDATE/BREAK HAL subset; no board, NVIC latency or electrical proof.")
 
@@ -92,3 +106,8 @@ if __name__ == "__main__":
         run(compile_image(Path(temporary), [ROOT / "Core/Src/stm32g4xx_it.c",
             Path(__file__).with_name("core_irq_model.c")], ["PLATFORM_MODEL_CORE_IRQ",
             "BLDC_G431_RUNTIME_ENTRY", "BLDC_G431_FINITE_RUN"]), runtime=True)
+    with tempfile.TemporaryDirectory(prefix="g431-rtos-core-irq-") as temporary:
+        run(compile_image(Path(temporary), [ROOT / "Core/Src/stm32g4xx_it.c",
+            Path(__file__).with_name("core_irq_model.c")], ["PLATFORM_MODEL_CORE_IRQ",
+            "BLDC_G431_RUNTIME_ENTRY", "BLDC_G431_FINITE_RUN", "BLDC_G431_FREERTOS"]),
+            runtime=True, rtos=True)

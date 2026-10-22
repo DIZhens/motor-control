@@ -516,6 +516,21 @@ bool control_runtime_step(ControlRuntime *runtime, ControlTime now,
         || (previous_dq_valid != runtime->current_dq.valid) || previous_phase != runtime->phase;
 }
 
+bool control_runtime_install_start_speed_pi(ControlRuntime *runtime, float kp, float ki)
+{
+    SpeedController next;
+    SpeedControllerConfig config;
+    if (runtime == NULL || runtime->motor == NULL || !runtime->config.control.enabled
+        || runtime->phase != CONTROL_RUNTIME_START_QUIET
+        || runtime->motor->state != MOTOR_STATE_IDLE || runtime->motor->faults != 0U
+        || runtime->motor->command_result != MOTOR_COMMAND_RESULT_ACCEPTED) { return false; }
+    config = runtime->config.control.speed;
+    config.kp_a_per_rpm = kp; config.ki_a_per_rpm_s = ki;
+    if (!speed_controller_init(&next, &config)) { return false; }
+    runtime->speed_controller = next;
+    return true;
+}
+
 void control_runtime_snapshot(const ControlRuntime *runtime, ControlTime now,
     bool has_sample, MotorSnapshot *snapshot)
 {

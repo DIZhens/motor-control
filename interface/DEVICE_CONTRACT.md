@@ -1,6 +1,6 @@
 # Device Contract
 
-本文件定义公共 Motor 与受门控 ControlRuntime 的设备语义。控制链及跨拍启停已实现，具体装配决定是否具备运行许可；G431 Observe 关闭控制配置，仍拒绝启动。Run 使用本板有限空载配置，已完成正式 UART 正反启停、调速及独立时限关断，其参数、实物依据及限制见 [Runtime 入口](../firmware/targets/BLDC_G431/runtime/README.md)。独立电流精度标定、持续运行和故障恢复尚未完成。公共业务 API 见 `firmware/app/motor/motor.h`，UART 表示见 [VOFA 协议](VOFA_PROTOCOL.md)。
+本文件定义公共 Motor 与受门控 ControlRuntime 的设备语义。控制链及跨拍启停已实现，具体装配决定是否具备运行许可；G431 Observe 关闭控制配置，仍拒绝启动。Run 使用本板有限空载配置，各版本的实物证据、镜像和限制从[Runtime入口](../firmware/targets/BLDC_G431/runtime/README.md)进入，不把历史镜像记录外推为当前镜像已实测。独立电流精度标定、持续运行和故障恢复尚未完成。公共业务 API 见 `firmware/app/motor/motor.h`，正式UART线格式见[Core Protocol V1](CORE_PROTOCOL_V1.md)，[VOFA协议](VOFA_PROTOCOL.md)保留验证构建的表示。
 
 ## 生命周期与请求
 
@@ -45,4 +45,25 @@ Start 必须分开；当前没有可用恢复流程，需要复位后重新装�
 
 ## 后续补齐边界
 
-G431 Run 承接原板相序、电流符号、编码器方向/极对数/偏置的有限台架证据；正式 Motor / UART 已完成正反启停、调速及独立时长边界，2圈边界、正式RUN故障注入及长期稳定性仍需分别验收。独立电流幅值精度、持久标定及故障恢复另行补齐，数值模型不替代实物条件。参数只开放真实调试需要的最小集合，不预建对象字典或多协议框架。
+### 本阶段速度调参合同
+
+以下最小参数生命周期通过正式Run的同一实时交接实现；线上及实机范围见[G431验证页](../firmware/targets/BLDC_G431/VALIDATION.md)。
+只开放速度PI的kp/ki，不修改PI数学、
+电流环配置、功率包络或Motor公共生命周期；Wire布局以[Core Protocol V1](CORE_PROTOCOL_V1.md)为准。
+
+- Default固定0.001/0.004；复位Staged取Default、generation1，Active取Default、generation0且不在使用。
+- 只在无故障、功率关闭且Runtime OFF的健康IDLE，整组写Staged；kp范围0.0005..0.005、ki为0..0.02，均有限。
+- 每次新的合法写generation按u32加1，协议重复请求不产生新修订；它不是跨复位唯一身份。
+- 合法Start被接受时由实时所有者复制当时Staged到Active并标记使用；拒绝Start不改变Active。
+- Stop/Fault保留最后Active及generation，但标记不在使用；Communication不能直接写PI实例或积分。
+- 不提供RUN在线修改、Flash持久化或故障自动恢复。500 Hz遥测配置只作IDLE压力，不能启动运动。
+
+内部ticket/Completion、协议结果、Motor业务结果及RUN状态分别表示，不能用最近一次命令结果
+推断某个请求已完成。内部Fail-closed保持现有safe-off和下一实时边界合入故障的所有权，不改变
+HCC；普通外部坏帧不派生新的运动命令、自动Stop或故障恢复。
+该内部锁存来源使用Target fault bit7，详细首因由后续COMMUNICATION_STATUS提供；
+此来源已接入Run的内部关断与ARM模型，并有逻辑供电下的故障锁存证据，不表示Clear获得新的恢复能力。
+
+### 其他剩余边界
+
+G431 Run 承接原板相序、电流符号、编码器方向/极对数/偏置的有限台架证据。不同协议与调度镜像的启停、调速及独立时限实测范围见[G431验证页](../firmware/targets/BLDC_G431/VALIDATION.md)；2圈边界、正式RUN故障注入及长期稳定性仍需分别验收。独立电流幅值精度、持久标定及故障恢复另行补齐，数值模型不替代实物条件。参数只开放真实调试需要的最小集合，不预建对象字典或多协议框架。

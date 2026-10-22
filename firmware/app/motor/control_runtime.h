@@ -114,6 +114,11 @@ bool control_runtime_step(ControlRuntime *runtime, ControlTime now,
     const PhaseCurrentObservation *current, bool power_disabled,
     uint32_t fault_evidence, const MotorCommand *command, bool has_command);
 
+/* 仅实时所有者在本拍Start ACCEPTED/START_QUIET后调用，启用前整组安装速度增益。
+ * 不改Default静态配置、限幅或Motor状态；拒绝/失败不改实例，不能用于RUN在线调参。
+ */
+bool control_runtime_install_start_speed_pi(ControlRuntime *runtime, float kp, float ki);
+
 /* 仅由同一实时所有者构造快照；后台读取 Target 发布的副本。 */
 void control_runtime_snapshot(const ControlRuntime *runtime, ControlTime now,
     bool has_sample, MotorSnapshot *snapshot);

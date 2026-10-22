@@ -205,6 +205,17 @@ with tempfile.TemporaryDirectory(prefix="current-controller-") as directory:
     close(model.values[1], -0.4)
     passed("零误差产生中性占空比；Park 正方向、两轴比例电压与单位一致")
 
+    for direct, quadrature, flags in [(1., 0., [1, 0]), (0., 1., [0, 1]), (1., 1., [1, 1])]:
+        model = Model([0., 0., 1000., 1000., 0., .01, 3., .45, .002])
+        inputs = list(DEFAULT_INPUT); inputs[5:7] = [direct, quadrature]
+        assert model.update(inputs)
+        model.check_reference([0., 0.])
+        assert model.read('model_axis_limited', '2I') == flags
+        assert bool(model.status[3]) == any(flags)
+        assert not model.update(inputs, [0, 1, 1, 1])
+        assert model.read('model_axis_limited', '2I') == [0, 0]
+    passed('新增d/q独立积分限幅标志对应原判据，数值与合并标志不变，失效时两位撤销')
+
     model = Model()
     for index in range(120):
         history = model.values[9:]

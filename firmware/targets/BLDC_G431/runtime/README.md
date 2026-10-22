@@ -1,7 +1,15 @@
 # G431 Runtime 入口
 
 `BLDC_G431_Run` 是日常开发的正式入口，装配公共 Motor / ControlRuntime、Platform 和
-UART / VOFA，执行固定硬件、空载条件下的有限启停与调速。上电始终关断，必须显式 Start。
+原生静态FreeRTOS后台。正式Run关闭旧UART/VOFA入口，使用Core Protocol V1。
+USART1以460800/8N1接入RX Circular DMA及单帧TX DMA；Communication唯一持有Codec、
+Session/事务Server，提供对象读写、完整命令应答及Telemetry/Event。无功率50/250Hz遥测与
+每秒状态请求通过，按250Hz完成本阶段通信验收；500Hz损失1.92%仍未通过原<1%门槛，
+作为容量边界保留，详见Target验证页。
+同一协议/RTOS镜像已完成一次固定空载`+60→+40 rpm→无会话Stop`，重复同身份Start只执行
+一次；457帧遥测连续、225帧RUN全有效，状态Event及停机独立读回通过。范围与镜像见验证页。
+Validation裸机入口仍保持115200，不能与Run混用串口设置。
+既有实测基线执行固定硬件、空载条件下的有限启停与调速；上电始终关断，必须显式Start。
 独立电流精度、持续运行与故障恢复尚未完成；实测镜像、证据及限制统一见
 [Target 验证页](../VALIDATION.md)。
 
@@ -16,7 +24,7 @@ UART / VOFA，执行固定硬件、空载条件下的有限启停与调速。上
 
 | 工程 | Keil Target | 入口与用途 | 输出 |
 | --- | --- | --- | --- |
-| 主工程 | `BLDC_G431_Run` | `target_runtime.c`，正式有限控制装配 | `build/run/` |
+| 主工程 | `BLDC_G431_Run` | `system_runtime` Bootstrap调用`target_runtime.c`，正式有限控制装配 | `build/run/` |
 | 验证工程 | `BLDC_G431_Observe` | 相同 Runtime，关闭控制并编入专用诊断 | `build/observe/` |
 | 验证工程 | `BLDC_G431_Timing` | `timing_entry.c` / `runtime_timing.c`，无功率计时 | `build/timing/` |
 | 验证工程 | `BLDC_control V1` | `validation/target_validation.c`，保留旧台架 ABI | `BLDC_control V1/` |
@@ -25,6 +33,7 @@ UART / VOFA，执行固定硬件、空载条件下的有限启停与调速。上
 日志使用绝对路径。这些命令仅构建，不连接 ST-Link 或烧录：
 
 ```powershell
+.\.venv\Scripts\python.exe firmware/targets/BLDC_G431/runtime/tools/generate_build_identity.py --manifest "$env:TEMP\g431-build-identity.json"
 & 'D:\keil5\UV4\UV4.exe' -r 'firmware\targets\BLDC_G431\MDK-ARM\BLDC_control V1.uvprojx' -t BLDC_G431_Run -j0 -o "$env:TEMP\g431-run-build.log"
 & 'D:\keil5\UV4\UV4.exe' -r 'firmware\targets\BLDC_G431\MDK-ARM\BLDC_G431_Validation.uvprojx' -t BLDC_G431_Observe -j0 -o "$env:TEMP\g431-observe-build.log"
 ```
@@ -37,7 +46,7 @@ ARMCC `-O3 -Otime`，其余组保留原继承配置。按速度优化使短数�
 相关 ARM 模型显式使用 `-Otime`；模型、历史计时和当前镜像的实测分别判定。
 
 Observe / Run 用 `BLDC_G431_RUNTIME_ENTRY` 选择同一 Core 装配入口；Run 再定义
-`BLDC_G431_FINITE_RUN`，Observe 用 `BLDC_G431_DIAGNOSTICS` 编入实验钩子，并保留
+`BLDC_G431_FINITE_RUN`及`BLDC_G431_FREERTOS`，Observe用`BLDC_G431_DIAGNOSTICS`编入实验钩子，并保留
 `BLDC_G431_OBSERVE_ENTRY` 兼容标记。Run 不编入专项诊断邮箱或中断测量钩子。
 Timing 使用 `BLDC_G431_TIMING_ENTRY`。`main()` 和 IRQ 的 USER CODE 选择互斥入口。
 两份工程共用 CubeMX 配置、Platform、Motor 和控制算法源，不复制实现或同时绑定两个 consumer。
@@ -55,13 +64,14 @@ B/C 电流在本启动零偏校正后取反、重构 A 相。静态记录的约 
 | 异步观测 | SSI / 母线实际采集 1 kHz；每个 fast tick 读取完整缓存，仅新时间戳更新估计 |
 | 启动校零 | 健康 IDLE、MOE 关闭、编码器静止连续 100 拍，再采 4096 点；无外部电流注入 |
 | 速度目标 | 绝对值不超过 80 rpm；估计运动排歧上限 300 rpm |
-| 速度 PI | Kp=0.001，Ki=0.004，Iq 限幅 ±0.10 名义 A，Id=0 |
+| 速度 PI | 默认Kp=0.001、Ki=0.004；内部健康IDLE可整组暂存，Start锁存Active；Iq限幅±0.10名义A、Id=0 |
 | 电压 / 母线 | 调制利用系数为 1.8/14，母线允许 10..14 V；电压矢量请求不超过 1.8 V |
 | 软件相电流撤销 | 任一校正相绝对值超过 0.65 名义 A |
 | 独立有限时长 | 从 Start 被接受起最多 1.5 秒，调速不会续期；TIM6 先 safe-off，再交接 Stop |
 | 净位移 | 接受 Start 后按新编码器观测解绕累加；绝对值达到 2 圈立即关断并锁存 bit 6 |
 
-上电不自动启转，串口仍为 115200 / 8N1。`start:60\n`、`speed:40\n` 和 `stop\n`
+既有VOFA实测基线串口为115200 / 8N1，当前Run已移除这条装配，以下命令仅解释历史证据。
+`start:60\n`、`speed:40\n`和`stop\n`
 分别走真实 Motor 请求和实时边界，表中的 `\n` 表示实际 LF。启动仍跨两拍提交中性 duty，
 成功使能才进入 RUN；有效 Id/Iq 来自相同正式控制反馈。运行不执行 Observe 的隔离计算、
 提交预算或电流诊断窗口，后台只处理 UART 和一致性遥测。未重新定义 VOFA 通道。
@@ -87,6 +97,51 @@ VOFA连接、Run单次命令、校零失败后的现场复位及Observe区别见
 .venv\Scripts\python.exe -B -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py
 ```
 
+## 内部事务交接与参数
+
+Run已装配[SystemRuntime交接](../../../app/system_runtime/README.md)：非零ticket、独立Stop槽、
+深度4静态Completion、参数写的ADC权威结果及Staged/Active生命周期。后台不能直接修改PI实例。
+速度调参publication只复制已有状态，RUN按真实速度更新边界发布；观测读取不推进样本序号。
+内部可信性丢失立即safe-off并撤销Session逻辑资格，下一ADC把bit7合入Motor；
+首因与计数单独保存，不改变Clear或现有有限保护。API边界见`target_runtime.h`。
+
+当前请求由唯一Communication任务的Server使用，`target_core_server.c`完成对象快照映射、
+准确ticket交接及协议无关Fail-closed连接；不从后台修改PI实例。原VOFA装配只保留在验证
+入口与兼容模型中，不是Run的第二个后台所有者。新协议已完成对象/事务、名义通信及一次
+固定空载正向启停调速，仍按各自HEX保存证据；持续运行、带载和完整保护尚未验收。
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run --exchange
+.\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_system_runtime.py
+.\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_uart_dma.py
+.\.venv\Scripts\python.exe -X utf8 firmware/app/communication/tests/verify_core_server.py
+```
+
+任务职责、栈预算、四个独立时间域及异常归属见[RTOS集成合同](RTOS_INTEGRATION.md)。
+任务模型替代异常上下文切换边界，不等同于真实调度器、实机栈余量或中断延迟通过。
+
+`uart_dma_transport.c`独占USART1及DMA1通道2/3，事件只唤醒Communication。接收按DMA
+位置与边界旗标核对进度，不能按通知次数推导字节；连续性断开时返回0字节及新epoch。
+发送最多130 B、内部复制且单帧在途，DMA TC后须等待USART TC；10ms超时或内部不变量
+失败锁存关断。具体时序界限见[字节流边界](RTOS_INTEGRATION.md#字节流与后台边界)。
+ARM模型使用模拟MMIO与字节复制替身，另以生产C库的真实串口回环核对复制结果。
+`tests/uart_transport_loopback.c`仅供逻辑供电临时镜像：替代后台service执行原始回环、
+有限暂停读取及故意冻结TX。它不含Motor命令、不加入任一正式工程，也不新增长期Target；
+实测完成恢复正式Run，故障测试不能作为业务恢复入口。
+正式Server通过正常引用保留TX/统计API，不使用强制keep或测试请求作为业务入口。
+
+## 构建身份
+
+修改正式Run源码、配置或依赖头文件后，先运行上面的`generate_build_identity.py`，再从Keil
+Rebuild；它只在内容变化时更新`firmware_build_identity.h`，不使用编译时间。正式工程成员、
+配置及保守头文件依赖闭包按仓库相对路径和去BOM/LF内容排序计算SHA256，取前64 bit为
+DEVICE_INFO的build ID，排除生成头本身以避免递归。条件分支头也纳入保守闭包，编译器系统
+头不入摘要，工具链版本另记；`--manifest`保存完整来源摘要，短ID不替代HEX/AXF核验。
+
+`--check`只核对身份是否过期，用于冻结和烧录前检查；直接Keil构建不会替代生成步骤。
+源改变后遗漏该步骤会被检查拒绝，不能把旧ID附会为新源码已验证。Python依赖安装见
+[开发规则](../../../../DEVELOPMENT.md#44-本地验证依赖)。
+
 ## 实时频率与作用时刻
 
 TIM1 载波保持 20 kHz；RCR=3 使三相 preload 每100 µs在指定谷底同时生效。
@@ -108,38 +163,33 @@ Platform 的 SSI / 母线实际采集为 1 kHz。Run 每个 100 µs fast tick �
   Stop 优先于普通排队请求，并丢弃更早的待处理命令。
 - TIM6 每 50 µs 检查独立 DWT 时钟和采样心跳；间隔超过 125 µs 锁存故障并 safe-off。
   最迟在后续一次 TIM6 检查发现；它不是完整 ISR WCET 或未来带载控制截止证明。
-- `target_vofa.c` 拥有后台接收行、片段超时、VOFA 命令映射与遥测发送缓存；通过协议无关的
+- 裸机Observe及既有实测基线的`target_vofa.c`拥有接收行、片段超时、命令映射与遥测发送缓存；通过协议无关的
   完整 `MotorCommand` 提交和一致性 `MotorSnapshot` 读取与实时装配交接。
   `target_uart.c` 封装 USART1 寄存器轮询及硬件错误，不解释 Motor 语义。
   后台每次至多收、发各一字节，44 字节帧发送完毕前不被新快照覆盖；UART 不进入 ADC 回调。
-- 实时侧 publication 保存协议无关的 `MotorSnapshot`；后台经 `motor_vofa` 映射到
+- 实时侧publication保存协议无关的`MotorSnapshot`；裸机后台经`motor_vofa`映射到
   原十通道格式。publication 按 100 Hz 或命令/故障/反馈有效性变化生成，后台约 100 Hz
   编码。Run 可发布活动目标、控制时间、母线、机械速度和有效的名义 Id/Iq；Observe 的
   目标保持零、Id/Iq 无效。旧快照失效资格仍由 Runtime 判断，不交给协议编码器猜测。
 
 `MotorSnapshot.command_result` 是最近一次处理结果，不具有逐请求关联或可靠应答语义。
-后续自研协议需另外完成事务标识、排队/拒绝结果和实际执行结果的关联，不能把提交成功解释为
-已经启转。此处不提前建立协议框架或 RTOS 包装层。
+自研协议通过独立ticket Completion关联实际结果，不能从这个最近值推断某请求已经完成，
+也不能把提交成功解释为已经启转。事务属于Communication，不增加Motor或控制ISR的协议状态。
 
-## 后续 FreeRTOS 的接入边界
+## FreeRTOS 的接入边界
 
-当前为裸机后台轮询，尚无 RTOS 内核或任务。后续只迁移后台通信、遥测与维护；
+本阶段已固定[RTOS集成合同](RTOS_INTEGRATION.md)及[Core Protocol V1](../../../../interface/CORE_PROTOCOL_V1.md)，
+按纯Codec、实时交接、RTOS启动、UART DMA、事务和压力逐项接通。
+
+当前Run已使用静态Bootstrap、Communication、Telemetry和Idle；Validation保持裸机轮询。
+RTOS只承接后台通信、遥测与维护；
 电流环、速度环仍在硬件同步 ADC 边界执行，保持 Motor / ControlRuntime 单写者，不改成独立任务。
 控制 ISR 不等待任务、队列或互斥锁，不调用内核 API。
 
-| 资源 | 当前所有者与后续约束 |
-| --- | --- |
-| TIM1 / ADC | 20 kHz PWM、10 kHz 电流采样与控制，速度环整数分频至 1 kHz |
-| TIM6 | 独立 nominal 50 µs 关断守卫；不得在移植时直接改作 HAL / 内核时基 |
-| SPI1 IRQ | MT6701 异步位置采集；向实时消费者发布完整观测，不写控制状态 |
-| USART1 | 当前后台字节轮询；协议阶段再实现有界接收/发送缓冲与 DMA 适配 |
-| SysTick / SVC / PendSV | 当前 Core / HAL 处理；集成内核时明确唯一 handler、HAL tick 和内核 tick 归属 |
-| 中断优先级 | 集成时核对控制抢占关系及使用内核通知的通信 IRQ 约束，不仅复制示例配置 |
-| RAM / 栈 | 收尾构建 Run 的 RW+ZI 为 8144 / 32768 B，已含 4 KiB 主栈及既有堆；任务栈尚未分配 |
-
-上表来自诊断隔离后的同次 MAP；旧实测 Run 的 RW+ZI 为 24328 B。腾出的空间尚未分配给
-FreeRTOS，任务栈、内核堆、通信缓冲和嵌套中断栈必须共同预算。
-构建占用与静态调用图都不能证明最坏栈深度。
+Run的TIM7提供HAL tick，SysTick/PendSV/SVC由原始Port独占，TIM6独立守卫不变；
+USART1由DMA Adapter独占，协议事务在Communication任务。优先级、栈及静态RAM预算见
+RTOS集成合同，真实启动、请求负载高水位及默认关断证据见Target验证页。串口压力和有限运行工作点需
+分别补验，空闲启动结果与静态调用图不能证明最坏栈深度。
 
 ## Observe 反馈与校零配置
 
@@ -485,8 +535,8 @@ ADC 丢失、旧快照失效、低优先级代码被 ADC 抢占的交错，以�
 既有 UART、手转反馈、逻辑供电零偏及后台计算计时各有有限实测；软件/CORDIC 对照的
 各次执行身份和范围见验证页。20 / 10 / 1 kHz 下的合成输入计算与真实 HCC 提交计时，
 以及后来的正式 Run 正反向 UART 有限实测，是两类不同证据；前者不能替代后者，
-后者也不证明完整 WCET 或全部保护。当前控制基线收尾后，下一能力增量按
-自研 UART 协议编解码、UART 联调、FreeRTOS 后台集成推进；电流精度和性能保留独立验收。
+后者也不证明完整WCET或全部保护。新协议请求应答、FreeRTOS后台、50/250Hz通信及一次
+协议下有限运动已有独立证据；500Hz原门槛仍FAIL，电流精度和性能保留独立范围。
 各轮镜像与实测范围、既有台架证据仍从
 [VALIDATION.md](../VALIDATION.md) 进入，按具体修改影响选择复测。
 

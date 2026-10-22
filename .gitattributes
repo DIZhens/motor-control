@@ -1,3 +1,5 @@
 # Keep Keil project options stable across Windows Git checkouts.
 *.uvprojx text eol=lf
 *.uvoptx text eol=lf
+# 供应源码按原始字节保留，避免换行转换破坏来源哈希。
+firmware/third_party/FreeRTOS/Source/** -text -whitespace

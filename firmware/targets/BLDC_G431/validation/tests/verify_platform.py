@@ -69,6 +69,8 @@ def compile_image(directory, extra_sources=(), definitions=()):
         command += ["-I", str((ROOT / "MDK-ARM" / include.replace("\\", "/")).resolve())]
     command += ["-D" + item for item in settings.findtext("Define").split(",")]
     command += ["-D" + item for item in definitions]
+    if 'BLDC_G431_FINITE_RUN' in definitions:
+        command += ['-I', str(ROOT.parents[1] / 'app/system_runtime')]
     objects = []
     # Compile the production translation unit unchanged; no stage/enable substitutes.
     for source in [ROOT / "validation/tests/platform_model.c", ROOT / "platform/realtime_motor_io.c", *extra_sources]:

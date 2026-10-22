@@ -3,8 +3,14 @@
 当前交付是固定 G431 板、2804 电机及 MT6701 原接线下的有限空载 FOC 控制基线。
 正式工程 `MDK-ARM/BLDC_control V1.uvprojx` 只保留 `BLDC_G431_Run`；观察、计时和旧台架
 位于 `MDK-ARM/BLDC_G431_Validation.uvprojx`，共享核心源码。构建、模块职责和资源归属见
-[runtime/README.md](runtime/README.md)，现有 UART / VOFA 操作见
+[runtime/README.md](runtime/README.md)，历史控制基线的UART / VOFA操作见
 [Host 说明](../../../host/vofa/README.md#有限-run-操作)。
+
+当前Run已接入原生FreeRTOS、460800/8N1 UART DMA及Core Protocol事务Server，关闭旧VOFA装配；
+对象、请求应答及50/250Hz遥测已有逻辑供电证据；本阶段按250Hz完成通信验收。
+500Hz仍未达原门槛，作为容量边界保留。修正前的协议＋FreeRTOS镜像已有一次正向有限启停
+调速及两条状态变化Event证据；当前Stop/栈修正版完成无功率UART联调，不重做带电P7。
+故障Event及复杂竞态仍限于模型。旧实物记录继续绑定各自HEX。
 
 `validation/` 台架经 HCC 使用 Platform，不是正式 Motor / ControlRuntime。
 旧功率包与保护注入要求电机三相断开；有限开环仅按[专用流程](validation/OPEN_LOOP.md)接电机。
@@ -21,13 +27,259 @@
 | 命令交接与一致性观测 | Run / Observe 模型，正式 UART 实物记录 | 单普通请求槽、Stop 优先；最近结果不是逐请求可靠应答 |
 | 保护与时序 | 原 Platform 保护实测、故障模型、独立守卫和正式 Run 停机读回 | 正式 Run 故障注入、2 圈触界及完整 ISR WCET 尚无实物验收 |
 | 性能与长期能力 | 既有台架速度曲线和电阻量级交叉检查 | 原 15 rpm 峰值初筛失败保留；持续运行、带载、独立电流精度、持久标定和故障恢复未完成 |
-| 自研协议 / FreeRTOS | 既有模块边界及[协议草案](../../../interface/PROTOCOL_DESIGN.md) | 尚未接入；后续按纯编解码、UART 联调、后台任务集成推进，CAN 实物再后续 |
+| 自研协议编解码 | [协议合同](../../../interface/CORE_PROTOCOL_V1.md)、[P1 离线证据](validation/evidence/protocol/p1.json)；真实 ARM C 与 Python、30 个黄金帧对照，已接入Run | 离线库验证与后续实物证据分开归属 |
+| 内部命令与参数交接 | [P2构建和ARM证据](validation/evidence/protocol/p2.json)、[P7有限实测](validation/evidence/protocol/p7.json)；ticket、Stop取消、Completion4、PI Staged/Active | Stop取消/内部破坏等竞态主要由模型覆盖；P7只证明本轮有限请求生命周期 |
+| FreeRTOS启动与时间域 | [P3启动证据](validation/evidence/protocol/p3.json)、[P7有限实测](validation/evidence/protocol/p7.json)；TIM7 HAL、SysTick Kernel、静态任务/Mailbox、默认关断 | 已覆盖名义通信与一次有限运动，不能替代WCET或最坏调度证明 |
+| UART DMA字节流 | [P4构建、模型和实物证据](validation/evidence/protocol/p4.json)；512 B RX、130 B单帧TX、460800回环、覆盖/帧错误恢复、冻结TX关断 | 字节流证据不代替Server/事务、50/250/500 Hz协议压力或运动负载 |
+| Session/事务/线上对象 | [P5构建、模型和实物证据](validation/evidence/protocol/p5.json)；七对象、参数去重/原结果重放、Stop/Clear、Python客户端/JSONL | 纯逻辑供电；本轮未发送Start/Update，无Telemetry/Event或协议压力验收 |
+| Telemetry/Event/通信压力 | [P6初测](validation/evidence/protocol/p6.json)、[TX优化及验收调整](validation/evidence/protocol/p6-tx.json)；50Hz×10s及250Hz×30s零缺帧，按250Hz完成本阶段通信验收 | 500Hz×10s缺96/5001帧，与96次覆盖一致，1.92%仍未通过原<1%门槛；本轮无运动，Event变化仅模型验证 |
+| 自研协议＋FreeRTOS有限闭环 | [P7实物证据](validation/evidence/protocol/p7.json)、[457帧观测](validation/evidence/protocol/p7-samples.csv)；同身份重复Start只启动一次，+60→+40 rpm→无会话Stop，225帧RUN全有效、零缺帧 | 固定空载正向单次；两条状态Event通过，故障注入、反向和独立时限触发未在本镜像复测，不作性能验收 |
+| 最终工程与资源核对 | [P8本地收尾证据](validation/evidence/protocol/p8.json)、[Stop/栈修正](validation/evidence/protocol/stop-stack.json)；四个Target原生Rebuild零错误零警告，Run/Validation隔离，新镜像无功率重复Stop通过 | 新源码身份与旧P7分开；按修正范围不重做带电P7；推送、PR和合并未执行，原500Hz失败保持 |
 
-以上两次正式 Run 实物记录属于 HEX
+表中旧UART正向及反向两次正式 Run 实物记录属于 HEX
 `0e73f54e03ceaa9b21f3ae7cfc305c1ca50ecc9577613cc47f974d54fd2eee76`。
 源码整理或新构建不会把旧证据改写成新镜像已实测。未受影响的功能证据继续保留；
 受影响的命令交接、后台通信与实时路径分别用针对性检查确认，不重跑无关底层波形。
 本页后续保留各轮测量条件、失败首因与镜像，读者不必依赖未分发的本地日志判断上述边界。
+
+## Sessionless Stop及栈未测量值修正
+
+sessionless Stop仅在途去重，不查写完成缓存，终态后完全相同的帧可以再次提交；BUSY拒绝
+也不缓存。非0 Session的普通请求及Stop继续按原Session/Sequence/完整内容去重与重放。
+Session、水位、单Stop槽及全部COBS/CRC/Header/Payload检查保持，未扩大Header或对象布局。
+四个栈字段初始化为0xFFFFFFFF，测量后原样更新；通信状态映射保留真实0，不把它改为未知值。
+
+P1/P2/P3/P5真实ARM模型分别12/19/15/34组通过，覆盖无会话Stop在途一次提交、完成后
+相同帧再次完成、不改变当前Session，以及尚无Session、BUSY后重试和普通会话Stop缓存。
+栈模型证明初始未知值、测量返回0及实际Target对象映射；没有在实物上故意耗尽任务栈。
+四个Keil Target再次Rebuild均零错误零警告，三个验证Target的HEX与前次一致。
+
+正式Run新build ID为`0xac7c5cfe4d3d6ed3`，HEX为
+`9491e86beef0770a1c93d91ca83b9d0954e12d03b8bb360c41234439fe15f4a7`，
+Flash装载66648 B、静态RAM21184 B；最终205项输入仅Server代码/头、SystemRuntime初始化和
+Target通信状态映射4项变化，Motor/ControlRuntime/HCC/Platform/DMA及RTOS配置均未改变。
+
+操作者确认OUTPUT关闭、退压后ST-Link独立逻辑3V3及串口条件。烧录与前后独立Flash读回
+66648 B匹配；两次相同session0/Sequence/完整字节Stop均返回ACCEPTED，Motor调用0→2，
+当前Session不变，后续普通请求有效，无自动重试。接受启动0，末态IDLE、目标0、六路LOW/
+MOE0，guard/内部/时序首因0。初次关断快照记录后台三项栈尚未测量为0xFFFFFFFF；后续最小
+剩余栈690/440/271/109 word已测量且超过25%。本轮没有Start/Update/Clear或带电P7。
+
+[修正证据](validation/evidence/protocol/stop-stack.json)与[P8](validation/evidence/protocol/p8.json)
+保存新源码身份、模型及UART读回；旧50/250/500Hz压力和P7继续绑定修正前HEX。
+500Hz的1.92%失败记录未改写，也未将旧运动记录当作新镜像重新实测。
+
+## 修正前的构建与隔离核对
+
+正式Run及独立验证工程的三个Target均完成原生Rebuild，全部零错误、零警告。
+本轮只核对构建、链接、资源及说明，没有修改固件源码、连接设备、烧录、复位或发送运动命令。
+
+| Target | Flash装载字节 | 静态RAM字节 | 入口 |
+| --- | ---: | ---: | --- |
+| BLDC_G431_Run | 66628 | 21192 | Core Protocol＋静态FreeRTOS＋UART DMA |
+| BLDC_G431_Observe | 79260 | 26480 | 裸机观察／VOFA |
+| BLDC_G431_Timing | 48080 | 9616 | 裸机专项计时 |
+| BLDC_control V1 | 57256 | 19488 | 裸机旧台架 |
+
+链接产物核对三个系统异常向量与唯一强符号：Run来自原始Port，Validation来自裸机Core；
+Run未链接旧VOFA、CMSIS包装、动态分配或临时诊断符号，Validation未链接Kernel/Port/新Server。
+供应源码24文件逐一匹配来源哈希。直接调用图及显式绑定的sample/trip回调没有可达内核API；
+未知间接调用、异常压栈和完整WCET仍不由静态调用图证明。
+
+Run的HEX与P7一致，build ID仍为`0xfd763adb40fa8964`，可装载AXF区及MAP也相同；
+AXF整体哈希变化仅在非装载`.comment`区，旧AXF与新AXF分别保留，不覆盖P7身份。
+已通过的Codec 12组、Server/Client 28组、任务14组、交接19组及DMA 11组按记录的来源哈希
+匹配后复用，没有将其写成P8重新执行；物理证据继续按P4/P5/P6/P7各自镜像归属。
+本镜像压力窗口最小剩余栈690/438/254/109 word，P7运动为690/464/271/109，均超过25%。
+
+[P8证据](validation/evidence/protocol/p8.json)汇总P0–P7、四份最终产物、资源与边界。
+P6按250Hz完成已确认的阶段范围，500Hz原门槛仍FAIL；本次只完成本地收尾，PR和合并尚未执行。
+两份用户Keil本地设置保持未提交；Validation工程仅有调试器DLL差异，构建配置及成员与HEAD一致。
+
+## 自研协议＋FreeRTOS：单次有限闭环通过
+
+沿用P6 TX优化后的已安装镜像，未改固件、未重新烧录。操作者确认12.0 V/0.20 A、ST-Link
+3V3断开且SWD/GND保留，原三相与编码器、固定空载、无外部注入，RST后静止、VOFA断开。
+前检4096点校零READY、IDLE/OFF、六路LOW/MOE0且无故障，软件母线约12.009 V；
+独立Flash在前后均读回66628 B匹配，build ID为`0xfd763adb40fa8964`，HEX为
+`ec3a17d9c2ebc45b4c6c0e8d7f446c00318cf460e0063b51ec1e853a08b54890`。
+
+新Session读回设备及状态，整组PI写0.001/0.004使Staged generation从1增至2，遥测250Hz。
+仅发一次新身份Start +60 rpm，并立即背靠背重复完全相同的帧与sequence；约0.400秒改
++40 rpm，约0.900秒发送session_id=0的Stop。四条原始命令终态均按身份/subject核对，
+两条Start终态内容一致；无自动重发、Clear、第二次新身份Start或反向。
+MCU accepted_starts仅0→1，Motor调用计数0→3，恰为Start/Update/Stop。
+
+完整记录457帧遥测，线上序号1..457连续，含配置切换前5帧及新generation的452帧；
+225帧RUN全部valid_flags=0x3ff，目标60/40 rpm分别100/125帧，均引用Active generation 2。
+两条STATE_CHANGED为IDLE→RUN、RUN→IDLE，独立事件序号1/2连续；无FAULT_LATCHED。
+通信错误/覆盖/事件丢弃与Host解析错误均0，终态无重发。这里只验收通信、参数及有限运行
+的集成；速度峰值约70.57 rpm，不作为性能调参或跟踪指标通过的依据。
+
+Stop后IDLE、目标0、Runtime OFF、六路LOW/MOE0、guard/内部/Motor/时序首因均0，
+TIM6原时基保持；Active generation为2且不在使用，电角标定配置及冻结零偏前后逐字节/值
+一致。最小剩余栈690/464/271/109 word均超过25%，操作者反馈“无异常”。
+[P7证据](validation/evidence/protocol/p7.json)保存身份、请求/终态、前后读回和范围，
+[观测CSV](validation/evidence/protocol/p7-samples.csv)使用MCU控制时间，不以Host到达时间代替。
+本轮没有验证持续带载、故障恢复、故障Event、2圈触界、独立时限触发或完整ISR WCET。
+
+## TX优化：250Hz通信验收通过，500Hz保留容量边界
+
+在原队列、波特率及控制参数下，仅调整Communication发送路径：复用既有130 B编码工作区，
+BUSY且Mailbox产生身份未变时不重复编码；样本覆盖、响应或Event改写工作区后立即失效。
+没有第二个待发样本槽。请求与Completion仍先处理，发送尝试之后再观察最佳努力Event；
+已排队终态和Event的发送优先级不变，新观察的Event在下次service参与选择。
+
+临时无功率诊断镜像的64项有界DWT记录区分了首个瓶颈：剔除前两项后，原逐帧编码耗时
+中位数92.29 µs，USART TC软件处理标记到下一DMA启动中位数132.52 µs；加入编码复用后，
+62项中61项命中，后者降为34.42 µs。记录包含抢占，TC软件标记不是引脚精确发送终点；
+它只说明该负载下的服务成本，不证明完整ISR WCET。诊断记录不进入正式镜像。
+
+最终Run全量构建零错误、零警告，Code65558/RO1054/RW444/ZI20748，静态RAM21192 B。
+28组真实ARM Server/Client模型通过，新增验证BUSY只编码一次、最新样本覆盖、工作区被
+响应/Event/IN_PROGRESS复用后的失效及损坏缓存长度。控制、DMA、Kernel/Port和保护未改，
+复用其未受影响证据。正式build ID为`0xfd763adb40fa8964`，HEX为
+`ec3a17d9c2ebc45b4c6c0e8d7f446c00318cf460e0063b51ec1e853a08b54890`，
+烧录与独立Flash读回66628 B匹配。完整输入摘要见[P6 TX证据](validation/evidence/protocol/p6-tx.json)。
+
+最终镜像按原逻辑供电条件复测，均穿插1 Hz状态请求：50Hz/10秒500帧、250Hz/30秒7501帧，
+零缺口、零覆盖、零重发、零解析/链路/内部错误。500Hz/10秒收到4905帧，序号1..5001缺96帧，
+与96次覆盖一致，1.92%仍超过原<1%门槛；9次状态请求无重发，最大响应6.15ms。
+单帧92 B在实际460704.6 baud下约占1.997ms，500Hz样本已占46000 B/s，几乎用尽线路。
+
+本阶段验收边界经确认调整为250Hz名义通信闭环；500Hz明确保留FAIL，不宣称原P6压力指标
+全部通过，也不放宽设备截止或功率保护。结束时IDLE、目标/命令计数/接受启动均0、MOE0、
+六路LOW、guard/内部/Motor/时序故障0；最小剩余栈690/438/254/109 word均超过25%。
+遥测恢复enabled/250Hz，PI仍Default，尚未发送运动命令；下一步仅补新协议下有限启停调速。
+
+## P6初测：遥测名义负载通过，500Hz发送吞吐未达标
+
+正式Run已接入Telemetry及Event，能力位0x3F。Telemetry任务只推进自己的产生/覆盖计数，
+值携会话epoch、该epoch首个产生计数和配置generation；Communication独占Session及线上
+序号映射。Mailbox深度1，BUSY时peek保留，TX接受才退休；旧epoch、旧配置或迟到样本丢弃。
+有效快照变化形成Event，深度8满丢最旧；终态优先于Event，Event优先于遥测，不抢写在途DMA。
+
+Run全量构建零错误、零警告，Code65374/RO1054/RW444/ZI20732，静态RAM21176/32768 B。
+25组Server/Client、14组真实Kernel/任务模型、12组Codec（47922断言、30黄金帧）及19组
+有限Runtime交接通过；测试替代Transport、实时步进或异常切换，不等价于实际调度/WCET。
+构建ID为`0xf2ae4e3aed717c5b`，HEX为
+`b0b5673da847b578597a3f94d121d9ebae92cda86dc4f5b82bd8028da769994c`，
+独立Flash读回66444 B匹配。未改控制算法、功率时序、Kernel/Port、静态队列容量或保护门限。
+
+在操作者确认OUTPUT关闭、ST-Link逻辑3V3、原三相及编码器保留、USB串口VCC不接且VOFA
+断开后，三个速率均穿插每秒一次COMMUNICATION_STATUS读取。50Hz/10秒收到501帧，
+250Hz/30秒收到7500帧，均无缺口、覆盖、响应重发或两端解析/链路错误。初次50Hz试验曾
+被Host将读线程延迟当成半帧超时而丢1帧；已修正Host空闲判据并保留失败记录，设备端
+20ms门限不变，复测通过。
+
+500Hz/10秒收到4676帧，序号1..5000缺324帧，恰好对应Mailbox覆盖324次，损失6.48%，
+未达到小于1%的门槛。9次周期状态读取均无重发，最大响应约6.32ms；两端解析、RX断续、
+DMA覆盖、UART错误、TX错误及内部故障均0。单帧92 B在实际460704.6 baud下约占1.997ms，
+500Hz几乎占满线路；当前吞吐约43.2kB/s，覆盖已把首个瓶颈限定在单帧TX服务吞吐，
+编码与任务调度各占多少尚未分别计时。没有扩容、降速或放宽门槛，P6整体尚未通过。
+
+结束读回Motor IDLE、目标0、命令计数/接受启动均0、六路LOW/MOE0，guard、内部、Motor及
+时序锁存故障为0，TIM6原时基保持。任务最小剩余栈Bootstrap690、Communication440、
+Telemetry254、Idle109 word，均超过25%。遥测配置恢复enabled/250Hz，PI仍Default且Active
+不在使用。本轮未发送Start/Update/Stop/Clear，未制造实物Event或运行运动负载；下一步先
+测量TX帧间空档并区分编码/调度成本，解决500Hz瓶颈后再进入协议下有限试转。
+
+## 会话事务与Python客户端：逻辑供电联调通过
+
+正式Run由唯一Communication任务持有Parser、Session、Sequence、普通/Stop在途及固定
+完成缓存4/终态FIFO4；通过准确ticket交给既有实时所有者。Stop取消未消费请求，已完成
+历史不改写；新拒绝也退休序号，重复处理中只提示IN_PROGRESS，完成后重放原终态。
+参数写仍由ADC权威应用，后台不改PI实例。20ms未完成、未知ticket/kind、损坏的索引/计数、
+响应FIFO溢出及不可恢复Transport错误锁内部故障，不作为普通BAD_REQUEST继续处理。
+这些故障/竞态由ARM模型验证，本轮没有另作实物故障注入。
+
+Run原生Rebuild零错误、零警告，Code63666/RO1058/RW444/ZI20468，静态RAM20912/32768 B；
+Server静态状态及编码工作区2576 B，不增加任务、动态分配或ISR协议计算。17组Server/Client
+模型、12组Codec（47922断言、30黄金帧）、19组Runtime交接通过。模型运行实际ARM Server、
+Codec、参数、交接和Motor，替代Transport、实时推进及C库复制；Python客户端对接同一模型，
+包括丢响应后原字节重发、总超时结果未知、新会话不重放旧Start及旧响应过滤。
+P4未受影响的DMA/Core/Kernel及独立Validation证据复用，不声称本轮重跑旧波形或全部工程。
+
+构建身份由204项正式源/配置及保守头文件闭包的规范化内容产生，短ID为
+`0x3df214f45eb49571`，完整摘要与输入清单保存在[P5证据](validation/evidence/protocol/p5.json)。
+HEX `18eefc3d5c8f97c2e7a6a5cd974f32dc984dd45742f98be71e1fe7f6f1092b54`
+已安装，原生校验及独立Flash读回64740 B匹配，DEVICE_INFO读到同一build ID。
+
+操作者确认OUTPUT关闭、仅ST-Link逻辑3V3、编码器与三相原接线保留，无电池或外部注入；
+USB串口共地、VCC不接、VOFA断开。25项实物请求/状态检查通过：七对象可读；重复PI写仅
+增加一次generation；内容冲突不替换原结果；后续写不改变缓存中的旧权威响应；长度、只读、
+版本/flags/未知消息及会话权限按合同拒绝。CRC坏帧、过期Stop片段和line break只恢复通信，
+片段未进入Motor。新会话保留参数并只读回状态，旧Session拒绝且不污染新序号。
+
+无会话Stop实际执行一次，重复应答没有再次进入Motor；健康IDLE的Clear返回真实ACCEPTED。
+Motor计数从0增至2，恰为Stop/Clear，接受Start仍为0；没有发送Start/Update。三次新的合法
+PI写使Staged generation从1增至4，最终值恢复Default 0.001/0.004，Active仍generation0且
+不在使用。停机读回IDLE、目标0、六路LOW/MOE0，guard/内部/Motor故障均0；FE、CRC、
+半帧超时和消息错误均留在通信统计。任务最小剩余栈Bootstrap690/768、Communication418/768、
+Telemetry281/384、Idle109/128 word，均超过25%，仅证明本轮请求负载。
+
+[Host操作说明](../../../host/protocol/README.md)提供显式连接、读写和JSONL记录器。
+本轮未启用线上Telemetry/Event，DEVICE_INFO暂不声明对应能力；默认遥测配置不代表采集
+链已验收。50/250/500 Hz压力、运动下调度与栈、WCET及新协议有限试转仍需单独验证。
+
+## UART DMA：字节流、覆盖恢复及发送超时通过
+
+CubeMX生成USART1 460800/8N1、RX DMA1_Channel2 Circular、TX DMA1_Channel3 Normal及
+三个优先级5的IRQ；RX/TX硬件仲裁保持LOW。Target Adapter独占寄存器，IRQ只核对必要
+进度、处理错误并通知Communication；不解析协议或调用Motor。Bootstrap最后开放RX。
+Validation仍为裸机115200轮询，不链接Adapter或Kernel；没有新增正式Target。
+
+四个原生Target均零错误、零警告；Run静态RAM为18336/32768 B。11组DMA ARM模型、
+12组SystemRuntime、19组交接、12组有限Run、46组Observe及Core IRQ 14/15/15项通过。
+DMA模型覆盖合并/重复通知、回绕、覆盖与复制后复核、PE/FE/NE/ORE、TX内部复制、
+DMA TC至USART TC的BUSY、10ms截止和迟到TC、内部故障后关闭事件源。模型采用模拟MMIO
+和字节复制替身；真实C库复制另外通过下面的原生串口测试核对。
+
+操作者确认OUTPUT关闭、ST-Link独立逻辑3V3，USB串口共地且VCC不接、VOFA断开；
+原三相和编码器保留，无电池或外部注入。临时回环镜像使用正式Adapter和Kernel，仅替代
+后台service，不处理Motor命令。COM5按460800连接，20种长度共7835 B逐字节回环一致，
+无丢失或重复，包含27 B复制及4096 B跨圈流。暂停读取40ms并注入2000 B后检测覆盖、
+提升epoch，后续117 B标记完全恢复；Host line break计到一次FE，后续126 B标记恢复，
+均未锁Motor故障。故意冻结已接受的TX后锁TIMEOUT首因8、guard/Motor bit7，六路LOW；
+再输入1000 B无响应、无重复故障，Communication继续运行。实物读回确认故障终态，
+精确10ms边界由ARM模型验证，本轮没有测量真实关断延迟。
+
+最后恢复正式Run，原生校验及独立Flash读回56516 B匹配，HEX为
+`dd0e5c4d9ee479be590fcc59a06ddd9fd9ea4cc0877ce4e79d160b1cf3d00278`。
+正式镜像不存在回环/故障注入符号，排空4096 B原始输入且发送0 B；Motor IDLE、接受启动0次，
+MOE=0、六路LOW、guard及内部故障0。栈最小剩余Bootstrap691/768、Communication691/768、
+Telemetry300/384、Idle110/128 word，均超过25%；仅适用于本轮负载。
+
+[P4证据](validation/evidence/protocol/p4.json)分别绑定临时与正式镜像及统计。
+本轮不含新协议Server、Session/事务、线上参数、Telemetry发送、协议压力或电机运动；
+不改写旧带电证据，也不证明WCET、最坏抢占、持续带载及独立电流精度。
+
+## 原生FreeRTOS：纯逻辑启动与静态任务通过
+
+Run手工集成STM32Cube FW_G4 V1.6.3的Kernel V10.3.1和RVDS/ARM_CM4F Port，供应源码未改。
+CubeMX只生成TIM7硬件时基及异常配置。四个原生Target均零错误、零警告；Run静态RAM为
+17400 / 32768 B，Validation保持裸机，Run不链接旧VOFA、CMSIS-RTOS或动态分配实现。
+11组任务ARM模型、19组交接、12组有限Run和46组Observe模型通过；Core IRQ三种入口
+11/12/12项通过。任务模型替代异常切换边界，因此实物启动另行核对。
+
+操作者确认OUTPUT关闭、先退压再仅由ST-Link提供逻辑3V3，原三相和编码器保留，无电池或
+外部注入。安装后原生校验及独立HOTPLUG读回53252 B匹配，HEX为
+`59b227d4995736cae7220bb73656c572b9c77fb264524a772a169b34cedc8b48`。
+调度器前HAL tick为4，Bootstrap读到HAL=6、Kernel=2后完成装配、自删除；之后任务数为3，
+Communication/Telemetry均在延时表，当前任务为Idle。两次读取之间HAL、Kernel和ControlTime
+持续推进，实际TIM7为1kHz，TIM6保留169/49分频配置及原守卫，NVIC与集成合同一致。
+
+| 任务 | 初始栈word | 本轮最小剩余word |
+| --- | --- | --- |
+| Bootstrap | 768 | 690（删除前） |
+| Communication | 768 | 723 |
+| Telemetry | 384 | 299 |
+| Idle | 128 | 109 |
+
+Motor保持IDLE、接受启动0次，六路LOW/MOE=0，guard和内部故障均为0，未发送运动命令。
+[P3证据](validation/evidence/protocol/p3.json)包含读回值、时基差值、任务与异常归属及镜像摘要。
+本轮只证明无通信负载的启动和后台交接；尚未验证UART DMA/协议压力、运动时的调度延迟、
+最坏栈或WCET，不替代旧控制镜像的带电功能证据。
 
 ## 收尾构建：正式入口隔离与有限复测通过
 

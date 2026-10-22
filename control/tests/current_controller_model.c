@@ -12,6 +12,7 @@ float model_actuation_angle[2];
 uint32_t model_input_valid[4];
 float model_values[11];
 uint32_t model_status[5];
+uint32_t model_axis_limited[2];
 uint32_t model_selector;
 float model_history[2];
 
@@ -39,6 +40,8 @@ static void model_capture(bool result, const CurrentControllerOutput *output)
     model_status[2] = (uint32_t)output->voltage_limited;
     model_status[3] = (uint32_t)output->integral_limited;
     model_status[4] = (uint32_t)controller->configured;
+    model_axis_limited[0] = output->d_integral_limited;
+    model_axis_limited[1] = output->q_integral_limited;
 }
 
 static CurrentControllerInput model_input(void)

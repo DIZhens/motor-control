@@ -22,6 +22,9 @@
 #include "stm32g4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#if defined(BLDC_G431_FREERTOS)
+#include "uart_dma_transport.h"
+#endif
 #include "../../platform/realtime_motor_io_internal.h"
 #include "../../platform/position_observation_internal.h"
 #if defined(BLDC_G431_TIMING_ENTRY)
@@ -76,6 +79,11 @@ extern DAC_HandleTypeDef hdac3;
 extern SPI_HandleTypeDef hspi1;
 extern TIM_HandleTypeDef htim1;
 extern TIM_HandleTypeDef htim6;
+extern DMA_HandleTypeDef hdma_usart1_rx;
+extern DMA_HandleTypeDef hdma_usart1_tx;
+extern UART_HandleTypeDef huart1;
+extern TIM_HandleTypeDef htim7;
+
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -159,22 +167,6 @@ void UsageFault_Handler(void)
 }
 
 /**
-  * @brief This function handles System service call via SWI instruction.
-  */
-void SVC_Handler(void)
-{
-  /* USER CODE BEGIN SVCall_IRQn 0 */
-#if defined(BLDC_G431_DIAGNOSTICS)
-  g_target_runtime_irq_entries[0]++;
-#endif
-
-  /* USER CODE END SVCall_IRQn 0 */
-  /* USER CODE BEGIN SVCall_IRQn 1 */
-
-  /* USER CODE END SVCall_IRQn 1 */
-}
-
-/**
   * @brief This function handles Debug monitor.
   */
 void DebugMon_Handler(void)
@@ -188,39 +180,6 @@ void DebugMon_Handler(void)
   /* USER CODE BEGIN DebugMonitor_IRQn 1 */
 
   /* USER CODE END DebugMonitor_IRQn 1 */
-}
-
-/**
-  * @brief This function handles Pendable request for system service.
-  */
-void PendSV_Handler(void)
-{
-  /* USER CODE BEGIN PendSV_IRQn 0 */
-#if defined(BLDC_G431_DIAGNOSTICS)
-  g_target_runtime_irq_entries[2]++;
-#endif
-
-  /* USER CODE END PendSV_IRQn 0 */
-  /* USER CODE BEGIN PendSV_IRQn 1 */
-
-  /* USER CODE END PendSV_IRQn 1 */
-}
-
-/**
-  * @brief This function handles System tick timer.
-  */
-void SysTick_Handler(void)
-{
-  /* USER CODE BEGIN SysTick_IRQn 0 */
-#if defined(BLDC_G431_DIAGNOSTICS)
-  g_target_runtime_irq_entries[3]++;
-#endif
-
-  /* USER CODE END SysTick_IRQn 0 */
-  HAL_IncTick();
-  /* USER CODE BEGIN SysTick_IRQn 1 */
-
-  /* USER CODE END SysTick_IRQn 1 */
 }
 
 /******************************************************************************/
@@ -242,6 +201,40 @@ void DMA1_Channel1_IRQHandler(void)
   /* USER CODE BEGIN DMA1_Channel1_IRQn 1 */
 
   /* USER CODE END DMA1_Channel1_IRQn 1 */
+}
+
+/**
+  * @brief This function handles DMA1 channel2 global interrupt.
+  */
+void DMA1_Channel2_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Channel2_IRQn 0 */
+#if defined(BLDC_G431_FREERTOS)
+  g431_uart_rx_dma_irq();
+#endif
+#if 0
+  /* USER CODE END DMA1_Channel2_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_usart1_rx);
+  /* USER CODE BEGIN DMA1_Channel2_IRQn 1 */
+#endif
+  /* USER CODE END DMA1_Channel2_IRQn 1 */
+}
+
+/**
+  * @brief This function handles DMA1 channel3 global interrupt.
+  */
+void DMA1_Channel3_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Channel3_IRQn 0 */
+#if defined(BLDC_G431_FREERTOS)
+  g431_uart_tx_dma_irq();
+#endif
+#if 0
+  /* USER CODE END DMA1_Channel3_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_usart1_tx);
+  /* USER CODE BEGIN DMA1_Channel3_IRQn 1 */
+#endif
+  /* USER CODE END DMA1_Channel3_IRQn 1 */
 }
 
 /**
@@ -353,6 +346,23 @@ void SPI1_IRQHandler(void)
 }
 
 /**
+  * @brief This function handles USART1 global interrupt / USART1 wake-up interrupt through EXTI line 25.
+  */
+void USART1_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART1_IRQn 0 */
+#if defined(BLDC_G431_FREERTOS)
+  g431_uart_irq();
+#endif
+#if 0
+  /* USER CODE END USART1_IRQn 0 */
+  HAL_UART_IRQHandler(&huart1);
+  /* USER CODE BEGIN USART1_IRQn 1 */
+#endif
+  /* USER CODE END USART1_IRQn 1 */
+}
+
+/**
   * @brief This function handles TIM6 global interrupt, DAC1 and DAC3 channel underrun error interrupts.
   */
 void TIM6_DAC_IRQHandler(void)
@@ -377,6 +387,41 @@ void TIM6_DAC_IRQHandler(void)
   /* USER CODE END TIM6_DAC_IRQn 1 */
 }
 
-/* USER CODE BEGIN 1 */
+/**
+  * @brief This function handles TIM7 global interrupt.
+  */
+void TIM7_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM7_IRQn 0 */
+#if defined(BLDC_G431_FREERTOS)
+  /* USER CODE END TIM7_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim7);
+  /* USER CODE BEGIN TIM7_IRQn 1 */
+#endif
+  /* USER CODE END TIM7_IRQn 1 */
+}
 
+/* USER CODE BEGIN 1 */
+/* 裸机验证保留原HAL SysTick；Run的三个异常符号全部来自原始Port。 */
+#if !defined(BLDC_G431_FREERTOS)
+void SVC_Handler(void)
+{
+#if defined(BLDC_G431_DIAGNOSTICS)
+    g_target_runtime_irq_entries[0]++;
+#endif
+}
+void PendSV_Handler(void)
+{
+#if defined(BLDC_G431_DIAGNOSTICS)
+    g_target_runtime_irq_entries[2]++;
+#endif
+}
+void SysTick_Handler(void)
+{
+#if defined(BLDC_G431_DIAGNOSTICS)
+    g_target_runtime_irq_entries[3]++;
+#endif
+    HAL_IncTick();
+}
+#endif
 /* USER CODE END 1 */

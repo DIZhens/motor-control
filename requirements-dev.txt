@@ -2,3 +2,4 @@
 # 以下版本已在 Python 3.13.2 上验证。
 unicorn==2.1.4
 pyelftools==0.33
+pyserial==3.5
