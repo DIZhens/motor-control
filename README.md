@@ -15,7 +15,7 @@
 control/      可移植电机控制算法
 interface/    Firmware / Host 共享的设备与协议合同
 firmware/     MCU 固件、Hardware Capability Contract 与各板 Target
-host/         PC 调试工具配置与说明，后续 Qt6 Host
+host/         Python 协议客户端、记录工具和验证用 VOFA 资料
 hardware/     板级硬件事实与电机、编码器参考资料
 ```
 
@@ -31,7 +31,9 @@ CAN 实物联调、Qt Host、位置环、标准 Modbus / CANopen 栈及 F405 同
 
 ## 实现与验证入口
 
-当前G431控制基线使用公共Motor / ControlRuntime，已取得有限空载UART正反向启动、调速、显式Stop和独立1.5秒关断的实物证据；原生FreeRTOS、UART DMA、会话事务及Python客户端另有逻辑供电证据。实测绑定固定板卡、电机、接线和镜像，不代表持续运行、全部保护或性能验收。Telemetry/Event与通信压力、独立电流精度、持久标定及故障恢复仍未验收，具体范围见Target验证页。
+G431正式Run使用公共Motor / ControlRuntime、原生静态FreeRTOS、460800/8N1 UART DMA及Core Protocol V1，提供会话事务、参数Staged/Active、Telemetry/Event和Python客户端。50Hz与250Hz通信通过；同一镜像已完成固定空载`+60→+40 rpm→无会话Stop`，重复同身份Start只执行一次，457帧遥测连续。500Hz损失1.92%仍未通过原<1%门槛，按已确认范围保留为容量边界。
+
+旧控制基线另有正反向启停和独立1.5秒关断证据，继续绑定各自镜像。实测不代表持续运行、全部保护或性能验收；独立电流精度、持久标定及故障恢复未完成，具体条件、镜像与限制统一见[G431验证页](firmware/targets/BLDC_G431/VALIDATION.md)。
 
 日常开发打开 `firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1.uvprojx`，唯一正式 Target 为 `BLDC_G431_Run`。观察、专项计时和旧台架另存于同目录 `BLDC_G431_Validation.uvprojx`，共享核心源码；它们不是不同的应用版本。F405 M0 保留独立实现与验证范围。
 
@@ -39,7 +41,7 @@ CAN 实物联调、Qt Host、位置环、标准 Modbus / CANopen 栈及 F405 同
 - [G431 Runtime 入口](firmware/targets/BLDC_G431/runtime/README.md)：正式构建、运行边界、模块职责与验证工程。
 - [G431 验证结果与剩余门槛](firmware/targets/BLDC_G431/VALIDATION.md)：G431 验收结论、镜像与证据的唯一汇总入口。
 - [F405 M0 说明](firmware/targets/ODRIVE_V36_405_M0/README.md)：独立的实现和验证范围。
-- [Host 入口](host/README.md)：V1 的 VOFA 资料职责与后续 Qt Host。
+- [Host 入口](host/README.md)：自研协议客户端、记录与压力测试，以及验证用 VOFA 资料。
 - [硬件资料入口](hardware/README.md)：控制板事实与独立的电机、编码器资料。
 - [共享接口入口](interface/README.md)：设备语义、UART 命令与观测合同。
 

@@ -21,9 +21,10 @@ VOFA 程序的本机位置与默认关断入口的首次串口设置见 [vofa/RE
 [protocol/codec.py](protocol/codec.py)已提供纯标准库编解码：CRC、COBS、帧、分片解析、
 固定请求/响应、对象、遥测和事件，与 C 端共用[固定黄金向量](../interface/test_vectors/core_protocol_v1.json)。
 离线验证命令与 API 边界见[通信库说明](../firmware/app/communication/README.md)。
-[protocol/client.py](protocol/client.py)已接入显式Session、请求关联、原身份重试及JSONL记录；
-串口CLI、操作边界与离线测试见[protocol/README.md](protocol/README.md)。连续遥测、事件和
-50/250/500Hz压力验收后续接入，当前不把请求记录器当成实时采集链。
+[protocol/client.py](protocol/client.py)已接入显式Session、请求关联、原身份重试、连续遥测/
+事件及JSONL记录；串口CLI、压力入口、操作边界与离线测试见
+[protocol/README.md](protocol/README.md)。50/250Hz通信及一次250Hz有限运动通过，
+500Hz仍未达原<1%门槛，结果从G431验证页进入。
 设备语义和线格式在 `interface/` 定义，主机不因重连自动重放运动命令。
 
 VOFA JustFloat与自研协议分别有自己的线上格式，不能直接混发。VOFA保留于独立验证构建，

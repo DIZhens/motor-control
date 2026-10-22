@@ -1,6 +1,6 @@
 # Device Contract
 
-本文件定义公共 Motor 与受门控 ControlRuntime 的设备语义。控制链及跨拍启停已实现，具体装配决定是否具备运行许可；G431 Observe 关闭控制配置，仍拒绝启动。Run 使用本板有限空载配置，已有 UART 正反启停、调速及独立时限关断证据，各自绑定的镜像、参数和限制见 [Runtime 入口](../firmware/targets/BLDC_G431/runtime/README.md)。独立电流精度标定、持续运行和故障恢复尚未完成。公共业务 API 见 `firmware/app/motor/motor.h`，正式UART线格式见[Core Protocol V1](CORE_PROTOCOL_V1.md)，[VOFA协议](VOFA_PROTOCOL.md)保留验证构建的表示。
+本文件定义公共 Motor 与受门控 ControlRuntime 的设备语义。控制链及跨拍启停已实现，具体装配决定是否具备运行许可；G431 Observe 关闭控制配置，仍拒绝启动。Run 使用本板有限空载配置，各版本的实物证据、镜像和限制从[Runtime入口](../firmware/targets/BLDC_G431/runtime/README.md)进入，不把历史镜像记录外推为当前镜像已实测。独立电流精度标定、持续运行和故障恢复尚未完成。公共业务 API 见 `firmware/app/motor/motor.h`，正式UART线格式见[Core Protocol V1](CORE_PROTOCOL_V1.md)，[VOFA协议](VOFA_PROTOCOL.md)保留验证构建的表示。
 
 ## 生命周期与请求
 
@@ -66,4 +66,4 @@ HCC；普通外部坏帧不派生新的运动命令、自动Stop或故障恢复�
 
 ### 其他剩余边界
 
-G431 Run 承接原板相序、电流符号、编码器方向/极对数/偏置的有限台架证据；正式 Motor / UART 已完成正反启停、调速及独立时长边界，2圈边界、正式RUN故障注入及长期稳定性仍需分别验收。独立电流幅值精度、持久标定及故障恢复另行补齐，数值模型不替代实物条件。参数只开放真实调试需要的最小集合，不预建对象字典或多协议框架。
+G431 Run 承接原板相序、电流符号、编码器方向/极对数/偏置的有限台架证据。不同协议与调度镜像的启停、调速及独立时限实测范围见[G431验证页](../firmware/targets/BLDC_G431/VALIDATION.md)；2圈边界、正式RUN故障注入及长期稳定性仍需分别验收。独立电流幅值精度、持久标定及故障恢复另行补齐，数值模型不替代实物条件。参数只开放真实调试需要的最小集合，不预建对象字典或多协议框架。

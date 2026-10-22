@@ -33,12 +33,40 @@
 | Session/事务/线上对象 | [P5构建、模型和实物证据](validation/evidence/protocol/p5.json)；七对象、参数去重/原结果重放、Stop/Clear、Python客户端/JSONL | 纯逻辑供电；本轮未发送Start/Update，无Telemetry/Event或协议压力验收 |
 | Telemetry/Event/通信压力 | [P6初测](validation/evidence/protocol/p6.json)、[TX优化及验收调整](validation/evidence/protocol/p6-tx.json)；50Hz×10s及250Hz×30s零缺帧，按250Hz完成本阶段通信验收 | 500Hz×10s缺96/5001帧，与96次覆盖一致，1.92%仍未通过原<1%门槛；本轮无运动，Event变化仅模型验证 |
 | 自研协议＋FreeRTOS有限闭环 | [P7实物证据](validation/evidence/protocol/p7.json)、[457帧观测](validation/evidence/protocol/p7-samples.csv)；同身份重复Start只启动一次，+60→+40 rpm→无会话Stop，225帧RUN全有效、零缺帧 | 固定空载正向单次；两条状态Event通过，故障注入、反向和独立时限触发未在本镜像复测，不作性能验收 |
+| 最终工程与资源核对 | [P8本地收尾证据](validation/evidence/protocol/p8.json)；四个Target原生Rebuild零错误零警告，Run/Validation隔离，最终HEX与P7一致 | 仅本地收尾；推送、PR和合并未执行；500Hz及其余实物限制保持 |
 
 表中旧UART正向及反向两次正式 Run 实物记录属于 HEX
 `0e73f54e03ceaa9b21f3ae7cfc305c1ca50ecc9577613cc47f974d54fd2eee76`。
 源码整理或新构建不会把旧证据改写成新镜像已实测。未受影响的功能证据继续保留；
 受影响的命令交接、后台通信与实时路径分别用针对性检查确认，不重跑无关底层波形。
 本页后续保留各轮测量条件、失败首因与镜像，读者不必依赖未分发的本地日志判断上述边界。
+
+## 最终构建与隔离核对
+
+正式Run及独立验证工程的三个Target均完成原生Rebuild，全部零错误、零警告。
+本轮只核对构建、链接、资源及说明，没有修改固件源码、连接设备、烧录、复位或发送运动命令。
+
+| Target | Flash装载字节 | 静态RAM字节 | 入口 |
+| --- | ---: | ---: | --- |
+| BLDC_G431_Run | 66628 | 21192 | Core Protocol＋静态FreeRTOS＋UART DMA |
+| BLDC_G431_Observe | 79260 | 26480 | 裸机观察／VOFA |
+| BLDC_G431_Timing | 48080 | 9616 | 裸机专项计时 |
+| BLDC_control V1 | 57256 | 19488 | 裸机旧台架 |
+
+链接产物核对三个系统异常向量与唯一强符号：Run来自原始Port，Validation来自裸机Core；
+Run未链接旧VOFA、CMSIS包装、动态分配或临时诊断符号，Validation未链接Kernel/Port/新Server。
+供应源码24文件逐一匹配来源哈希。直接调用图及显式绑定的sample/trip回调没有可达内核API；
+未知间接调用、异常压栈和完整WCET仍不由静态调用图证明。
+
+Run的HEX与P7一致，build ID仍为`0xfd763adb40fa8964`，可装载AXF区及MAP也相同；
+AXF整体哈希变化仅在非装载`.comment`区，旧AXF与新AXF分别保留，不覆盖P7身份。
+已通过的Codec 12组、Server/Client 28组、任务14组、交接19组及DMA 11组按记录的来源哈希
+匹配后复用，没有将其写成P8重新执行；物理证据继续按P4/P5/P6/P7各自镜像归属。
+本镜像压力窗口最小剩余栈690/438/254/109 word，P7运动为690/464/271/109，均超过25%。
+
+[P8证据](validation/evidence/protocol/p8.json)汇总P0–P7、四份最终产物、资源与边界。
+P6按250Hz完成已确认的阶段范围，500Hz原门槛仍FAIL；本次只完成本地收尾，PR和合并尚未执行。
+两份用户Keil本地设置保持未提交；Validation工程仅有调试器DLL差异，构建配置及成员与HEAD一致。
 
 ## 自研协议＋FreeRTOS：单次有限闭环通过
 

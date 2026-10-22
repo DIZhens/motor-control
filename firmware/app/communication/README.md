@@ -54,6 +54,10 @@ COBS、长度或 CRC 错误不发布帧，解码目标保持原值。仅 `CORE_O
 [固定黄金向量](../../../interface/test_vectors/core_protocol_v1.json)对照。测试仅读取期望值，
 不调用被测编码器重新生成黄金字节；固定 CRC 由独立标准库参考构造。
 
+Codec模型覆盖全部固定布局、逐字段值、所有分片点、连续帧、随机chunk、CRC位翻转、
+错误后恢复、精确容量、超时边界和时钟回绕。`--report <路径>`可保存带来源摘要的结果。
+这是离线编解码模型，不替代下述事务模型或实物字节流与调度验收。
+
 ## 事务Server
 
 [core_server.h](core_server.h)由唯一Communication任务持有，不依赖HAL或FreeRTOS。
@@ -96,9 +100,8 @@ DMA传输重叠。新产生的事件参与下轮选择，已排队事件仍先�
 Transport/实时推进及C库复制为替身。实物请求应答与记录器范围见
 [G431验证页](../../targets/BLDC_G431/VALIDATION.md)及[Host说明](../../../host/protocol/README.md)。
 
-覆盖全部固定布局、逐字段值、所有分片点、连续帧、随机 chunk、CRC 位翻转、错误后恢复、
-精确容量、超时边界和时钟回绕。`--report <路径>` 可保存带来源摘要的本次结果。
-这是离线库模型，不能证明串口吞吐、DMA 连续性、任务调度、会话去重或实际 Motor 行为。
+Server模型验证会话去重、事务竞态和参数交接语义，不证明实际串口吞吐、DMA连续性、
+任务调度或电机运动。`--report <路径>`保存结果及来源摘要。
 G431字节流的有界进度、连续性epoch、单帧TX和实物范围见
 [Target集成合同](../../targets/BLDC_G431/runtime/RTOS_INTEGRATION.md#字节流与后台边界)及
 [验证页](../../targets/BLDC_G431/VALIDATION.md)。

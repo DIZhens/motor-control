@@ -107,8 +107,8 @@ Run已装配[SystemRuntime交接](../../../app/system_runtime/README.md)：非�
 
 当前请求由唯一Communication任务的Server使用，`target_core_server.c`完成对象快照映射、
 准确ticket交接及协议无关Fail-closed连接；不从后台修改PI实例。原VOFA装配只保留在验证
-入口与兼容模型中，不是Run的第二个后台所有者。新协议已完成逻辑供电下对象/事务验证，
-模型和构建不改写既有HEX运动记录，未授予新的带电或持续运行验收。
+入口与兼容模型中，不是Run的第二个后台所有者。新协议已完成对象/事务、名义通信及一次
+固定空载正向启停调速，仍按各自HEX保存证据；持续运行、带载和完整保护尚未验收。
 
 ```powershell
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run --exchange
@@ -535,8 +535,8 @@ ADC 丢失、旧快照失效、低优先级代码被 ADC 抢占的交错，以�
 既有 UART、手转反馈、逻辑供电零偏及后台计算计时各有有限实测；软件/CORDIC 对照的
 各次执行身份和范围见验证页。20 / 10 / 1 kHz 下的合成输入计算与真实 HCC 提交计时，
 以及后来的正式 Run 正反向 UART 有限实测，是两类不同证据；前者不能替代后者，
-后者也不证明完整WCET或全部保护。新协议请求应答与FreeRTOS后台另有逻辑供电证据，
-Telemetry/Event、通信压力及新协议运动分别验收；电流精度和性能保留独立范围。
+后者也不证明完整WCET或全部保护。新协议请求应答、FreeRTOS后台、50/250Hz通信及一次
+协议下有限运动已有独立证据；500Hz原门槛仍FAIL，电流精度和性能保留独立范围。
 各轮镜像与实测范围、既有台架证据仍从
 [VALIDATION.md](../VALIDATION.md) 进入，按具体修改影响选择复测。
 
