@@ -100,7 +100,7 @@ CoreResult core_server_port_read_object(uint16_t id, CoreObject *value)
     return CORE_RESULT_OK;
 }
 void model_feed(uint32_t count) { core_server_feed(&model_server, model_input, count, model_now); }
-void model_poll(void) { core_server_poll(&model_server, model_now); }
+void model_poll(void) { core_server_poll(&model_server, model_now); core_server_observe(&model_server); }
 void model_flush(void) { core_server_flush(&model_server); }
 void model_discontinuity(void) { core_server_discontinuity(&model_server); }
 void model_rt_step(void)
@@ -139,5 +139,9 @@ void model_corrupt_state(uint32_t mode)
 {
     if (mode == 0U) { model_server.response_count = CORE_RESPONSE_CAPACITY + 1U; }
     else if (mode == 1U) { model_server.cache_next = CORE_CACHE_CAPACITY; }
-    else { model_server.ordinary.ticket = 0U; }
+    else if (mode == 2U) { model_server.ordinary.ticket = 0U; }
+    else {
+        model_server.telemetry_wire_valid = true;
+        model_server.telemetry_wire_length = mode == 3U ? 0U : CORE_WIRE_MAX + 1U;
+    }
 }

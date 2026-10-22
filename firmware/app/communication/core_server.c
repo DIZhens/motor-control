@@ -14,6 +14,7 @@ static bool same_request(const CoreFrame *a, const CoreFrame *b)
 }
 static void build_answer(CoreServer *s, const CoreFrame *request, uint16_t result, uint16_t subject)
 {
+    s->telemetry_wire_valid = false;
     memset(&s->answer, 0, sizeof(s->answer));
     s->answer.result_code = result; s->answer.subject_id = subject; s->answer.motor_result = 0xFFFFU;
     memset(&s->output, 0, sizeof(s->output));
@@ -53,6 +54,7 @@ static void abandon(CoreServer *s)
     if (s->failed) { return; }
     s->failed = true; s->session = 0U; s->highest_sequence = 0U;
     s->active_epoch = 0U; s->event_count = 0U;
+    s->telemetry_wire_valid = false;
     s->response_count = 0U; s->cache_next = 0U; memset(s->cache, 0, sizeof(s->cache));
     for (index = 0U; index < 2U; ++index) {
         p = index == 0U ? &s->stop : &s->ordinary;
@@ -70,6 +72,7 @@ static bool state_valid(CoreServer *s)
 {
     if (s->response_count > CORE_RESPONSE_CAPACITY || s->cache_next >= CORE_CACHE_CAPACITY
         || s->event_count > CORE_EVENT_CAPACITY
+        || (s->telemetry_wire_valid && (s->telemetry_wire_length == 0U || s->telemetry_wire_length > CORE_WIRE_MAX))
         || (s->ordinary.active && s->ordinary.ticket == 0U) || (s->stop.active && s->stop.ticket == 0U)
         || (s->ordinary.active && s->stop.active && s->ordinary.ticket == s->stop.ticket)
         || s->highest_sequence == 0xFFFFFFFFU || (s->session == 0U && s->highest_sequence != 0U)) {
@@ -341,6 +344,11 @@ void core_server_poll(CoreServer *s, uint32_t now_ms)
         if (!core_server_port_completion(&completion)) { break; }
         completed(s, &completion);
     }
+}
+
+void core_server_observe(CoreServer *s)
+{
+    if (!state_valid(s) || observe_failure(s)) { return; }
     observe_snapshot(s);
 }
 
@@ -350,22 +358,30 @@ static bool telemetry_frame(CoreServer *s)
     CoreSpeedSample sample;
     uint32_t offset, sequence;
     size_t length;
-    if (!core_server_port_telemetry_peek(&value)) { return false; }
+    if (!core_server_port_telemetry_peek(&value)) { s->telemetry_wire_valid = false; return false; }
     if (s->session == 0U || s->failed || s->telemetry_exhausted || value.epoch != s->active_epoch
         || core_server_port_read_object(CORE_TELEMETRY_CONFIG, &s->answer.value) != CORE_RESULT_OK
         || !s->answer.value.telemetry_config.enabled
         || value.sample.telemetry_config_generation != s->answer.value.telemetry_config.generation) {
-        core_server_port_telemetry_retire(); return false;
+        s->telemetry_wire_valid = false; core_server_port_telemetry_retire(); return false;
     }
     if (!s->telemetry_domain_valid) {
         s->telemetry_domain_valid = true; s->telemetry_first = value.epoch_first;
     }
     offset = value.produced - s->telemetry_first;
     if (offset >= 0xFFFFFFFEU) {
-        s->telemetry_exhausted = true; core_server_port_telemetry_retire(); return false;
+        s->telemetry_exhausted = true; s->telemetry_wire_valid = false;
+        core_server_port_telemetry_retire(); return false;
     }
     sequence = offset + 1U;
     s->telemetry_sequence = sequence; /* 生成值决定序号，BUSY不重新分配或成功后才编号。 */
+    if (s->telemetry_wire_valid && s->telemetry_wire_epoch == value.epoch
+        && s->telemetry_wire_produced == value.produced
+        && s->telemetry_wire_generation == value.sample.telemetry_config_generation) { return true; }
+    /* 前一帧DMA仍在途时预先编码；只要Mailbox被覆盖就必须重新编码最新值。 */
+    s->telemetry_wire_valid = false;
+    s->telemetry_wire_epoch = value.epoch; s->telemetry_wire_produced = value.produced;
+    s->telemetry_wire_generation = value.sample.telemetry_config_generation;
 #define COPY_FIELD(name) sample.name = value.sample.name
     COPY_FIELD(sample_sequence); COPY_FIELD(control_time_ticks); COPY_FIELD(position_observation_time);
     COPY_FIELD(target_velocity_rpm); COPY_FIELD(velocity_rpm); COPY_FIELD(mechanical_position_turns);
@@ -394,12 +410,14 @@ void core_server_flush(CoreServer *s)
     observe_failure(s);
     if (s->response_count != 0U) {
         source = 0U;
+        s->telemetry_wire_valid = false;
         for (index = 0U; index < s->response_count; ++index) {
             if (s->responses[index].critical) { selected = index; break; }
         }
         s->output = s->responses[selected].frame;
     } else if (!s->failed && s->event_count != 0U) {
         source = 1U;
+        s->telemetry_wire_valid = false;
         memset(&s->output, 0, sizeof(s->output));
         s->output.version = 1U; s->output.kind = CORE_EVENT; s->output.header_size = CORE_HEADER_SIZE;
         s->output.message_id = s->events[0].message; s->output.sequence = s->events[0].sequence;
@@ -411,8 +429,13 @@ void core_server_flush(CoreServer *s)
         source = 2U;
         if (!telemetry_frame(s)) { return; }
     }
-    if (core_frame_encode(&s->output, s->wire, sizeof(s->wire), &count) != CORE_OK) {
-        fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return;
+    if (source == 2U && s->telemetry_wire_valid) {
+        count = s->telemetry_wire_length;
+    } else {
+        if (core_frame_encode(&s->output, s->wire, sizeof(s->wire), &count) != CORE_OK) {
+            fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return;
+        }
+        if (source == 2U) { s->telemetry_wire_length = count; s->telemetry_wire_valid = true; }
     }
     result = byte_stream_try_send(s->wire, count);
     if (result == BYTE_STREAM_BUSY) { return; }
@@ -425,5 +448,5 @@ void core_server_flush(CoreServer *s)
     } else if (source == 1U) {
         for (index = 1U; index < s->event_count; ++index) { s->events[index - 1U] = s->events[index]; }
         s->event_count--;
-    } else { core_server_port_telemetry_retire(); }
+    } else { s->telemetry_wire_valid = false; core_server_port_telemetry_retire(); }
 }

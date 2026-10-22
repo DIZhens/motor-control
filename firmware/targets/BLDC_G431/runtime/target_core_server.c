@@ -30,6 +30,8 @@ void target_core_server_service(void)
     }
     core_server_poll(&s_server, HAL_GetTick());
     core_server_flush(&s_server);
+    /* 先处理完请求/Completion并尝试续帧，再在DMA传输期间采集最佳努力事件。 */
+    core_server_observe(&s_server);
 }
 
 bool core_server_port_permitted(void) { return target_runtime_session_permitted(); }

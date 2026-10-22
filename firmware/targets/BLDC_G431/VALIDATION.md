@@ -7,7 +7,8 @@
 [Host 说明](../../../host/vofa/README.md#有限-run-操作)。
 
 当前Run已接入原生FreeRTOS、460800/8N1 UART DMA及Core Protocol事务Server，关闭旧VOFA装配；
-对象、请求应答及50/250Hz遥测已有逻辑供电证据；500Hz压力未达标，Event竞态仅有模型证据。
+对象、请求应答及50/250Hz遥测已有逻辑供电证据；本阶段按250Hz完成通信验收。
+500Hz仍未达原门槛，作为容量边界保留；Event竞态仅有模型证据。
 旧实物启停记录
 继续绑定各自HEX，不改写为新协议镜像的运动验收。
 
@@ -31,7 +32,7 @@
 | FreeRTOS启动与时间域 | [P3构建、模型和实物证据](validation/evidence/protocol/p3.json)；TIM7 HAL、SysTick Kernel、静态任务/Mailbox、唯一异常入口、默认关断 | 启动负载证据；不代替协议负载、运动下调度压力或WCET证明 |
 | UART DMA字节流 | [P4构建、模型和实物证据](validation/evidence/protocol/p4.json)；512 B RX、130 B单帧TX、460800回环、覆盖/帧错误恢复、冻结TX关断 | 字节流证据不代替Server/事务、50/250/500 Hz协议压力或运动负载 |
 | Session/事务/线上对象 | [P5构建、模型和实物证据](validation/evidence/protocol/p5.json)；七对象、参数去重/原结果重放、Stop/Clear、Python客户端/JSONL | 纯逻辑供电；本轮未发送Start/Update，无Telemetry/Event或协议压力验收 |
-| Telemetry/Event/通信压力 | [P6构建、模型和实物证据](validation/evidence/protocol/p6.json)；单槽发送、epoch隔离、Event8、独立序号、Python连续记录；50Hz×10s及250Hz×30s通过 | 500Hz×10s缺324/5000帧，与324次覆盖一致，6.48%超过1%；本轮无运动，Event变化仅模型验证 |
+| Telemetry/Event/通信压力 | [P6初测](validation/evidence/protocol/p6.json)、[TX优化及验收调整](validation/evidence/protocol/p6-tx.json)；50Hz×10s及250Hz×30s零缺帧，按250Hz完成本阶段通信验收 | 500Hz×10s缺96/5001帧，与96次覆盖一致，1.92%仍未通过原<1%门槛；本轮无运动，Event变化仅模型验证 |
 
 以上两次正式 Run 实物记录属于 HEX
 `0e73f54e03ceaa9b21f3ae7cfc305c1ca50ecc9577613cc47f974d54fd2eee76`。
@@ -39,7 +40,36 @@
 受影响的命令交接、后台通信与实时路径分别用针对性检查确认，不重跑无关底层波形。
 本页后续保留各轮测量条件、失败首因与镜像，读者不必依赖未分发的本地日志判断上述边界。
 
-## 遥测名义负载通过，500Hz发送吞吐未达标
+## TX优化：250Hz通信验收通过，500Hz保留容量边界
+
+在原队列、波特率及控制参数下，仅调整Communication发送路径：复用既有130 B编码工作区，
+BUSY且Mailbox产生身份未变时不重复编码；样本覆盖、响应或Event改写工作区后立即失效。
+没有第二个待发样本槽。请求与Completion仍先处理，发送尝试之后再观察最佳努力Event；
+已排队终态和Event的发送优先级不变，新观察的Event在下次service参与选择。
+
+临时无功率诊断镜像的64项有界DWT记录区分了首个瓶颈：剔除前两项后，原逐帧编码耗时
+中位数92.29 µs，USART TC软件处理标记到下一DMA启动中位数132.52 µs；加入编码复用后，
+62项中61项命中，后者降为34.42 µs。记录包含抢占，TC软件标记不是引脚精确发送终点；
+它只说明该负载下的服务成本，不证明完整ISR WCET。诊断记录不进入正式镜像。
+
+最终Run全量构建零错误、零警告，Code65558/RO1054/RW444/ZI20748，静态RAM21192 B。
+28组真实ARM Server/Client模型通过，新增验证BUSY只编码一次、最新样本覆盖、工作区被
+响应/Event/IN_PROGRESS复用后的失效及损坏缓存长度。控制、DMA、Kernel/Port和保护未改，
+复用其未受影响证据。正式build ID为`0xfd763adb40fa8964`，HEX为
+`ec3a17d9c2ebc45b4c6c0e8d7f446c00318cf460e0063b51ec1e853a08b54890`，
+烧录与独立Flash读回66628 B匹配。完整输入摘要见[P6 TX证据](validation/evidence/protocol/p6-tx.json)。
+
+最终镜像按原逻辑供电条件复测，均穿插1 Hz状态请求：50Hz/10秒500帧、250Hz/30秒7501帧，
+零缺口、零覆盖、零重发、零解析/链路/内部错误。500Hz/10秒收到4905帧，序号1..5001缺96帧，
+与96次覆盖一致，1.92%仍超过原<1%门槛；9次状态请求无重发，最大响应6.15ms。
+单帧92 B在实际460704.6 baud下约占1.997ms，500Hz样本已占46000 B/s，几乎用尽线路。
+
+本阶段验收边界经确认调整为250Hz名义通信闭环；500Hz明确保留FAIL，不宣称原P6压力指标
+全部通过，也不放宽设备截止或功率保护。结束时IDLE、目标/命令计数/接受启动均0、MOE0、
+六路LOW、guard/内部/Motor/时序故障0；最小剩余栈690/438/254/109 word均超过25%。
+遥测恢复enabled/250Hz，PI仍Default，尚未发送运动命令；下一步仅补新协议下有限启停调速。
+
+## P6初测：遥测名义负载通过，500Hz发送吞吐未达标
 
 正式Run已接入Telemetry及Event，能力位0x3F。Telemetry任务只推进自己的产生/覆盖计数，
 值携会话epoch、该epoch首个产生计数和配置generation；Communication独占Session及线上

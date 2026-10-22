@@ -63,9 +63,9 @@ Task notification1、栈检查2、max priorities4。只链接实际使用的Kern
 | Idle | 0 | 128 | Kernel维护，静态提供内存 |
 
 栈按实际MAP调用链及FPU上下文预留，word为4字节。静态调用链已知部分为Bootstrap304 B、
-Communication1216 B、Telemetry408 B、Idle40 B，仍有间接调用/汇编未知量及硬件异常压栈。
-当前Run静态RAM为21176/32768 B，包含4 KiB主栈、原512 B C库堆保留区、512 B RX/130 B TX
-及2816 B Server静态状态/工作区；无动态分配调用或FreeRTOS heap实现。Event8、Mailbox1及
+Communication1224 B、Telemetry408 B、Idle40 B，仍有间接调用/汇编未知量及硬件异常压栈。
+当前Run静态RAM为21192/32768 B，包含4 KiB主栈、原512 B C库堆保留区、512 B RX/130 B TX
+及2832 B Server静态状态/工作区；无动态分配调用或FreeRTOS heap实现。Event8、Mailbox1及
 发送元数据已计入；Server只peek原Mailbox，不添加第二个待发样本槽。
 不能把静态占用当作栈安全证明；长期任务实测最小剩余栈必须≥初始25%，Bootstrap删除前记录自身数值。
 
@@ -80,6 +80,9 @@ ADC只形成Completion与1 kHz速度调参publication，不发Task notification�
 Communication保留1ms超时唤醒，有界服务Server/Completion、RX及终态/Event/最新遥测发送。
 Telemetry在有效会话中按配置周期生成Mailbox值和单写产生计数；Communication映射独立
 线上序号，TX接受才退休，BUSY保留、下一份覆盖计数；epoch/generation不符的值直接丢弃。
+同一产生身份复用既有wire编码工作区，Mailbox更新则重新编码，不保留旧值发送队列。
+服务先处理RX、截止及Completion，再尝试续帧，最后读取最佳努力Event快照；不在TX完成
+IRQ中编码、复制整帧或做统计，事件FIFO选择优先级及单帧传输所有权不变。
 Motor装配和任务句柄就绪后，Bootstrap初始化
 唯一Server，再执行Transport初始化、事件绑定及RX DMA启动，最后自删除。Parser、Session、
 事务、参数映射和响应缓存都在Communication上下文，无ISR协议工作。物理控制时间仍来自

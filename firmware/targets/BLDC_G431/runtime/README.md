@@ -4,7 +4,8 @@
 原生静态FreeRTOS后台。正式Run关闭旧UART/VOFA入口，使用Core Protocol V1。
 USART1以460800/8N1接入RX Circular DMA及单帧TX DMA；Communication唯一持有Codec、
 Session/事务Server，提供对象读写、完整命令应答及Telemetry/Event。无功率50/250Hz遥测与
-每秒状态请求通过；500Hz压力的邮箱覆盖超过门槛，尚未验收，详见Target验证页。
+每秒状态请求通过，按250Hz完成本阶段通信验收；500Hz损失1.92%仍未通过原<1%门槛，
+作为容量边界保留，详见Target验证页。
 Validation裸机入口仍保持115200，不能与Run混用串口设置。
 既有实测基线执行固定硬件、空载条件下的有限启停与调速；上电始终关断，必须显式Start。
 独立电流精度、持续运行与故障恢复尚未完成；实测镜像、证据及限制统一见

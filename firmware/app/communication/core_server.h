@@ -31,6 +31,10 @@ typedef struct {
     uint32_t previous_state, previous_faults;
     bool snapshot_valid, telemetry_domain_valid, telemetry_exhausted;
     uint32_t telemetry_first, telemetry_sequence;
+    /* 复用下方既有wire工作区；Mailbox仍是唯一待发真值，不缓存第二份样本。 */
+    bool telemetry_wire_valid;
+    uint32_t telemetry_wire_epoch, telemetry_wire_produced, telemetry_wire_generation;
+    size_t telemetry_wire_length;
     CoreQueuedEvent events[CORE_EVENT_CAPACITY];
     CorePendingRequest ordinary, stop;
     CoreCompletedRequest cache[CORE_CACHE_CAPACITY];
@@ -49,6 +53,8 @@ void core_server_discontinuity(CoreServer *server);
 /* 先检查可信性/截止，再有界排空Completion；不等待、不自动重试业务。 */
 void core_server_poll(CoreServer *server, uint32_t now_ms);
 void core_server_flush(CoreServer *server);
+/* 非关键快照观察放在发送尝试之后；事件下轮参与优先级选择，不阻塞续帧。 */
+void core_server_observe(CoreServer *server);
 
 /* 链接期窄集成；没有运行期Ops表。对象取得一致副本，写请求只交给实时所有者。 */
 CoreResult core_server_port_read_object(uint16_t object, CoreObject *value);

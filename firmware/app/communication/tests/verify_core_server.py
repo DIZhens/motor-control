@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 from elftools.elf.elffile import ELFFile
-from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS
+from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE
 from unicorn.arm_const import UC_CPU_ARM_CORTEX_M4, UC_ARM_REG_R0, UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_PC
 
 COMM=Path(__file__).resolve().parents[1]
@@ -153,7 +153,7 @@ def tests():
     m=Model().open();m.feed(req(seq=1));m.put('model_tx_error',1);m.call('model_flush');assert m.get('model_failure')==7
     for result in [3,4,99]:
         m=Model().open();m.put('model_submit_override',result);m.feed(req(4,3,seq=1));assert m.get('model_failure')==6
-    for corruption in [0,1,2]:
+    for corruption in [0,1,2,3,4]:
         m=Model().open();m.feed(req(4,1,seq=1,target_velocity_rpm=60))
         m.call('model_corrupt_state',corruption);m.poll();assert m.get('model_failure')==6
     passed('未知ticket、终态FIFO溢出及不可恢复Transport错误锁首因，不静默丢响应')
@@ -187,6 +187,36 @@ def tests():
     m.call('model_produce',5);m.feed(req(seq=1));assert m.take()[0].kind==2
     assert m.take()[0].sequence==5
     passed('单槽遥测BUSY不取走；产生计数映射在线序号、覆盖表现为缺口；终态优先')
+
+    m=Model().open();encodes=[]
+    address=m.symbols['core_frame_encode'] & ~1
+    m.cpu.hook_add(UC_HOOK_CODE,lambda cpu,pc,size,user:encodes.append(1) if pc==address else None)
+    # OPEN已执行编码路径；清旧翻译块使新Hook真正覆盖该入口。
+    m.cpu.ctl_flush_tb()
+    m.call('model_produce',1);m.put('model_tx_busy',1)
+    for _ in range(5):m.call('model_flush')
+    assert len(encodes)==1 and m.get('model_telemetry_pending')==1,(len(encodes),m.get('model_telemetry_pending'))
+    m.put('model_tx_busy',0);f,v=m.take()
+    assert f.kind==3 and f.sequence==1 and v['sample_sequence']==4 and len(encodes)==1
+    passed('真实ARM编码入口计数：同一Mailbox五次BUSY只编码一次，接受前不消费、不增加发送槽')
+
+    m=Model().open();m.call('model_produce',1);m.put('model_tx_busy',1);m.call('model_flush')
+    m.call('model_produce',3);m.call('model_flush');m.put('model_tx_busy',0)
+    f,v=m.take();assert f.sequence==3 and v['sample_sequence']==12
+    m.call('model_produce',4);m.put('model_tx_busy',1);m.call('model_flush')
+    m.feed(req(seq=1));m.put('model_tx_busy',0)
+    assert m.take()[0].kind==2
+    f,v=m.take();assert f.kind==3 and f.sequence==4
+    passed('覆盖后的最新产生身份重新编码；终态抢先复用wire后，旧遥测编码不能误发')
+
+    m=Model().open();m.call('model_produce',1);m.put('model_tx_busy',1);m.call('model_flush')
+    m.call('model_event_state',2);m.poll();m.put('model_tx_busy',0)
+    assert m.take()[0].kind==4 and m.take()[0].kind==3
+    m=Model().open();m.call('model_produce',1);m.put('model_tx_busy',1);m.call('model_flush')
+    pending=req(3,0x102,seq=1,value=dict(kp=.002,ki=.006));m.feed(pending);m.feed(pending)
+    m.put('model_tx_busy',0)
+    f,v=m.take();assert f.kind==3 and f.sequence==1 and v['sample_sequence']==4
+    passed('Event与IN_PROGRESS提示改写工作区会撤销遥测复用资格，优先级与帧内容保持正确')
 
     m=Model().open();m.call('model_produce',1);m.open(2)
     assert m.take() is None and m.get('model_telemetry_pending')==0
