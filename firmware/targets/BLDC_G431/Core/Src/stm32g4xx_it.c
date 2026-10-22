@@ -22,6 +22,9 @@
 #include "stm32g4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#if defined(BLDC_G431_FREERTOS)
+#include "uart_dma_transport.h"
+#endif
 #include "../../platform/realtime_motor_io_internal.h"
 #include "../../platform/position_observation_internal.h"
 #if defined(BLDC_G431_TIMING_ENTRY)
@@ -76,6 +79,9 @@ extern DAC_HandleTypeDef hdac3;
 extern SPI_HandleTypeDef hspi1;
 extern TIM_HandleTypeDef htim1;
 extern TIM_HandleTypeDef htim6;
+extern DMA_HandleTypeDef hdma_usart1_rx;
+extern DMA_HandleTypeDef hdma_usart1_tx;
+extern UART_HandleTypeDef huart1;
 extern TIM_HandleTypeDef htim7;
 
 /* USER CODE BEGIN EV */
@@ -198,6 +204,40 @@ void DMA1_Channel1_IRQHandler(void)
 }
 
 /**
+  * @brief This function handles DMA1 channel2 global interrupt.
+  */
+void DMA1_Channel2_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Channel2_IRQn 0 */
+#if defined(BLDC_G431_FREERTOS)
+  g431_uart_rx_dma_irq();
+#endif
+#if 0
+  /* USER CODE END DMA1_Channel2_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_usart1_rx);
+  /* USER CODE BEGIN DMA1_Channel2_IRQn 1 */
+#endif
+  /* USER CODE END DMA1_Channel2_IRQn 1 */
+}
+
+/**
+  * @brief This function handles DMA1 channel3 global interrupt.
+  */
+void DMA1_Channel3_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Channel3_IRQn 0 */
+#if defined(BLDC_G431_FREERTOS)
+  g431_uart_tx_dma_irq();
+#endif
+#if 0
+  /* USER CODE END DMA1_Channel3_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_usart1_tx);
+  /* USER CODE BEGIN DMA1_Channel3_IRQn 1 */
+#endif
+  /* USER CODE END DMA1_Channel3_IRQn 1 */
+}
+
+/**
   * @brief This function handles ADC1 and ADC2 global interrupt.
   */
 void ADC1_2_IRQHandler(void)
@@ -303,6 +343,23 @@ void SPI1_IRQHandler(void)
   /* USER CODE BEGIN SPI1_IRQn 1 */
 #endif
   /* USER CODE END SPI1_IRQn 1 */
+}
+
+/**
+  * @brief This function handles USART1 global interrupt / USART1 wake-up interrupt through EXTI line 25.
+  */
+void USART1_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART1_IRQn 0 */
+#if defined(BLDC_G431_FREERTOS)
+  g431_uart_irq();
+#endif
+#if 0
+  /* USER CODE END USART1_IRQn 0 */
+  HAL_UART_IRQHandler(&huart1);
+  /* USER CODE BEGIN USART1_IRQn 1 */
+#endif
+  /* USER CODE END USART1_IRQn 1 */
 }
 
 /**

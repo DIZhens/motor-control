@@ -28,6 +28,16 @@ static void fatal(RuntimeInternalFaultReason reason)
 
 void system_runtime_assert_failed(void) { fatal(RUNTIME_INTERNAL_RTOS); }
 
+void system_runtime_communication_notify(bool from_interrupt)
+{
+    BaseType_t higher_priority_woken = pdFALSE;
+    if (s_communication == NULL) { fatal(RUNTIME_INTERNAL_BOOTSTRAP); }
+    if (from_interrupt) {
+        vTaskNotifyGiveFromISR(s_communication, &higher_priority_woken);
+        portYIELD_FROM_ISR(higher_priority_woken);
+    } else { xTaskNotifyGive(s_communication); }
+}
+
 void vApplicationStackOverflowHook(TaskHandle_t task, char *name)
 {
     (void)task; (void)name;
@@ -48,6 +58,7 @@ static void communication_task(void *argument)
         /* ADC只写Completion；后台最长1ms醒来，随后由协议Server接管排空。 */
         (void)ulTaskNotifyTake(pdTRUE, 1U);
         g_system_runtime_status.communication_passes++;
+        system_runtime_target_communication_service();
         if (xQueueReceive(s_mailbox, &sample, 0U) == pdPASS) {
             /* P3只验证最新值交接，不发串口、不消费尚无事务所有者的Completion。 */
             g_system_runtime_status.latest_sample_sequence = sample.sample_sequence;
@@ -108,7 +119,9 @@ static void bootstrap_task(void *argument)
     /* Idle已由vTaskStartScheduler静态创建。Bootstrap仍最高优先级，长期任务尚未执行。 */
     s_idle = xTaskGetIdleTaskHandle();
     if (s_communication == NULL || s_telemetry == NULL || s_idle == NULL
-        || !system_runtime_target_bootstrap()) { fatal(RUNTIME_INTERNAL_BOOTSTRAP); }
+        || !system_runtime_target_bootstrap() || !system_runtime_target_start_transport()) {
+        fatal(RUNTIME_INTERNAL_BOOTSTRAP);
+    }
     g_system_runtime_status.phase = SYSTEM_RUNTIME_READY;
     g_system_runtime_status.bootstrap_stack_free = uxTaskGetStackHighWaterMark(NULL);
     vTaskDelete(NULL);

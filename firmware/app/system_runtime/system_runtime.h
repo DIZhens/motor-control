@@ -2,10 +2,13 @@
 #define SYSTEM_RUNTIME_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 /* 链接到RTOS Target的后台装配入口；不从控制ISR调用。 */
 void system_runtime_start(void);
 void system_runtime_assert_failed(void);
+/* 仅作有界唤醒，事件权威状态仍由Transport查询；允许通知合并。 */
+void system_runtime_communication_notify(bool from_interrupt);
 
 typedef enum {
     SYSTEM_RUNTIME_RESET = 0,

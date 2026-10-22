@@ -197,7 +197,12 @@ with tempfile.TemporaryDirectory(prefix='g431-system-runtime-') as directory:
     assert m.read('g_system_runtime_status') == 3
     assert m.call('uxTaskGetNumberOfTasks') == 4
     assert m.read('s_mailbox') and m.read('s_communication') and m.read('s_telemetry')
+    assert m.read('model_transport_count')==1
     passed('Bootstrap创建真实静态Mailbox及长期任务后装配Target，记录高水位再请求自删除')
+    m_transport = Model();m_transport.start();m_transport.write('model_transport_ok',0);m_transport.bootstrap()
+    assert m_transport.stop=='fatal' and m_transport.read('model_boot_count')==1
+    assert m_transport.read('model_transport_count')==1
+    passed('Motor与任务装配后才开放Transport；失败保持内部关断')
     for rate in [50, 250, 500]:
         m.write('model_rate_hz', rate)
         m.write('model_sample_sequence', rate)

@@ -2,6 +2,8 @@
 
 `BLDC_G431_Run` 是日常开发的正式入口，装配公共 Motor / ControlRuntime、Platform 和
 原生静态FreeRTOS后台。当前迁移增量关闭旧UART/VOFA入口，新协议Server接入前不开放Host命令。
+USART1已以460800/8N1接入RX Circular DMA及单帧TX DMA；当前Communication仅有限排空输入，
+不解释协议、不回应业务请求。Validation裸机入口仍保持115200，不能与Run混用串口设置。
 既有实测基线执行固定硬件、空载条件下的有限启停与调速；上电始终关断，必须显式Start。
 独立电流精度、持续运行与故障恢复尚未完成；实测镜像、证据及限制统一见
 [Target 验证页](../VALIDATION.md)。
@@ -97,17 +99,29 @@ Run已装配[SystemRuntime交接](../../../app/system_runtime/README.md)：非�
 内部可信性丢失立即safe-off并撤销Session逻辑资格，下一ADC把bit7合入Motor；
 首因与计数单独保存，不改变Clear或现有有限保护。API边界见`target_runtime.h`。
 
-当前这些新增请求入口仅由ARM模型消费；已接入原生FreeRTOS启动和遥测Mailbox，尚无
-新协议Server或UART DMA。原VOFA装配只保留在验证入口与兼容模型中，不是Run的第二个后台所有者。
+当前这些新增请求入口仅由ARM模型消费；已接入原生FreeRTOS、遥测Mailbox及UART DMA，
+尚无新协议Server。原VOFA装配只保留在验证入口与兼容模型中，不是Run的第二个后台所有者。
 模型和构建不改写既有HEX实物记录；新镜像的实物验收按后续阶段单独说明。
 
 ```powershell
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run --exchange
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_system_runtime.py
+.\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_uart_dma.py
 ```
 
 任务职责、栈预算、四个独立时间域及异常归属见[RTOS集成合同](RTOS_INTEGRATION.md)。
 任务模型替代异常上下文切换边界，不等同于真实调度器、实机栈余量或中断延迟通过。
+
+`uart_dma_transport.c`独占USART1及DMA1通道2/3，事件只唤醒Communication。接收按DMA
+位置与边界旗标核对进度，不能按通知次数推导字节；连续性断开时返回0字节及新epoch。
+发送最多130 B、内部复制且单帧在途，DMA TC后须等待USART TC；10ms超时或内部不变量
+失败锁存关断。具体时序界限见[字节流边界](RTOS_INTEGRATION.md#字节流与后台边界)。
+ARM模型使用模拟MMIO与字节复制替身，另以生产C库的真实串口回环核对复制结果。
+`tests/uart_transport_loopback.c`仅供逻辑供电临时镜像：替代后台service执行原始回环、
+有限暂停读取及故意冻结TX。它不含Motor命令、不加入任一正式工程，也不新增长期Target；
+实测完成恢复正式Run，故障测试不能作为业务恢复入口。
+正式P4尚无TX调用者，链接器可裁剪未使用的发送/统计API；完整TX路径由临时回环镜像
+引用并实测，不为保留符号添加业务调用。Server接入后再由正常引用保留相应API。
 
 ## 实时频率与作用时刻
 

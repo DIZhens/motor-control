@@ -86,6 +86,13 @@ def run(image, runtime=False, rtos=False):
     cases += 1
     if rtos:
         assert not {'SVC_Handler', 'PendSV_Handler', 'SysTick_Handler'} & m.symbols.keys()
+    for entry,counter in [('DMA1_Channel2_IRQHandler','model_core_uart_rx_calls'),
+                          ('DMA1_Channel3_IRQHandler','model_core_uart_tx_calls'),
+                          ('USART1_IRQHandler','model_core_uart_calls')]:
+        m=Model(image);m.call(entry)
+        assert m.word(counter)==int(rtos) and m.word('model_core_unexpected_irqs')==0
+        assert m.word('model_control_time')==0 and not m.moe()
+        cases+=1
     label = 'Run RTOS Core' if rtos else ("Run兼容试具" if runtime else "Validation")
     print(f"G431 real Core IRQ ownership ({label}): {cases} cases PASS")
     print("Core/Platform ARM code with faithful UPDATE/BREAK HAL subset; no board, NVIC latency or electrical proof.")

@@ -3,15 +3,15 @@
 通信业务通过设备合同与 Motor 交互；线格式编解码不读取 Motor 私有数据，不直接操作功率，
 不依赖 HAL、STM32 或 FreeRTOS。硬件字节流由 Target 提供。
 
-现有 Run 使用 `vofa` / `motor_vofa`，Target 负责 UART 及装配。新的 Core Protocol 库当前
-只进入独立 ARM 模型，尚未加入 Run / Validation 工程成员，不改变现有设备的串口格式。
-两个协议没有自动探测或混发入口。
+正式Run已移除`vofa` / `motor_vofa`装配，使用Target的460800/8N1 DMA字节流；当前只排空
+原始输入、不回应业务请求。Core Protocol库仍只进入独立ARM模型，事务Server尚未接入。
+Validation保留裸机115200/VOFA验证入口，两个协议没有自动探测或混发入口。
 
 ## Core Protocol 库
 
 - [core_protocol.h](core_protocol.h)：CRC、COBS、完整帧及分片解析器。
 - [core_protocol_values.h](core_protocol_values.h)：请求、响应、七种固定对象、72 B 遥测和事件。
-- [byte_stream_transport.h](byte_stream_transport.h)：后续 Target 字节流合同，当前只有声明。
+- [byte_stream_transport.h](byte_stream_transport.h)：Target字节流合同，G431已实现RX/TX DMA。
 
 编号、单位、有效位、精确长度及会话规则以
 [Wire Contract](../../../interface/CORE_PROTOCOL_V1.md)为准；C 类型不是线上结构体。
@@ -57,3 +57,6 @@ COBS、长度或 CRC 错误不发布帧，解码目标保持原值。仅 `CORE_O
 覆盖全部固定布局、逐字段值、所有分片点、连续帧、随机 chunk、CRC 位翻转、错误后恢复、
 精确容量、超时边界和时钟回绕。`--report <路径>` 可保存带来源摘要的本次结果。
 这是离线库模型，不能证明串口吞吐、DMA 连续性、任务调度、会话去重或实际 Motor 行为。
+G431字节流的有界进度、连续性epoch、单帧TX和实物范围见
+[Target集成合同](../../targets/BLDC_G431/runtime/RTOS_INTEGRATION.md#字节流与后台边界)及
+[验证页](../../targets/BLDC_G431/VALIDATION.md)。

@@ -763,6 +763,11 @@
               <FileType>1</FileType>
               <FilePath>..\runtime\target_system_runtime.c</FilePath>
             </File>
+            <File>
+              <FileName>uart_dma_transport.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/uart_dma_transport.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

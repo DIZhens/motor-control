@@ -15,8 +15,8 @@ assert或栈溢出直接调用Target的协议无关关断，不等待ADC或队�
 
 任务优先级为Bootstrap 3、Communication 2、Telemetry 1、Idle 0，栈分别为
 768/768/384/128个32位word。Telemetry按20/4/2ms周期读取已有publication，覆盖Mailbox；
-Communication等待通知或1ms超时。当前只验证任务及最新值交接，Communication暂不消费
-Completion、不开放Host命令或发送UART；DMA Transport与事务Server接入后由它唯一持有。
+Communication等待通知或1ms超时。当前唯一持有UART DMA Transport并有限排空原始输入，
+尚不消费Completion、不解释Host命令或发送业务应答；事务Server后续接入同一任务。
 高水位每秒保存，静态容量和离线模型都不代替实机任务栈余量或调度延迟验收。
 
 ## 请求与完成
@@ -73,7 +73,8 @@ Telemetry覆盖不属于内部故障。真正的Session与事务清理由后续S
 
 ## 当前装配与验证
 
-只有正式G431 Run链接本模块。Run已移除旧VOFA/UART源码装配，新协议接管前不开放串口命令；
+只有正式G431 Run链接本模块。Run已移除旧VOFA/UART源码装配，使用460800/8N1的DMA字节流，
+新协议接管前不开放串口命令；
 旧邮箱兼容代码仍供隔离控制模型使用，不能建立第二个后台所有者。
 Validation工程保持裸机旧入口，不链接本目录或FreeRTOS。
 
@@ -82,9 +83,11 @@ Validation工程保持裸机旧入口，不链接本目录或FreeRTOS。
 ```powershell
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run --exchange
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_system_runtime.py
+.\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_uart_dma.py
 ```
 
 模型通过正式Run装配执行请求、参数、完成FIFO、发布和Fail-closed，HCC/MMIO是替身；
 不代表电气安全、ISR WCET、调度延迟或新镜像实物通过。任务模型执行实际Kernel/Port及任务代码，
-但在异常切换/任务阻塞处替代硬件上下文切换；新协议Server和UART DMA尚未接入。证据与构建入口见
+但在异常切换/任务阻塞处替代硬件上下文切换。UART Adapter另有真实串口回环、覆盖恢复及
+故意冻结TX的超时实测，临时测试镜像不加入正式工程；新协议Server尚未接入。证据与构建入口见
 [G431验证页](../../targets/BLDC_G431/VALIDATION.md)。

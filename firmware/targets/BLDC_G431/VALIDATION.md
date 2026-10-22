@@ -6,8 +6,8 @@
 [runtime/README.md](runtime/README.md)，历史控制基线的UART / VOFA操作见
 [Host 说明](../../../host/vofa/README.md#有限-run-操作)。
 
-当前Run已进入原生FreeRTOS后台迁移，关闭旧VOFA装配；UART DMA和新协议Server尚未接入，
-因此当前镜像不开放Host命令。旧实物启停记录继续绑定各自HEX，不改写为本轮运动验收。
+当前Run已接入原生FreeRTOS和460800/8N1 UART DMA，关闭旧VOFA装配；新协议Server尚未接入，
+因此当前镜像只排空原始输入、不开放Host命令。旧实物启停记录继续绑定各自HEX，不改写为本轮运动验收。
 
 `validation/` 台架经 HCC 使用 Platform，不是正式 Motor / ControlRuntime。
 旧功率包与保护注入要求电机三相断开；有限开环仅按[专用流程](validation/OPEN_LOOP.md)接电机。
@@ -24,15 +24,48 @@
 | 命令交接与一致性观测 | Run / Observe 模型，正式 UART 实物记录 | 单普通请求槽、Stop 优先；最近结果不是逐请求可靠应答 |
 | 保护与时序 | 原 Platform 保护实测、故障模型、独立守卫和正式 Run 停机读回 | 正式 Run 故障注入、2 圈触界及完整 ISR WCET 尚无实物验收 |
 | 性能与长期能力 | 既有台架速度曲线和电阻量级交叉检查 | 原 15 rpm 峰值初筛失败保留；持续运行、带载、独立电流精度、持久标定和故障恢复未完成 |
-| 自研协议编解码 | [协议合同](../../../interface/CORE_PROTOCOL_V1.md)、[P1 离线证据](validation/evidence/protocol/p1.json)；真实 ARM C 与 Python、30 个黄金帧对照 | 独立库，尚未接入Run；会话事务、UART DMA后续实现，离线库通过不等于实物通过 |
+| 自研协议编解码 | [协议合同](../../../interface/CORE_PROTOCOL_V1.md)、[P1 离线证据](validation/evidence/protocol/p1.json)；真实 ARM C 与 Python、30 个黄金帧对照 | 独立库，尚未接入Run；会话事务后续实现，离线库通过不等于实物通过 |
 | 内部命令与参数交接 | [P2构建和ARM证据](validation/evidence/protocol/p2.json)；ticket、Stop取消、Completion4、PI Staged/Active、1kHz观测和内部关断 | 尚无线上参数入口或会话去重；P2为离线交接验收，本轮启动检查不代替带电命令验收 |
-| FreeRTOS启动与时间域 | [P3构建、模型和实物证据](validation/evidence/protocol/p3.json)；TIM7 HAL、SysTick Kernel、静态任务/Mailbox、唯一异常入口、默认关断 | 纯逻辑供电IDLE；尚无UART DMA/协议负载、运动下调度压力或WCET证明 |
+| FreeRTOS启动与时间域 | [P3构建、模型和实物证据](validation/evidence/protocol/p3.json)；TIM7 HAL、SysTick Kernel、静态任务/Mailbox、唯一异常入口、默认关断 | 启动负载证据；不代替协议负载、运动下调度压力或WCET证明 |
+| UART DMA字节流 | [P4构建、模型和实物证据](validation/evidence/protocol/p4.json)；512 B RX、130 B单帧TX、460800回环、覆盖/帧错误恢复、冻结TX关断 | 纯逻辑供电；无Server/事务/线上命令，未做50/250/500 Hz协议压力及运动负载 |
 
 以上两次正式 Run 实物记录属于 HEX
 `0e73f54e03ceaa9b21f3ae7cfc305c1ca50ecc9577613cc47f974d54fd2eee76`。
 源码整理或新构建不会把旧证据改写成新镜像已实测。未受影响的功能证据继续保留；
 受影响的命令交接、后台通信与实时路径分别用针对性检查确认，不重跑无关底层波形。
 本页后续保留各轮测量条件、失败首因与镜像，读者不必依赖未分发的本地日志判断上述边界。
+
+## UART DMA：字节流、覆盖恢复及发送超时通过
+
+CubeMX生成USART1 460800/8N1、RX DMA1_Channel2 Circular、TX DMA1_Channel3 Normal及
+三个优先级5的IRQ；RX/TX硬件仲裁保持LOW。Target Adapter独占寄存器，IRQ只核对必要
+进度、处理错误并通知Communication；不解析协议或调用Motor。Bootstrap最后开放RX。
+Validation仍为裸机115200轮询，不链接Adapter或Kernel；没有新增正式Target。
+
+四个原生Target均零错误、零警告；Run静态RAM为18336/32768 B。11组DMA ARM模型、
+12组SystemRuntime、19组交接、12组有限Run、46组Observe及Core IRQ 14/15/15项通过。
+DMA模型覆盖合并/重复通知、回绕、覆盖与复制后复核、PE/FE/NE/ORE、TX内部复制、
+DMA TC至USART TC的BUSY、10ms截止和迟到TC、内部故障后关闭事件源。模型采用模拟MMIO
+和字节复制替身；真实C库复制另外通过下面的原生串口测试核对。
+
+操作者确认OUTPUT关闭、ST-Link独立逻辑3V3，USB串口共地且VCC不接、VOFA断开；
+原三相和编码器保留，无电池或外部注入。临时回环镜像使用正式Adapter和Kernel，仅替代
+后台service，不处理Motor命令。COM5按460800连接，20种长度共7835 B逐字节回环一致，
+无丢失或重复，包含27 B复制及4096 B跨圈流。暂停读取40ms并注入2000 B后检测覆盖、
+提升epoch，后续117 B标记完全恢复；Host line break计到一次FE，后续126 B标记恢复，
+均未锁Motor故障。故意冻结已接受的TX后锁TIMEOUT首因8、guard/Motor bit7，六路LOW；
+再输入1000 B无响应、无重复故障，Communication继续运行。实物读回确认故障终态，
+精确10ms边界由ARM模型验证，本轮没有测量真实关断延迟。
+
+最后恢复正式Run，原生校验及独立Flash读回56516 B匹配，HEX为
+`dd0e5c4d9ee479be590fcc59a06ddd9fd9ea4cc0877ce4e79d160b1cf3d00278`。
+正式镜像不存在回环/故障注入符号，排空4096 B原始输入且发送0 B；Motor IDLE、接受启动0次，
+MOE=0、六路LOW、guard及内部故障0。栈最小剩余Bootstrap691/768、Communication691/768、
+Telemetry300/384、Idle110/128 word，均超过25%；仅适用于本轮负载。
+
+[P4证据](validation/evidence/protocol/p4.json)分别绑定临时与正式镜像及统计。
+本轮不含新协议Server、Session/事务、线上参数、Telemetry发送、协议压力或电机运动；
+不改写旧带电证据，也不证明WCET、最坏抢占、持续带载及独立电流精度。
 
 ## 原生FreeRTOS：纯逻辑启动与静态任务通过
 

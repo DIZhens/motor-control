@@ -24,7 +24,7 @@ CubeMX仅负责TIM7 HAL timebase、UART/DMA/NVIC等硬件配置。可生成不�
 
 ## 资源与中断所有权
 
-以下为资源边界；UART/DMA行待Transport接入，其余已进入Run配置和启动核对。
+以下资源已进入Run配置和启动核对；UART/DMA由Target的字节流Adapter独占。
 G431有4个NVIC优先级位，保持PRIORITYGROUP_4；数值越小逻辑优先级越高。
 
 | 资源 | 优先级 | 所有者与约束 |
@@ -32,7 +32,7 @@ G431有4个NVIC优先级位，保持PRIORITYGROUP_4；数值越小逻辑优先�
 | TIM1 Update/Break | 0，保持 | Platform，20 kHz PWM及有效更新/保护；无RTOS API |
 | ADC1_2 / ADC1 DMA1_Channel1 | 1，保持 | Platform/ControlRuntime，10 kHz唯一实时写者；无RTOS API |
 | SPI1 | 2，保持 | MT6701有限SSI事务；无RTOS API |
-| USART1 / RX DMA1_Channel2 / TX DMA1_Channel3 | 5，待接入 | UART Adapter，只记必要进度/错误并通知后台 |
+| USART1 / RX DMA1_Channel2 / TX DMA1_Channel3 | 5 | UART Adapter，只记必要进度/错误并通知后台 |
 | TIM6 | 15，保持 | 原约50 µs独立守卫及1.5秒上限，不改成HAL/内核时基 |
 | TIM7 | 15，新增 | HAL 1 kHz，调度器前后均推进；不通知RTOS |
 | SysTick / PendSV | 15 | Kernel 1 kHz tick及上下文切换，正式Run由Port唯一拥有 |
@@ -64,8 +64,8 @@ Task notification1、栈检查2、max priorities4。只链接实际使用的Kern
 
 栈按实际MAP调用链及FPU上下文预留，word为4字节。静态调用链已知部分为Bootstrap304 B、
 Communication224 B、Telemetry296 B、Idle40 B，仍有间接调用/汇编未知量及硬件异常压栈。
-当前Run静态RAM为17400/32768 B，包含4 KiB主栈及原512 B C库堆保留区；无动态分配调用
-或FreeRTOS heap实现。后续512 B RX、130 B TX、协议缓存/FIFO还需继续预算。
+当前Run静态RAM为18336/32768 B，包含4 KiB主栈、原512 B C库堆保留区及512 B RX/130 B TX；
+无动态分配调用或FreeRTOS heap实现。后续协议缓存/FIFO还需继续预算。
 不能把静态占用当作栈安全证明；长期任务实测最小剩余栈必须≥初始25%，Bootstrap删除前记录自身数值。
 
 调度器前：HAL/TIM7 tick、时钟和生成硬件初始化、最早safe-off、创建静态Bootstrap、启动
@@ -76,9 +76,10 @@ Completion、装配Motor保持关断、启动Drive Timing/TIM6、绑定事件Sin
 静态资源失败进入协议无关Fail-closed，不尝试重启调度器或电机。
 
 ADC只形成Completion与1 kHz速度调参publication，不发Task notification或Queue。
-Communication保留最迟1ms唤醒边界，待Server加入后排空Completion；当前只消费遥测Mailbox，
-不开放串口命令、不消费尚无事务所有者的Completion。Protocol/Session初始化、事件绑定及
-RX DMA启动由后续增量加入Bootstrap末端。物理控制时间仍来自PWM/ADC，HAL/RTOS tick不参与FOC dt。
+Communication保留1ms超时唤醒，待Server加入后排空Completion；当前消费遥测Mailbox并有限
+排空UART原始输入，不开放串口命令、不消费尚无事务所有者的Completion。Motor装配和任务
+句柄就绪后，Bootstrap最后执行Transport初始化、事件绑定及RX DMA启动，再自删除；
+Protocol/Session初始化后续加入。物理控制时间仍来自PWM/ADC，HAL/RTOS tick不参与FOC dt。
 
 ## 字节流与后台边界
 
@@ -87,14 +88,23 @@ RX DMA启动由后续增量加入Bootstrap末端。物理控制时间仍来自PW
 权威事实为DMA生产位置、后台消费位置、连续性epoch和实际TX所有权。
 
 RX只用512 B Circular DMA，初版无额外软件Ring；IDLE/HT/TC/Error IRQ不做COBS、CRC、
-解析或整块复制。生产减消费超过512即明确连续性破坏，作废半帧至下一delimiter。
-必须证明HT/TC合并、回绕及延迟处理下的进度可靠，不能把NDTR单个模位置当作总生产量。
-无法证明覆盖可检测时停止并报告，不借扩大缓冲掩盖。
+解析或整块复制。按NDTR位置差与HT/TC边界旗标共同核对；DWT观测间隔须小于8ms，
+并以HAL tick交叉检查。512字节在本波特率下约11.1ms填满；观测超时、旗标不一致或
+无法排除整圈推进时提升epoch并丢弃未知段，不能猜测字节。已知生产减消费超过512则
+累计buffer_overruns并丢弃未读段。rx_bytes/produced只累计可观测的模增量，不能作为
+未知整圈丢失量的精确统计。调试停核不保证连续性，恢复后必须尊重epoch。
+复制在临界区外，复制前后复核DMA进度/epoch；失败返回0字节，不能交付可能覆盖的副本。
+Server须在连续性破坏后作废半帧并丢弃至下一delimiter。
 
-Transport接受完整TX后复制进内部130 B缓冲，完成前归DMA；只允许单帧在途，
-BUSY不建立第二套传输队列。10 ms未完成是内部可信性失败。普通PE/FE/NE/ORE只恢复字节流，
+Transport接受完整TX后复制进内部130 B缓冲，完成前归Transport；只允许单帧在途，
+DMA TC后仍BUSY，USART TC才退休并累计tx_bytes；BUSY不建立第二套传输队列。
+10ms未完成由下一次Communication服务或UART/TX IRQ检查锁内部故障，不把迟到TC当成功；
+这是有界服务检查而非额外独立硬件定时器。普通PE/FE/NE/ORE只恢复字节流，
 不会直接Stop或清故障。FIFO内部不变量失败则调用有界safe-off和锁存入口，随后由实时边界
-合入Motor；Session逻辑有效性从锁存时立即撤销，不从ADC访问协议对象。
+合入Motor；Session逻辑有效性从锁存时立即撤销，不从ADC访问协议对象。内部失败同时
+停用RX/TX DMA和UART事件源，避免故障锁存后的中断反复重入，不自动重启Transport。
+RX/TX DMA硬件仲裁均为LOW，保留ADC Channel1的通道次序优势；BASEPRI临界区仅屏蔽
+优先级5及以下，控制优先级0..4可抢占，块复制不在临界区或ISR内。
 
 72 B样本加Header/CRC为90 B，标准COBS及delimiter共92 B；460800/8N1提供46080 B/s。
 50/250/500 Hz分别占4600/23000/46000 B/s。500 Hz已占99.83%，仅剩80 B/s给响应及帧间
