@@ -14,6 +14,8 @@ bool system_runtime_target_start_transport(void);
 void system_runtime_target_communication_service(void);
 bool system_runtime_target_read_sample(SpeedCommissioningSample *sample);
 bool system_runtime_target_read_telemetry(RuntimeTelemetryConfig *config);
+/* 单个原子u32；0表示没有可发送会话。不能从Telemetry修改协议状态。 */
+uint32_t system_runtime_target_telemetry_epoch(void);
 /* 必须先关功率；不可依赖调度器、队列或串口。生产Target不返回。 */
 void system_runtime_target_fatal(RuntimeInternalFaultReason reason);
 

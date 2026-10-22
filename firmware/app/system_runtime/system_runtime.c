@@ -1,5 +1,6 @@
 #include "system_runtime.h"
 #include "system_runtime_target.h"
+#include "telemetry_mailbox.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -13,7 +14,7 @@ static StaticTask_t s_bootstrap_tcb, s_communication_tcb, s_telemetry_tcb, s_idl
 static StackType_t s_bootstrap_stack[BOOTSTRAP_WORDS], s_communication_stack[COMMUNICATION_WORDS];
 static StackType_t s_telemetry_stack[TELEMETRY_WORDS], s_idle_stack[configMINIMAL_STACK_SIZE];
 static StaticQueue_t s_telemetry_queue;
-static uint8_t s_telemetry_storage[sizeof(SpeedCommissioningSample)];
+static uint8_t s_telemetry_storage[sizeof(RuntimeTelemetryValue)];
 static QueueHandle_t s_mailbox;
 static TaskHandle_t s_communication, s_telemetry, s_idle;
 volatile SystemRuntimeStatus g_system_runtime_status;
@@ -51,7 +52,6 @@ void vApplicationGetIdleTaskMemory(StaticTask_t **tcb, StackType_t **stack, uint
 
 static void communication_task(void *argument)
 {
-    SpeedCommissioningSample sample;
     TickType_t watermark_tick = xTaskGetTickCount();
     (void)argument;
     for (;;) {
@@ -59,11 +59,6 @@ static void communication_task(void *argument)
         (void)ulTaskNotifyTake(pdTRUE, 1U);
         g_system_runtime_status.communication_passes++;
         system_runtime_target_communication_service();
-        if (xQueueReceive(s_mailbox, &sample, 0U) == pdPASS) {
-            /* P3只验证最新值交接，不发串口、不消费尚无事务所有者的Completion。 */
-            g_system_runtime_status.latest_sample_sequence = sample.sample_sequence;
-            g_system_runtime_status.telemetry_consumed++;
-        }
         if ((TickType_t)(xTaskGetTickCount() - watermark_tick) >= 1000U) {
             watermark_tick = xTaskGetTickCount();
             g_system_runtime_status.communication_stack_free = uxTaskGetStackHighWaterMark(NULL);
@@ -73,11 +68,24 @@ static void communication_task(void *argument)
     }
 }
 
+bool system_runtime_telemetry_peek(RuntimeTelemetryValue *value)
+{ return xQueuePeek(s_mailbox, value, 0U) == pdPASS; }
+
+void system_runtime_telemetry_retire(void)
+{
+    RuntimeTelemetryValue value;
+    if (xQueueReceive(s_mailbox, &value, 0U) == pdPASS) {
+        g_system_runtime_status.latest_sample_sequence = value.sample.sample_sequence;
+        g_system_runtime_status.telemetry_consumed++;
+    }
+}
+
 static void telemetry_task(void *argument)
 {
     TickType_t wake = xTaskGetTickCount();
     RuntimeTelemetryConfig config;
-    SpeedCommissioningSample sample;
+    RuntimeTelemetryValue value, old;
+    uint32_t epoch = 0U, first = 0U;
     TickType_t period;
     (void)argument;
     for (;;) {
@@ -87,9 +95,23 @@ static void telemetry_task(void *argument)
                 fatal(RUNTIME_INTERNAL_TRANSACTION_CORRUPT);
             }
             period = 1000U / config.rate_hz;
-            if (config.enabled && system_runtime_target_read_sample(&sample)) {
-                if (xQueueOverwrite(s_mailbox, &sample) != pdPASS) { fatal(RUNTIME_INTERNAL_RTOS); }
+            value.epoch = system_runtime_target_telemetry_epoch();
+            if (config.enabled && value.epoch != 0U && system_runtime_target_read_sample(&value.sample)) {
+                value.produced = g_system_runtime_status.telemetry_publications + 1U;
+                if (epoch != value.epoch) {
+                    epoch = value.epoch; first = value.produced;
+                }
+                value.epoch_first = first;
+                value.sample.telemetry_config_generation = config.generation;
+                /* 短后台临界区使“检查旧槽+覆盖”不可被消费者穿插；高优先级控制不受屏蔽。 */
+                taskENTER_CRITICAL();
+                if (xQueuePeek(s_mailbox, &old, 0U) == pdPASS && old.epoch == value.epoch
+                    && old.sample.telemetry_config_generation == config.generation) {
+                    g_system_runtime_status.telemetry_overwrites++;
+                }
+                if (xQueueOverwrite(s_mailbox, &value) != pdPASS) { fatal(RUNTIME_INTERNAL_RTOS); }
                 g_system_runtime_status.telemetry_publications++;
+                taskEXIT_CRITICAL();
                 xTaskNotifyGive(s_communication);
             }
         }
@@ -109,7 +131,7 @@ static void bootstrap_task(void *argument)
     g_system_runtime_status.kernel_tick_bootstrap = xTaskGetTickCount();
     if ((uint32_t)(g_system_runtime_status.hal_tick_bootstrap - hal_before) == 0U
         || (TickType_t)(xTaskGetTickCount() - tick_before) < 2U) { fatal(RUNTIME_INTERNAL_BOOTSTRAP); }
-    s_mailbox = xQueueCreateStatic(1U, sizeof(SpeedCommissioningSample),
+    s_mailbox = xQueueCreateStatic(1U, sizeof(RuntimeTelemetryValue),
         s_telemetry_storage, &s_telemetry_queue);
     if (s_mailbox == NULL) { fatal(RUNTIME_INTERNAL_BOOTSTRAP); }
     s_communication = xTaskCreateStatic(communication_task, "Communication", COMMUNICATION_WORDS,

@@ -213,7 +213,24 @@ with tempfile.TemporaryDirectory(prefix='g431-system-runtime-') as directory:
     assert m.stop == 'communication-block' and m.events[-1] == ('notify-wait', 1)
     assert m.read(symbols['g_system_runtime_status'] + 7 * 4) == 500
     passed('真实Queue覆盖保留最新样本；Communication最长等待1ms，Telemetry周期20/4/2ms')
-    for available_name in ['model_sample_available', 'model_config_available', 'model_enabled']:
+    assert m.read(symbols['g_system_runtime_status']+48)==2
+    produced=m.read(symbols['g_system_runtime_status']+20)
+    # 换会话/配置不重写生产计数，也不把旧域替换算成域内覆盖。
+    for epoch,generation in [(2,1),(2,2)]:
+        m.write('model_epoch',epoch);m.write('model_generation',generation)
+        m.mode='telemetry';m.current(m.read('s_telemetry'));m.call('telemetry_task',0)
+    assert m.read(symbols['g_system_runtime_status']+20)==produced+2
+    assert m.read(symbols['g_system_runtime_status']+48)==2
+    passed('真实Mailbox覆盖精确计数；epoch/generation切换不算域内覆盖、不重置单写生产计数')
+    late=Model();late.start();late.bootstrap();late.write('model_change_epoch_during_copy',1)
+    late.mode='telemetry';late.current(late.read('s_telemetry'));late.call('telemetry_task',0)
+    assert late.read('model_epoch')==2 and late.call('model_mailbox_epoch')==1
+    late.call('telemetry_task',0)
+    assert late.call('model_mailbox_epoch')==2
+    assert late.read(symbols['g_system_runtime_status']+20)==2
+    assert late.read(symbols['g_system_runtime_status']+48)==0
+    passed('在复制窗口模拟Communication抢占换Session；迟到值仍携旧epoch，下次生产才进入新域')
+    for available_name in ['model_sample_available', 'model_config_available', 'model_enabled','model_epoch']:
         m = Model(); m.start(); m.bootstrap(); m.write(available_name, 0)
         m.mode = 'telemetry'; m.current(m.read('s_telemetry')); m.call('telemetry_task', 0)
         assert m.stop == 'telemetry-block'

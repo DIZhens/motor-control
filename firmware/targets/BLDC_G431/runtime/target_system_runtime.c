@@ -55,6 +55,7 @@ bool system_runtime_target_read_sample(SpeedCommissioningSample *sample)
 {
     return target_runtime_read_commissioning(sample);
 }
+uint32_t system_runtime_target_telemetry_epoch(void) { return target_core_server_telemetry_epoch(); }
 
 static void transport_event(void *context, uint32_t events, bool from_interrupt)
 {

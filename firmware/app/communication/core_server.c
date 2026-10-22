@@ -52,6 +52,7 @@ static void abandon(CoreServer *s)
     uint32_t index;
     if (s->failed) { return; }
     s->failed = true; s->session = 0U; s->highest_sequence = 0U;
+    s->active_epoch = 0U; s->event_count = 0U;
     s->response_count = 0U; s->cache_next = 0U; memset(s->cache, 0, sizeof(s->cache));
     for (index = 0U; index < 2U; ++index) {
         p = index == 0U ? &s->stop : &s->ordinary;
@@ -68,6 +69,7 @@ static void fail(CoreServer *s, RuntimeInternalFaultReason reason)
 static bool state_valid(CoreServer *s)
 {
     if (s->response_count > CORE_RESPONSE_CAPACITY || s->cache_next >= CORE_CACHE_CAPACITY
+        || s->event_count > CORE_EVENT_CAPACITY
         || (s->ordinary.active && s->ordinary.ticket == 0U) || (s->stop.active && s->stop.ticket == 0U)
         || (s->ordinary.active && s->stop.active && s->ordinary.ticket == s->stop.ticket)
         || s->highest_sequence == 0xFFFFFFFFU || (s->session == 0U && s->highest_sequence != 0U)) {
@@ -142,6 +144,7 @@ static void read_communication(CoreServer *s)
     v->length_errors = s->parser.stats.length_errors; v->version_errors = s->parser.stats.version_errors;
     v->message_errors = s->parser.stats.message_errors + s->parser.stats.flags_errors + s->message_errors;
     v->parser_timeouts = s->parser.stats.timeouts; v->response_fifo_high_water = s->response_high_water;
+    v->event_drop_count = s->event_drop_count; v->event_fifo_high_water = s->event_high_water;
 }
 static void cancelled(CoreServer *s, uint32_t ticket)
 {
@@ -225,8 +228,12 @@ static void received(void *context, CoreStatus status, const CoreFrame *f)
         if (s->ordinary.active) { error_answer(s, f, CORE_SESSION_BUSY, false, false); return; }
         proposed = s->decoded.proposed_session_id;
         if (proposed != s->session) {
+            if (s->epoch_counter == 0xFFFFFFFFU) { fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return; }
             s->session = proposed; s->highest_sequence = 0U; s->cache_next = 0U;
             s->response_count = 0U; memset(s->cache, 0, sizeof(s->cache));
+            s->event_count = 0U; s->event_sequence = 0U; s->snapshot_valid = false;
+            s->telemetry_domain_valid = false; s->telemetry_exhausted = false; s->telemetry_sequence = 0U;
+            s->active_epoch = ++s->epoch_counter;
             /* 已排队Stop保留原ticket/请求身份；旧会话完成不进入新缓存。 */
         }
         build_answer(s, f, CORE_RESULT_OK, 0U); s->answer.accepted_session_id = proposed;
@@ -288,6 +295,37 @@ static void completed(CoreServer *s, const RuntimeCommandCompletion *c)
     retire(s, &p->request, stop, p->request.session_id == s->session || p->request.session_id == 0U);
     p->active = false;
 }
+static void event(CoreServer *s, uint16_t message, uint32_t first, uint32_t second, uint64_t time)
+{
+    CoreQueuedEvent *entry;
+    uint32_t index;
+    if (s->event_sequence == 0xFFFFFFFEU) { return; }
+    if (s->event_count == CORE_EVENT_CAPACITY) {
+        for (index = 1U; index < CORE_EVENT_CAPACITY; ++index) { s->events[index - 1U] = s->events[index]; }
+        s->event_count--; s->event_drop_count++;
+    }
+    entry = &s->events[s->event_count++];
+    entry->message = message; entry->sequence = ++s->event_sequence;
+    entry->value = (CoreEvent){first, second, time};
+    if (s->event_count > s->event_high_water) { s->event_high_water = s->event_count; }
+}
+
+static void observe_snapshot(CoreServer *s)
+{
+    CoreMotorSnapshot *m = &s->answer.value.motor_snapshot;
+    if (s->session == 0U || s->failed || core_server_port_read_object(CORE_MOTOR_SNAPSHOT,
+        &s->answer.value) != CORE_RESULT_OK || (m->valid_flags & 0xC1U) != 0xC1U) { return; }
+    if (s->snapshot_valid) {
+        if (s->previous_state != m->motor_state) {
+            event(s, CORE_STATE_CHANGED, s->previous_state, m->motor_state, m->control_time_ticks);
+        }
+        if ((m->fault_flags & ~s->previous_faults) != 0U) {
+            event(s, CORE_FAULT_LATCHED, m->fault_flags & ~s->previous_faults, m->fault_flags, m->control_time_ticks);
+        }
+    }
+    s->previous_state = m->motor_state; s->previous_faults = m->fault_flags; s->snapshot_valid = true;
+}
+
 void core_server_poll(CoreServer *s, uint32_t now_ms)
 {
     RuntimeCommandCompletion completion;
@@ -303,18 +341,77 @@ void core_server_poll(CoreServer *s, uint32_t now_ms)
         if (!core_server_port_completion(&completion)) { break; }
         completed(s, &completion);
     }
+    observe_snapshot(s);
 }
+
+static bool telemetry_frame(CoreServer *s)
+{
+    RuntimeTelemetryValue value;
+    CoreSpeedSample sample;
+    uint32_t offset, sequence;
+    size_t length;
+    if (!core_server_port_telemetry_peek(&value)) { return false; }
+    if (s->session == 0U || s->failed || s->telemetry_exhausted || value.epoch != s->active_epoch
+        || core_server_port_read_object(CORE_TELEMETRY_CONFIG, &s->answer.value) != CORE_RESULT_OK
+        || !s->answer.value.telemetry_config.enabled
+        || value.sample.telemetry_config_generation != s->answer.value.telemetry_config.generation) {
+        core_server_port_telemetry_retire(); return false;
+    }
+    if (!s->telemetry_domain_valid) {
+        s->telemetry_domain_valid = true; s->telemetry_first = value.epoch_first;
+    }
+    offset = value.produced - s->telemetry_first;
+    if (offset >= 0xFFFFFFFEU) {
+        s->telemetry_exhausted = true; core_server_port_telemetry_retire(); return false;
+    }
+    sequence = offset + 1U;
+    s->telemetry_sequence = sequence; /* 生成值决定序号，BUSY不重新分配或成功后才编号。 */
+#define COPY_FIELD(name) sample.name = value.sample.name
+    COPY_FIELD(sample_sequence); COPY_FIELD(control_time_ticks); COPY_FIELD(position_observation_time);
+    COPY_FIELD(target_velocity_rpm); COPY_FIELD(velocity_rpm); COPY_FIELD(mechanical_position_turns);
+    COPY_FIELD(iq_reference_a); COPY_FIELD(iq_feedback_a); COPY_FIELD(id_feedback_a); COPY_FIELD(bus_voltage_v);
+    COPY_FIELD(motor_state); COPY_FIELD(fault_flags); COPY_FIELD(valid_flags); COPY_FIELD(limit_flags);
+    COPY_FIELD(active_profile_generation); COPY_FIELD(telemetry_config_generation);
+#undef COPY_FIELD
+    memset(&s->output, 0, sizeof(s->output));
+    s->output.version = 1U; s->output.kind = CORE_TELEMETRY;
+    s->output.header_size = CORE_HEADER_SIZE; s->output.session_id = s->session;
+    s->output.message_id = CORE_SPEED_SAMPLE; s->output.sequence = sequence;
+    if (core_sample_encode(&sample, s->output.payload, sizeof(s->output.payload), &length) != CORE_RESULT_OK) {
+        fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return false;
+    }
+    s->output.payload_length = (uint16_t)length;
+    return true;
+}
+
 void core_server_flush(CoreServer *s)
 {
     uint32_t index, selected = 0U;
     size_t count;
+    uint32_t source;
     ByteStreamResult result;
     if (!state_valid(s)) { return; }
-    if (s->response_count == 0U) { return; }
-    for (index = 0U; index < s->response_count; ++index) {
-        if (s->responses[index].critical) { selected = index; break; }
+    observe_failure(s);
+    if (s->response_count != 0U) {
+        source = 0U;
+        for (index = 0U; index < s->response_count; ++index) {
+            if (s->responses[index].critical) { selected = index; break; }
+        }
+        s->output = s->responses[selected].frame;
+    } else if (!s->failed && s->event_count != 0U) {
+        source = 1U;
+        memset(&s->output, 0, sizeof(s->output));
+        s->output.version = 1U; s->output.kind = CORE_EVENT; s->output.header_size = CORE_HEADER_SIZE;
+        s->output.message_id = s->events[0].message; s->output.sequence = s->events[0].sequence;
+        s->output.session_id = s->session;
+        if (core_event_encode(s->output.message_id, &s->events[0].value, s->output.payload,
+            sizeof(s->output.payload), &count) != CORE_RESULT_OK) { fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return; }
+        s->output.payload_length = (uint16_t)count;
+    } else {
+        source = 2U;
+        if (!telemetry_frame(s)) { return; }
     }
-    if (core_frame_encode(&s->responses[selected].frame, s->wire, sizeof(s->wire), &count) != CORE_OK) {
+    if (core_frame_encode(&s->output, s->wire, sizeof(s->wire), &count) != CORE_OK) {
         fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return;
     }
     result = byte_stream_try_send(s->wire, count);
@@ -322,6 +419,11 @@ void core_server_flush(CoreServer *s)
     if (result != BYTE_STREAM_ACCEPTED) {
         if (!observe_failure(s)) { fail(s, RUNTIME_INTERNAL_TRANSPORT); } return;
     }
-    for (index = selected + 1U; index < s->response_count; ++index) { s->responses[index - 1U] = s->responses[index]; }
-    s->response_count--;
+    if (source == 0U) {
+        for (index = selected + 1U; index < s->response_count; ++index) { s->responses[index - 1U] = s->responses[index]; }
+        s->response_count--;
+    } else if (source == 1U) {
+        for (index = 1U; index < s->event_count; ++index) { s->events[index - 1U] = s->events[index]; }
+        s->event_count--;
+    } else { core_server_port_telemetry_retire(); }
 }

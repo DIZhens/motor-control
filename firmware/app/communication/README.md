@@ -72,8 +72,15 @@ Transport内部失败立即Fail-closed、撤销Session，不重执行或自动�
 只清半帧并同步至下一delimiter。TX优先选关键Stop/系统终态，再选普通终态；BUSY保留完整
 逻辑响应，在途帧由Transport拥有。IN_PROGRESS提示不占终态FIFO，拥塞时可省略并等原终态。
 
-当前提供七个对象、参数权威写与命令结果；Telemetry/Event发送尚未接入，因此DEVICE_INFO
-暂不声明这两项能力，相关发送统计保持0。Header序号、运行时ticket与Motor状态各自独立。
+当前提供七个对象、参数权威写、命令结果和Telemetry/Event，DEVICE_INFO能力为0x3F。
+Header序号、运行时ticket与Motor状态各自独立。Server从有效快照变化形成事件，FIFO8满
+丢最旧并计数，不替代实时故障路径；新会话建立观察基准，不凭初次读取虚构变化。
+
+TX依次选择关键终态、普通终态、Event、最新Telemetry。Telemetry只peek原单槽Mailbox，
+串口接受后才退休；BUSY不取走，不在Server另建待发遥测槽。Telemetry任务独占产生计数，
+值携epoch及该epoch首个产生计数；Communication独占Session与线上序号映射基准。
+配置切换保持同会话序号单调，旧epoch/旧generation值包括抢占后迟到的值均丢弃；Host按
+Session/config域核对缺口。Event/Telemetry各自耗尽时停止该类发送，新会话才重置，不改Motor。
 
 ```powershell
 .\.venv\Scripts\python.exe -X utf8 firmware/app/communication/tests/verify_core_server.py

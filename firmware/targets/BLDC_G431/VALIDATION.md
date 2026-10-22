@@ -7,7 +7,8 @@
 [Host 说明](../../../host/vofa/README.md#有限-run-操作)。
 
 当前Run已接入原生FreeRTOS、460800/8N1 UART DMA及Core Protocol事务Server，关闭旧VOFA装配；
-对象和请求应答已有逻辑供电证据，Telemetry/Event发送与通信压力后续接入。旧实物启停记录
+对象、请求应答及50/250Hz遥测已有逻辑供电证据；500Hz压力未达标，Event竞态仅有模型证据。
+旧实物启停记录
 继续绑定各自HEX，不改写为新协议镜像的运动验收。
 
 `validation/` 台架经 HCC 使用 Platform，不是正式 Motor / ControlRuntime。
@@ -30,12 +31,45 @@
 | FreeRTOS启动与时间域 | [P3构建、模型和实物证据](validation/evidence/protocol/p3.json)；TIM7 HAL、SysTick Kernel、静态任务/Mailbox、唯一异常入口、默认关断 | 启动负载证据；不代替协议负载、运动下调度压力或WCET证明 |
 | UART DMA字节流 | [P4构建、模型和实物证据](validation/evidence/protocol/p4.json)；512 B RX、130 B单帧TX、460800回环、覆盖/帧错误恢复、冻结TX关断 | 字节流证据不代替Server/事务、50/250/500 Hz协议压力或运动负载 |
 | Session/事务/线上对象 | [P5构建、模型和实物证据](validation/evidence/protocol/p5.json)；七对象、参数去重/原结果重放、Stop/Clear、Python客户端/JSONL | 纯逻辑供电；本轮未发送Start/Update，无Telemetry/Event或协议压力验收 |
+| Telemetry/Event/通信压力 | [P6构建、模型和实物证据](validation/evidence/protocol/p6.json)；单槽发送、epoch隔离、Event8、独立序号、Python连续记录；50Hz×10s及250Hz×30s通过 | 500Hz×10s缺324/5000帧，与324次覆盖一致，6.48%超过1%；本轮无运动，Event变化仅模型验证 |
 
 以上两次正式 Run 实物记录属于 HEX
 `0e73f54e03ceaa9b21f3ae7cfc305c1ca50ecc9577613cc47f974d54fd2eee76`。
 源码整理或新构建不会把旧证据改写成新镜像已实测。未受影响的功能证据继续保留；
 受影响的命令交接、后台通信与实时路径分别用针对性检查确认，不重跑无关底层波形。
 本页后续保留各轮测量条件、失败首因与镜像，读者不必依赖未分发的本地日志判断上述边界。
+
+## 遥测名义负载通过，500Hz发送吞吐未达标
+
+正式Run已接入Telemetry及Event，能力位0x3F。Telemetry任务只推进自己的产生/覆盖计数，
+值携会话epoch、该epoch首个产生计数和配置generation；Communication独占Session及线上
+序号映射。Mailbox深度1，BUSY时peek保留，TX接受才退休；旧epoch、旧配置或迟到样本丢弃。
+有效快照变化形成Event，深度8满丢最旧；终态优先于Event，Event优先于遥测，不抢写在途DMA。
+
+Run全量构建零错误、零警告，Code65374/RO1054/RW444/ZI20732，静态RAM21176/32768 B。
+25组Server/Client、14组真实Kernel/任务模型、12组Codec（47922断言、30黄金帧）及19组
+有限Runtime交接通过；测试替代Transport、实时步进或异常切换，不等价于实际调度/WCET。
+构建ID为`0xf2ae4e3aed717c5b`，HEX为
+`b0b5673da847b578597a3f94d121d9ebae92cda86dc4f5b82bd8028da769994c`，
+独立Flash读回66444 B匹配。未改控制算法、功率时序、Kernel/Port、静态队列容量或保护门限。
+
+在操作者确认OUTPUT关闭、ST-Link逻辑3V3、原三相及编码器保留、USB串口VCC不接且VOFA
+断开后，三个速率均穿插每秒一次COMMUNICATION_STATUS读取。50Hz/10秒收到501帧，
+250Hz/30秒收到7500帧，均无缺口、覆盖、响应重发或两端解析/链路错误。初次50Hz试验曾
+被Host将读线程延迟当成半帧超时而丢1帧；已修正Host空闲判据并保留失败记录，设备端
+20ms门限不变，复测通过。
+
+500Hz/10秒收到4676帧，序号1..5000缺324帧，恰好对应Mailbox覆盖324次，损失6.48%，
+未达到小于1%的门槛。9次周期状态读取均无重发，最大响应约6.32ms；两端解析、RX断续、
+DMA覆盖、UART错误、TX错误及内部故障均0。单帧92 B在实际460704.6 baud下约占1.997ms，
+500Hz几乎占满线路；当前吞吐约43.2kB/s，覆盖已把首个瓶颈限定在单帧TX服务吞吐，
+编码与任务调度各占多少尚未分别计时。没有扩容、降速或放宽门槛，P6整体尚未通过。
+
+结束读回Motor IDLE、目标0、命令计数/接受启动均0、六路LOW/MOE0，guard、内部、Motor及
+时序锁存故障为0，TIM6原时基保持。任务最小剩余栈Bootstrap690、Communication440、
+Telemetry254、Idle109 word，均超过25%。遥测配置恢复enabled/250Hz，PI仍Default且Active
+不在使用。本轮未发送Start/Update/Stop/Clear，未制造实物Event或运行运动负载；下一步先
+测量TX帧间空档并区分编码/调度成本，解决500Hz瓶颈后再进入协议下有限试转。
 
 ## 会话事务与Python客户端：逻辑供电联调通过
 

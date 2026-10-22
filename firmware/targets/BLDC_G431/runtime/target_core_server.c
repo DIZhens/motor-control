@@ -7,6 +7,11 @@
 #include "main.h"
 
 static CoreServer s_server;
+uint32_t target_core_server_telemetry_epoch(void)
+{ return target_runtime_session_permitted() ? s_server.active_epoch : 0U; }
+bool core_server_port_telemetry_peek(RuntimeTelemetryValue *value)
+{ return system_runtime_telemetry_peek(value); }
+void core_server_port_telemetry_retire(void) { system_runtime_telemetry_retire(); }
 
 void target_core_server_start(void) { core_server_init(&s_server); }
 void target_core_server_service(void)
@@ -45,7 +50,7 @@ CoreResult core_server_port_read_object(uint16_t id, CoreObject *value)
     const RuntimeSpeedProfile *profile;
     switch (id) {
     case CORE_DEVICE_INFO:
-        value->device_info = (CoreDeviceInfo){1U, 1U, 1U, 1U, 0x27U, 20000U, G431_FIRMWARE_BUILD_ID};
+        value->device_info = (CoreDeviceInfo){1U, 1U, 1U, 1U, 0x3FU, 20000U, G431_FIRMWARE_BUILD_ID};
         return CORE_RESULT_OK;
     case CORE_MOTOR_SNAPSHOT:
         if (!target_runtime_read_snapshot(&snapshot)) { return CORE_INTERNAL_ERROR; }
@@ -73,6 +78,7 @@ CoreResult core_server_port_read_object(uint16_t id, CoreObject *value)
             ? g_system_runtime_status.telemetry_stack_free : 0xFFFFFFFFU;
         c->internal_fault_reason = (uint32_t)fault.first_reason; c->internal_fault_count = fault.count;
         c->tx_busy_count = transport.tx_busy_count; c->tx_errors = transport.tx_errors;
+        c->telemetry_overwrites = g_system_runtime_status.telemetry_overwrites;
         return CORE_RESULT_OK;
     case CORE_SPEED_PI_DEFAULT: case CORE_SPEED_PI_STAGED: case CORE_SPEED_PI_ACTIVE: case CORE_TELEMETRY_CONFIG:
         if (!target_runtime_read_parameters(&parameters)) { return CORE_INTERNAL_ERROR; }

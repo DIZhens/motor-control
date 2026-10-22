@@ -40,8 +40,24 @@ Session、Sequence和subject关联，过滤旧会话响应。普通请求每次�
 遗失的旧ID。设备复位后Session消失，主机不能把上一启动的缓存结果当成当前状态。
 
 `JsonlLogger`新建文件并拒绝覆盖，记录发送字节/重试次数、接收帧身份及关联的解码结果，
-时间为Host单调秒；无效浮点保存为null并保留有效位。当前是请求应答记录器，不是P6的
-连续采集/序号缺口统计验收。目录须预先存在，重复运行选择新日志文件名。
+时间为Host单调秒；无效浮点保存为null并保留有效位。RPC等待和`Client.poll()`均持续接收
+Telemetry/Event，按Session/config generation分别统计序号缺口、保留最新解码值；事件序号
+独立。目录须预先存在，重复运行选择新日志文件名。
+
+Host先排出串口驱动已有字节，不能以Python调度/日志延迟推断线上半帧空闲；观察到空读时
+仍按20ms清半帧并等待delimiter。设备端20ms超时及Host请求100ms/最多两次原身份重发不变。
+
+无运动压力入口（需要先现场确认OUTPUT关闭和逻辑供电）：
+
+```powershell
+.\.venv\Scripts\python.exe -m host.protocol.pressure --port COM5 --rate 250 --seconds 30 --request-hz 1 --log capture.jsonl --report summary.json
+```
+
+入口只读取状态和整组写遥测配置，拒绝非健康IDLE；先关闭遥测、建立新会话，给该工作点
+独立序号起点，然后启用指定速率、每秒穿插一次COMMUNICATION_STATUS读取，最后关闭遥测
+并排空在途帧。报告保留实际时长、请求量/最大延迟、重发、两端错误及覆盖/缺口，不自动
+重试整轮，不发送Start/Update/Clear。500Hz仅IDLE，缺口须与覆盖一致且损失低于1%；50/250Hz
+要求两者均0。该入口不代替功率关断、控制时序及MCU栈的独立读回。
 
 ## 离线验证
 

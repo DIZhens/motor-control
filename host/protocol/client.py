@@ -64,6 +64,72 @@ class Client:
         self._busy = False
         self.received_frames = self.ignored_frames = self.retransmissions = 0
         self.last_recovery = None
+        self.telemetry_domains = {}
+        self.latest_telemetry = self.latest_event = None
+        self.event_sequence = 0
+        self.event_gaps = self.async_errors = 0
+
+    def _asynchronous(self, status, frame):
+        if status != codec.Status.OK or frame.kind not in (3, 4) or not self.session or frame.session_id != self.session:
+            return None
+        try:
+            if not 1 <= frame.sequence <= 0xFFFFFFFE:
+                raise ValueError('异步序号非法')
+            if frame.kind == 3:
+                if frame.message_id != 0x1001:
+                    raise ValueError('未知遥测')
+                value = codec.decode_sample(frame.payload)
+                domain = (frame.session_id, value['telemetry_config_generation'])
+                stats = self.telemetry_domains.setdefault(domain, dict(received=0, gaps=0, order_errors=0,
+                                                                      first=frame.sequence, last=0))
+                if stats['last']:
+                    if frame.sequence <= stats['last']:
+                        stats['order_errors'] += 1
+                    else:
+                        stats['gaps'] += frame.sequence - stats['last'] - 1
+                stats['received'] += 1
+                stats['last'] = frame.sequence
+                self.latest_telemetry = (frame, value)
+            else:
+                value = codec.decode_event(frame.message_id, frame.payload)
+                if self.event_sequence and frame.sequence <= self.event_sequence:
+                    raise ValueError('事件序号倒退')
+                if self.event_sequence:
+                    self.event_gaps += frame.sequence - self.event_sequence - 1
+                self.event_sequence = frame.sequence
+                self.latest_event = (frame, value)
+            return value
+        except (codec.CodecError, ValueError):
+            self.async_errors += 1
+            return None
+
+    def poll(self):
+        """单所有者空闲收帧；不发请求，不自动重连，记录器同步保存异步帧。"""
+        if self._busy:
+            raise RuntimeError('不能在请求处理中重入poll')
+        try:
+            frames = self._read_frames()
+        except OSError as error:
+            self.session = 0
+            raise ConnectionLost(str(error)) from error
+        for status, frame in frames:
+            self.received_frames += 1
+            value = self._asynchronous(status, frame)
+            if value is None:
+                self.ignored_frames += 1
+            self._record(direction='rx', frame=asdict(frame), status=int(status), correlated=False, value=value)
+
+    def _read_frames(self):
+        # 先排驱动中已到达的字节；不能把Python调度/日志停顿当成线上空闲。
+        count = max(1, min(512, self.stream.in_waiting)) if hasattr(self.stream, 'in_waiting') else 512
+        data = self.stream.read(count)
+        now = int(self.clock() * 1000) & 0xFFFFFFFF
+        if not data:
+            self.parser.poll(now)
+            return []
+        if self.parser.candidate:
+            self.parser.last_byte_ms = now
+        return self.parser.feed(data, now)
 
     def _record(self, **fields):
         if self.logger:
@@ -84,8 +150,7 @@ class Client:
                     raise ConnectionLost('请求未完整写入，停止自动重试')
                 deadline = self.clock() + self.timeout
                 while self.clock() < deadline:
-                    data = self.stream.read(512)
-                    frames = self.parser.feed(data, int(self.clock() * 1000) & 0xFFFFFFFF)
+                    frames = self._read_frames()
                     matched = None
                     for status, incoming in frames:
                         self.received_frames += 1
@@ -99,12 +164,14 @@ class Client:
                                 correlated = value['subject_id'] == subject
                             except codec.CodecError:
                                 correlated = False
+                        if not correlated:
+                            value = self._asynchronous(status, incoming)
                         self._record(direction='rx', frame=asdict(incoming), status=int(status),
                                      correlated=correlated, value=value)
                         if correlated:
                             if value['result_code'] != codec.Result.IN_PROGRESS:
                                 matched = value
-                        else:
+                        elif value is None:
                             self.ignored_frames += 1
                     if matched is not None:
                         if matched['result_code'] in (codec.Result.SESSION_INVALID, codec.Result.SYSTEM_FAIL_CLOSED):
@@ -146,6 +213,7 @@ class Client:
         # 同ID OPEN在设备幂等；本实例同ID时也不重置请求序号。
         if proposed != self.session:
             self.sequence = 1
+            self.event_sequence = 0
         self.session = proposed
         self.last_recovery = {name: self.read_object(obj) for name, obj in (
             ('motor_snapshot', codec.MOTOR_SNAPSHOT), ('speed_pi_staged', codec.SPEED_PI_STAGED),

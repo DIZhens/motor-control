@@ -16,8 +16,11 @@ assert或栈溢出直接调用Target的协议无关关断，不等待ADC或队�
 任务优先级为Bootstrap 3、Communication 2、Telemetry 1、Idle 0，栈分别为
 768/768/384/128个32位word。Telemetry按20/4/2ms周期读取已有publication，覆盖Mailbox；
 Communication等待通知或1ms超时，唯一持有UART DMA、Parser/Session/事务Server；有界读取
-字节、消费准确ticket Completion并发送终态Response。Telemetry Mailbox目前仍仅记录消费
-序号，线上Telemetry/Event发送后续接入；控制与实时状态所有权保持不变。
+字节、消费准确ticket Completion并按终态/Event/最新Telemetry优先级发送。
+Mailbox是唯一的待发遥测槽；Communication只peek，TX接受或域失效后才退休。
+Telemetry独占产生计数和覆盖计数，不从Communication重写。后台短临界区将检查旧槽与覆盖
+组成原子操作，高优先级控制ISR保持可执行。值携会话epoch、epoch首个产生计数及配置generation；
+Communication只发布原子epoch，旧epoch迟到值不能混入新会话。
 高水位每秒保存，静态容量和离线模型都不代替实机任务栈余量或调度延迟验收。
 
 ## 请求与完成
@@ -55,7 +58,8 @@ Active及generation。Default静态配置、其他控制参数和数值公式保
 没有RUN在线改PI、Flash保存或自动恢复。
 
 遥测配置默认enabled、250Hz、generation1，只在相同健康IDLE边界写入；500Hz仅用于IDLE压力，
-G431提交和实时消费两处都阻止Start进入Motor。该配置目前尚未驱动后台发送周期。
+G431提交和实时消费两处都阻止Start进入Motor。配置驱动Telemetry周期，只有有效会话且
+enabled时产生Mailbox值；配置替换不会重置产生计数或控制侧sample_sequence。
 
 ## 发布与内部故障
 

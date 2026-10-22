@@ -25,6 +25,7 @@ typedef struct {
     uint32_t communication_passes, telemetry_publications, telemetry_consumed;
     uint32_t latest_sample_sequence;
     uint32_t bootstrap_stack_free, communication_stack_free, telemetry_stack_free, idle_stack_free;
+    uint32_t telemetry_overwrites;
 } SystemRuntimeStatus;
 extern volatile SystemRuntimeStatus g_system_runtime_status;
 

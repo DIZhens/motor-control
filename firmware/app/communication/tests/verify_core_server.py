@@ -52,7 +52,8 @@ class Model:
         if not n:return None
         data=bytes(self.cpu.mem_read(self.symbols['model_tx'],n));self.put('model_tx_length',0);self.put('model_tx_busy',0)
         status,f=py.decode_frame(data[:-1]);assert status==py.Status.OK
-        return f,py.decode_response(f.message_id,f.payload)
+        return f,(py.decode_response(f.message_id,f.payload) if f.kind==2 else
+                  py.decode_sample(f.payload) if f.kind==3 else py.decode_event(f.message_id,f.payload))
     def response(self,data,rt=False):
         self.feed(data)
         if rt:self.call('model_rt_step')
@@ -177,6 +178,56 @@ def tests():
     assert status['message_errors']==3 and status['version_errors']==1
     passed('TX BUSY保留完整终态；未知消息/版本/flags明确拒绝，错误kind不执行')
 
+    m=Model().open();m.call('model_produce',1)
+    f,v=m.take();assert f.kind==3 and f.sequence==1 and v['sample_sequence']==4
+    m.call('model_produce',2);m.put('model_tx_busy',1);m.call('model_flush')
+    assert m.get('model_telemetry_pending')==1
+    m.call('model_produce',4);m.put('model_tx_busy',0)
+    assert m.take()[0].sequence==4 and m.get('model_telemetry_pending')==0
+    m.call('model_produce',5);m.feed(req(seq=1));assert m.take()[0].kind==2
+    assert m.take()[0].sequence==5
+    passed('单槽遥测BUSY不取走；产生计数映射在线序号、覆盖表现为缺口；终态优先')
+
+    m=Model().open();m.call('model_produce',1);m.open(2)
+    assert m.take() is None and m.get('model_telemetry_pending')==0
+    m.call('model_produce',2);m.call('model_old_epoch');assert m.take() is None
+    m.call('model_produce',1);assert m.take()[0].sequence==1
+    m.call('model_produce',2)
+    assert m.response(req(3,0x201,session=2,seq=1,value=dict(enabled=1,rate_hz=50)),True)[1]['result_code']==0
+    assert m.take() is None
+    m.call('model_produce',3);assert m.take()[0].sequence==3
+    passed('新Session清序号且丢弃队列旧epoch和迟到旧值；配置切换丢旧generation并保持线上单调')
+
+    m=Model().open();m.call('model_produce',1)
+    m.call('model_event_state',2);m.poll()
+    m.feed(req(seq=1));assert m.take()[0].kind==2
+    f,v=m.take();assert f.kind==4 and f.message_id==0x2001 and f.sequence==1
+    assert v['first']==1 and v['second']==2
+    assert m.take()[0].kind==3
+    m.call('model_event_state',3);m.poll()
+    assert m.take()[0].message_id==0x2001
+    f,v=m.take();assert f.message_id==0x2002 and v['first']==5 and v['second']==5
+    m.poll();assert m.take() is None
+    passed('有效快照变化生成STATE_CHANGED/FAULT_LATCHED，仅新锁存位；事件优先于遥测')
+
+    m=Model().open()
+    for i in range(12):m.call('model_event_state',2 if i%2==0 else 1);m.poll()
+    status=m.response(req(subject=3))[1]['value']
+    assert status['event_drop_count']==4 and status['event_fifo_high_water']==8
+    assert [m.take()[0].sequence for _ in range(8)]==list(range(5,13))
+    m.call('model_event_state',2);m.poll();m.open(2);assert m.take() is None
+    assert m.get('model_failure')==0
+    passed('事件FIFO8满丢最旧并计数；会话替换清旧事件且不故障')
+
+    m=Model().open();m.call('model_exhaust_sequences');m.call('model_produce',0xFFFFFFFE)
+    assert m.take()[0].sequence==0xFFFFFFFE
+    m.call('model_produce',0xFFFFFFFF);assert m.take() is None
+    m.call('model_event_state',2);m.poll();assert m.take()[0].sequence==0xFFFFFFFE
+    m.call('model_event_state',1);m.poll();assert m.take() is None
+    assert m.response(req(seq=1))[1]['result_code']==0
+    m.open(2);m.call('model_produce',1);assert m.take()[0].sequence==1
+    passed('Telemetry/Event独立耗尽不回绕、不改Session或Motor；新Session恢复独立序号域')
+
 def host_tests():
     from host.protocol.client import Client, RequestTimeout, ConnectionLost, JsonlLogger
     class Clock:
@@ -245,6 +296,41 @@ def host_tests():
         except FileExistsError:pass
         else:raise AssertionError('must not overwrite log')
     passed('JSONL保留线上身份/重试/解码值，无效浮点转null，已有记录拒绝覆盖')
+    client.logger=None
+    # 在一次read块内放入终态之后的遥测/事件，不能在匹配响应后提前return丢掉它们。
+    stream=Stream();client=Client(stream,clock=stream.clock);client.connect(789)
+    sample=dict(zip(py.SAMPLE_FIELDS,[0]*len(py.SAMPLE_FIELDS)))
+    sample.update(valid_flags=0x301,telemetry_config_generation=1)
+    def telemetry(sequence,generation=1,session=789):
+        sample['telemetry_config_generation']=generation
+        return py.encode_frame(py.Frame(3,0x1001,session,sequence,py.encode_sample(sample)))
+    for seq in [1,3]:stream.buffer+=telemetry(seq)
+    stream.buffer+=telemetry(77,session=123)
+    stream.buffer+=py.encode_frame(py.Frame(4,0x2001,789,1,py.encode_event(0x2001,dict(first=1,second=2,control_time_ticks=100))))
+    assert client.read_object(1)['result_code']==0
+    domain=client.telemetry_domains[(789,1)]
+    assert domain['received']==2 and domain['gaps']==1 and domain['order_errors']==0
+    assert client.latest_event[1]['second']==2 and (123,1) not in client.telemetry_domains
+    stream.buffer+=telemetry(4,2)
+    while stream.buffer:client.poll()
+    assert client.telemetry_domains[(789,2)]['gaps']==0
+    passed('Python在RPC和空闲期间持续解码Telemetry/Event；按Session/config域计缺口，过滤旧会话')
+    class DelayedStream:
+        def __init__(self):self.clock=Clock();self.chunks=[]
+        def read(self,size):
+            delay,data=self.chunks.pop(0);self.clock.value+=delay;return data
+    delayed=DelayedStream();client=Client(delayed,clock=delayed.clock);client.session=789
+    data=telemetry(1)
+    delayed.chunks=[(.001,data[:27]),(.050,data[27:])]
+    client.poll();client.poll()
+    assert client.parser.stats['timeouts']==0 and client.latest_telemetry[0].sequence==1
+    delayed.chunks=[(.001,data[:27]),(.021,b''),(.001,data[27:]+telemetry(2))]
+    client.poll();client.poll();client.poll()
+    assert client.parser.stats['timeouts']==1 and client.latest_telemetry[0].sequence==2
+    passed('Host调度停顿不伪装线上空闲；实际观察空读达到20ms仍丢半帧并恢复同步')
+    delayed.chunks=[(.001,telemetry(0)),(.001,py.encode_frame(py.Frame(3,0x7777,789,3,b'')))]
+    client.poll();client.poll();assert client.async_errors==2
+    passed('非法异步序号和未知遥测计错，不能击穿客户端接收循环')
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--report',type=Path);args=parser.parse_args()

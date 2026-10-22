@@ -3,12 +3,15 @@
 
 #include "core_protocol_values.h"
 #include "runtime_exchange.h"
+#include "telemetry_mailbox.h"
 
 #define CORE_RESPONSE_CAPACITY 4U
 #define CORE_CACHE_CAPACITY 4U
 #define CORE_RUNTIME_TIMEOUT_MS 20U
+#define CORE_EVENT_CAPACITY 8U
 
 typedef struct { CoreFrame frame; bool critical; } CoreQueuedResponse;
+typedef struct { CoreEvent value; uint32_t sequence; uint16_t message; } CoreQueuedEvent;
 typedef struct { CoreFrame request, response; bool valid; } CoreCompletedRequest;
 typedef struct {
     CoreFrame request;
@@ -23,6 +26,12 @@ typedef struct {
     uint32_t session, highest_sequence, now_ms, response_count, cache_next;
     uint32_t response_high_water, message_errors;
     bool failed;
+    volatile uint32_t active_epoch;
+    uint32_t epoch_counter, event_count, event_sequence, event_drop_count, event_high_water;
+    uint32_t previous_state, previous_faults;
+    bool snapshot_valid, telemetry_domain_valid, telemetry_exhausted;
+    uint32_t telemetry_first, telemetry_sequence;
+    CoreQueuedEvent events[CORE_EVENT_CAPACITY];
     CorePendingRequest ordinary, stop;
     CoreCompletedRequest cache[CORE_CACHE_CAPACITY];
     CoreQueuedResponse responses[CORE_RESPONSE_CAPACITY];
@@ -48,5 +57,7 @@ RuntimeExchangeResult core_server_port_submit(const RuntimeRequest *request,
 bool core_server_port_completion(RuntimeCommandCompletion *completion);
 bool core_server_port_permitted(void);
 void core_server_port_fail_closed(RuntimeInternalFaultReason reason);
+bool core_server_port_telemetry_peek(RuntimeTelemetryValue *value);
+void core_server_port_telemetry_retire(void);
 
 #endif

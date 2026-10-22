@@ -19,6 +19,25 @@ uint8_t model_input[1024], model_tx[130];
 uint32_t model_now, model_tx_length, model_tx_busy, model_permitted, model_healthy;
 uint32_t model_failure, model_failure_count, model_submit_count, model_start_ready;
 uint32_t model_tx_bytes, model_tx_error, model_submit_override;
+RuntimeTelemetryValue model_telemetry;
+uint32_t model_telemetry_pending;
+bool core_server_port_telemetry_peek(RuntimeTelemetryValue *value)
+{ if (!model_telemetry_pending) { return false; } *value = model_telemetry; return true; }
+void core_server_port_telemetry_retire(void) { model_telemetry_pending = 0U; }
+void model_produce(uint32_t produced)
+{
+    model_telemetry = (RuntimeTelemetryValue){0};
+    model_telemetry.epoch = model_server.active_epoch;
+    model_telemetry.produced = produced; model_telemetry.epoch_first = 1U;
+    model_telemetry.sample.sample_sequence = produced * 4U;
+    model_telemetry.sample.telemetry_config_generation = model_parameters.telemetry.generation;
+    model_telemetry.sample.valid_flags = 0x301U;
+    model_telemetry_pending = 1U;
+}
+void model_event_state(uint32_t state) { model_motor.state = (MotorState)state; model_motor.faults = state == 3U ? 5U : 0U; }
+void model_old_epoch(void) { model_telemetry.epoch--; }
+void model_exhaust_sequences(void)
+{ model_server.event_sequence = 0xFFFFFFFDU; }
 void runtime_exchange_barrier(void) { __asm { DMB } }
 void model_init(void)
 {
