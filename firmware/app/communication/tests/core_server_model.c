@@ -101,6 +101,9 @@ CoreResult core_server_port_read_object(uint16_t id, CoreObject *value)
 }
 void model_feed(uint32_t count) { core_server_feed(&model_server, model_input, count, model_now); }
 void model_poll(void) { core_server_poll(&model_server, model_now); core_server_observe(&model_server); }
+uint32_t model_current_session(void) { return model_server.session; }
+uint32_t model_highest_sequence(void) { return model_server.highest_sequence; }
+uint32_t model_motor_commands(void) { return model_motor.command_count; }
 void model_flush(void) { core_server_flush(&model_server); }
 void model_discontinuity(void) { core_server_discontinuity(&model_server); }
 void model_rt_step(void)

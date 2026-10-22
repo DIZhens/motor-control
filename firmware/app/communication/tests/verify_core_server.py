@@ -40,6 +40,7 @@ class Model:
         self.cpu.reg_write(UC_ARM_REG_SP,0x20007FF0);self.cpu.reg_write(UC_ARM_REG_LR,0x0803F001);self.cpu.reg_write(UC_ARM_REG_R0,arg)
         self.cpu.emu_start(self.symbols[name]|1,0x0803F000,count=1000000)
         assert self.cpu.reg_read(UC_ARM_REG_PC)==0x0803F000,name
+        return self.cpu.reg_read(UC_ARM_REG_R0)
     def feed(self,data):
         assert len(data)<=1024
         self.cpu.mem_write(self.symbols['model_input'],bytes(data));self.call('model_feed',len(data))
@@ -122,10 +123,60 @@ def tests():
     values=[m.take(),m.take()]
     assert values[0][1]['result_code']==py.Result.CANCELLED_BY_STOP
     assert values[1][1]['motor_result']==1 and values[1][0].session_id==0
-    assert m.response(stop)==values[1] and m.get('model_submit_count')==2
+    assert m.response(stop,True)==values[1] and m.get('model_submit_count')==3
     assert m.response(ordinary)==values[0]
     assert m.response(req(2,0x102,seq=2))[1]['value']['generation']==1
-    passed('sessionless Stop优先取消未消费普通ticket；各自唯一终态、重复Stop不再入队')
+    passed('sessionless Stop优先取消未消费普通ticket；普通取消终态仍缓存，已完成Stop可再提交')
+    m=Model().open();stop=req(4,3,session=0,seq=10)
+    m.feed(stop);m.feed(stop)
+    assert m.take()[1]['result_code']==py.Result.IN_PROGRESS and m.get('model_submit_count')==1
+    assert m.call('model_current_session')==1 and m.call('model_highest_sequence')==0
+    m.call('model_rt_step');m.feed(stop)
+    assert m.take()[1]['result_code']==py.Result.IN_PROGRESS and m.get('model_submit_count')==1
+    m.poll();first=m.take()
+    assert first[1]['motor_result']==1 and m.call('model_motor_commands')==1
+    assert m.response(stop,True)==first and m.get('model_submit_count')==2
+    assert m.call('model_motor_commands')==2 and m.call('model_current_session')==1
+    assert m.call('model_highest_sequence')==0
+    assert m.response(req(seq=1))[1]['result_code']==0
+    passed('无会话Stop在途仅提交一次；终态后相同帧再提交完成，不改变Session或普通序号水位')
+    m=Model();stop=req(4,3,session=0,seq=10)
+    first=m.response(stop,True)
+    assert m.response(stop,True)==first and m.get('model_submit_count')==2
+    assert m.call('model_motor_commands')==2 and m.call('model_current_session')==0
+    passed('尚无Session时相同无会话Stop完成后仍可再执行，不因Session同为0进入完成缓存')
+    m=Model().open();m.feed(req(4,3,session=0,seq=10));other=req(4,3,session=0,seq=11)
+    assert m.response(other)[1]['result_code']==py.Result.BUSY and m.get('model_submit_count')==1
+    m.call('model_rt_step');m.poll();assert m.take()[1]['motor_result']==1
+    assert m.response(other,True)[1]['motor_result']==1 and m.get('model_submit_count')==2
+    assert m.call('model_current_session')==1
+    passed('其他无会话Stop在途返回BUSY且不缓存拒绝；原Stop完成后该帧可以提交')
+    m=Model().open();stop=req(4,3,session=1,seq=1)
+    m.feed(stop);m.feed(stop)
+    assert m.take()[1]['result_code']==py.Result.IN_PROGRESS and m.get('model_submit_count')==1
+    m.call('model_rt_step');m.poll();first=m.take()
+    assert m.response(stop)==first and m.get('model_submit_count')==1
+    assert m.call('model_motor_commands')==1
+    assert m.response(wire(4,1,1,b'\x03\0',flags=1))[1]['result_code']==py.Result.SEQUENCE_CONFLICT
+    passed('非0 Session的Stop继续在途去重及完成终态重放，只执行一次')
+    stop=req(4,3,session=0,seq=10);damaged=bytearray(stop);damaged[-3]^=1
+    invalid=[bytes(damaged),b'\xff\0',wire(4,0,10,b'\x03\0',version=2),
+             wire(4,0,10,b'\x03\0',flags=1),wire(4,0,10,b'\x03\0',kind=2),
+             wire(4,0,10,b'\x03\0\0')]
+    for frame in invalid:
+        m=Model().open();m.feed(frame);m.take()
+        assert m.get('model_submit_count')==0 and m.call('model_motor_commands')==0
+        assert m.call('model_current_session')==1
+    passed('sessionless Stop仍逐层验证COBS/CRC/Header/Payload；错误帧不提交且不改变Session')
+    m=Model().open()
+    for communication,telemetry in [(0xFFFFFFFF,0xFFFFFFFF),(0,0),(0,0xFFFFFFFF),(438,254)]:
+        m.put(m.symbols['g_system_runtime_status']+36,communication)
+        m.put(m.symbols['g_system_runtime_status']+40,telemetry)
+        m.call('model_mapping_read_stacks')
+        assert m.get('model_mapping_communication_stack')==communication
+        assert m.get('model_mapping_telemetry_stack')==telemetry
+        assert m.get('model_mapping_unexpected_calls')==0
+    passed('真实Target通信状态映射原样保留未测量0xFFFFFFFF、实测0及非零高水位')
     m=Model().open();m.feed(req(4,3,seq=1))
     assert m.response(req(4,3,seq=2))[1]['result_code']==py.Result.BUSY
     m.open(2);m.call('model_rt_step');m.poll()
@@ -364,7 +415,9 @@ def host_tests():
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--report',type=Path);args=parser.parse_args()
+    target=ROOT/'firmware/targets/BLDC_G431'
     sources=[COMM/'core_server.c',COMM/'core_protocol.c',COMM/'core_protocol_values.c',Path(__file__).with_name('core_server_model.c'),
+        Path(__file__).with_name('target_core_mapping_model.c'),target/'runtime/target_core_server.c',
         ROOT/'firmware/app/system_runtime/runtime_exchange.c',ROOT/'firmware/app/system_runtime/runtime_parameters.c',ROOT/'firmware/app/motor/motor.c']
     with tempfile.TemporaryDirectory(prefix='g431-core-server-') as directory:
         temp=Path(directory);scatter=temp/'model.sct'
@@ -374,10 +427,20 @@ def main():
             obj=temp/(source.stem+'.o');objects.append(obj)
             command=[ARM/'armcc.exe','--cpu=Cortex-M4.fp','--c99','-O3','-Otime','--split_sections','-g']
             for include in [COMM,ROOT/'firmware/app/motor',ROOT/'firmware/app/system_runtime']:command+=['-I',include]
+            if source.name in ('target_core_server.c','target_core_mapping_model.c'):
+                command+=['-DBLDC_G431_FINITE_RUN','-DSTM32G431xx','-DUSE_HAL_DRIVER']
+                for include in [target/'runtime',target/'Core/Inc',ROOT/'firmware/platform_contract',
+                    target/'Drivers/CMSIS/Include',target/'Drivers/CMSIS/Device/ST/STM32G4xx/Include',
+                    target/'Drivers/STM32G4xx_HAL_Driver/Inc']:
+                    command+=['-I',include]
+            if source.name=='target_core_server.c':
+                # 单独保留真实对象映射，避免与Server业务替身端口同名；未使用装配路径由链接器移除。
+                for name in ('read_object','permitted','fail_closed','submit','completion','telemetry_peek','telemetry_retire'):
+                    command+=['-Dcore_server_port_'+name+'=mapping_core_server_port_'+name]
             result=subprocess.run([*map(str,command),'-c',str(source),'-o',str(obj)],capture_output=True)
             assert result.returncode==0 and b'warning' not in result.stdout.lower()+result.stderr.lower(),result.stdout+result.stderr
         axf=temp/'model.axf'
-        result=subprocess.run([*map(str,[ARM/'armlink.exe','--cpu=Cortex-M4.fp','--scatter',scatter,'--entry=model_init','--keep=core_server_model.o(*)','-o',axf,*objects])],capture_output=True)
+        result=subprocess.run([*map(str,[ARM/'armlink.exe','--cpu=Cortex-M4.fp','--scatter',scatter,'--entry=model_init','--keep=core_server_model.o(*)','--keep=target_core_mapping_model.o(*)','-o',axf,*objects])],capture_output=True)
         assert result.returncode==0,result.stdout+result.stderr
         with axf.open('rb') as f:
             elf=ELFFile(f);Model.data=[(s['sh_addr'],s.data()) for s in elf.iter_sections() if s['sh_flags']&2 and s['sh_type']=='SHT_PROGBITS']
@@ -386,6 +449,6 @@ def main():
     if args.report:
         args.report.parent.mkdir(parents=True,exist_ok=True)
         args.report.write_text(json.dumps(dict(status='PASS',groups=groups,hardware_access=False,
-            execution='ARMCC Cortex-M4F + Unicorn; simulated Transport/real-time stepping and bytewise library copy substitute',
+            execution='ARMCC Cortex-M4F + Unicorn; real Target object mapping with substituted read inputs; simulated Transport/real-time stepping and bytewise library copy substitute',
             source_sha256={p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in [Path(__file__),*sources,ROOT/'host/protocol/client.py',ROOT/'host/protocol/codec.py']}),ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 if __name__=='__main__':main()

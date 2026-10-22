@@ -102,6 +102,8 @@ with tempfile.TemporaryDirectory(prefix='g431-system-runtime-') as directory:
             self.delay_hal = True
             self.fail_create = ''
             self.return_scheduler = False
+            self.stack_watermark_value = None
+            self.advance_communication_tick = False
             self.cpu.hook_add(UC_HOOK_CODE, self.code)
             self.cpu.hook_add(UC_HOOK_MEM_INVALID, self.invalid)
 
@@ -135,6 +137,8 @@ with tempfile.TemporaryDirectory(prefix='g431-system-runtime-') as directory:
                 self.skip(0)
             elif self.return_scheduler and at('xPortStartScheduler'):
                 self.skip(0)
+            elif self.stack_watermark_value is not None and at('uxTaskGetStackHighWaterMark'):
+                self.skip(self.stack_watermark_value)
             elif at('prvStartFirstTask'):
                 self.stop = 'port-first-task'
                 cpu.emu_stop()
@@ -152,7 +156,10 @@ with tempfile.TemporaryDirectory(prefix='g431-system-runtime-') as directory:
                 self.calls['notify'] = count + 1
                 self.events.append(('notify-wait', cpu.reg_read(UC_ARM_REG_R1)))
                 if count: self.stop = 'communication-block'; cpu.emu_stop()
-                else: self.skip()
+                else:
+                    if self.advance_communication_tick:
+                        self.write('xTickCount', self.read('xTickCount') + 1000)
+                    self.skip()
             elif self.mode == 'telemetry' and at('vTaskDelayUntil'):
                 self.events.append(('telemetry-period', cpu.reg_read(UC_ARM_REG_R1)))
                 self.stop = 'telemetry-block'
@@ -187,7 +194,9 @@ with tempfile.TemporaryDirectory(prefix='g431-system-runtime-') as directory:
             self.mode = 'bootstrap'
             self.call('bootstrap_task', 0)
 
-    m = Model(); m.start()
+    m = Model()
+    assert [m.read(symbols['g_system_runtime_status']+32+4*i) for i in range(4)]==[0xFFFFFFFF]*4
+    m.start()
     assert m.read(0xE000E014) == 169999
     assert m.read(0xE000ED20) >> 16 == 0xF0F0
     assert m.read('model_pre_count') == 1 and m.read('model_boot_count') == 0
@@ -198,7 +207,14 @@ with tempfile.TemporaryDirectory(prefix='g431-system-runtime-') as directory:
     assert m.call('uxTaskGetNumberOfTasks') == 4
     assert m.read('s_mailbox') and m.read('s_communication') and m.read('s_telemetry')
     assert m.read('model_transport_count')==1
+    assert m.read(symbols['g_system_runtime_status']+32) != 0xFFFFFFFF
+    assert [m.read(symbols['g_system_runtime_status']+36+4*i) for i in range(3)]==[0xFFFFFFFF]*3
     passed('Bootstrap创建真实静态Mailbox及长期任务后装配Target，记录高水位再请求自删除')
+    zero=Model();zero.start();zero.bootstrap()
+    zero.stack_watermark_value=0;zero.advance_communication_tick=True
+    zero.mode='communication';zero.current(zero.read('s_communication'));zero.call('communication_task',0)
+    assert [zero.read(symbols['g_system_runtime_status']+36+4*i) for i in range(3)]==[0]*3
+    passed('四个栈初始为未测量0xFFFFFFFF；Bootstrap单独更新，后台实测0原样发布')
     m_transport = Model();m_transport.start();m_transport.write('model_transport_ok',0);m_transport.bootstrap()
     assert m_transport.stop=='fatal' and m_transport.read('model_boot_count')==1
     assert m_transport.read('model_transport_count')==1

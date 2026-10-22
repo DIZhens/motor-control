@@ -17,7 +17,11 @@ static StaticQueue_t s_telemetry_queue;
 static uint8_t s_telemetry_storage[sizeof(RuntimeTelemetryValue)];
 static QueueHandle_t s_mailbox;
 static TaskHandle_t s_communication, s_telemetry, s_idle;
-volatile SystemRuntimeStatus g_system_runtime_status;
+/* 未测量与实测耗尽的0分开；各所有者测量后原样覆盖，不在协议映射时猜测。 */
+volatile SystemRuntimeStatus g_system_runtime_status = {
+    .bootstrap_stack_free = UINT32_MAX, .communication_stack_free = UINT32_MAX,
+    .telemetry_stack_free = UINT32_MAX, .idle_stack_free = UINT32_MAX
+};
 
 static void fatal(RuntimeInternalFaultReason reason)
 {

@@ -68,7 +68,8 @@ Server保留一个普通在途和一个Stop在途、完成缓存4、终态Respon
 Header语义及精确payload，不用CRC代替内容比较。新拒绝也退休序号并缓存；重复处理中
 仅给IN_PROGRESS提示，完成后原终态重放。Stop取消未消费普通ticket并分别形成取消/Stop终态；
 已完成请求保留原结果。新会话不改Motor或参数，已排队Stop保留原身份且其旧完成不进新缓存。
-无会话Stop也完整校验，重复缓存只代表同一操作，新的Stop须分配新的非保留Sequence。
+无会话Stop也完整校验，仅在途去重；终态后同一帧可以再次提交，不保存session0完成缓存。
+非0 Session的普通请求及Stop继续使用完成缓存和原终态重放。
 
 普通事务20ms截止先于迟到Completion处理；未知ticket/kind、内部交接错误、响应FIFO满及
 Transport内部失败立即Fail-closed、撤销Session，不重执行或自动恢复。可发送时只为旧在途

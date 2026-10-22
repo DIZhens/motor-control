@@ -59,7 +59,7 @@ class Client:
         self.parser = codec.Parser()
         self.session = 0
         self.sequence = 1
-        # 无会话Stop也须避免不同客户端总从1开始，撞上设备仍保留的完成缓存。
+        # 无会话Stop以随机初值关联应答，减少不同客户端从1开始时误收迟到应答的机会。
         self.stop_sequence = secrets.randbelow(0xFFFFFFFE) + 1
         self._busy = False
         self.received_frames = self.ignored_frames = self.retransmissions = 0

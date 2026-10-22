@@ -37,7 +37,7 @@ typedef struct {
     size_t telemetry_wire_length;
     CoreQueuedEvent events[CORE_EVENT_CAPACITY];
     CorePendingRequest ordinary, stop;
-    CoreCompletedRequest cache[CORE_CACHE_CAPACITY];
+    CoreCompletedRequest cache[CORE_CACHE_CAPACITY]; /* 仅非0 Session；无会话Stop只在途去重。 */
     CoreQueuedResponse responses[CORE_RESPONSE_CAPACITY];
     /* 编码工作区归同一所有者，避免嵌套大对象挤占任务栈。 */
     CoreRequest decoded;

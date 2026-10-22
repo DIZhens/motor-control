@@ -64,7 +64,7 @@ Task notification1、栈检查2、max priorities4。只链接实际使用的Kern
 
 栈按实际MAP调用链及FPU上下文预留，word为4字节。静态调用链已知部分为Bootstrap304 B、
 Communication1224 B、Telemetry408 B、Idle40 B，仍有间接调用/汇编未知量及硬件异常压栈。
-当前Run静态RAM为21192/32768 B，包含4 KiB主栈、原512 B C库堆保留区、512 B RX/130 B TX
+当前Run静态RAM为21184/32768 B，包含4 KiB主栈、原512 B C库堆保留区、512 B RX/130 B TX
 及2832 B Server静态状态/工作区；无动态分配调用或FreeRTOS heap实现。Event8、Mailbox1及
 发送元数据已计入；Server只peek原Mailbox，不添加第二个待发样本槽。
 不能把静态占用当作栈安全证明；长期任务实测最小剩余栈必须≥初始25%，Bootstrap删除前记录自身数值。

@@ -74,10 +74,8 @@ CoreResult core_server_port_read_object(uint16_t id, CoreObject *value)
         c->uart_pe = transport.parity_errors; c->uart_fe = transport.framing_errors;
         c->uart_ne = transport.noise_errors; c->uart_ore = transport.hardware_rx_overruns;
         c->completion_fifo_high_water = target_runtime_completion_high_water();
-        c->communication_stack_min_words = g_system_runtime_status.communication_stack_free != 0U
-            ? g_system_runtime_status.communication_stack_free : 0xFFFFFFFFU;
-        c->telemetry_stack_min_words = g_system_runtime_status.telemetry_stack_free != 0U
-            ? g_system_runtime_status.telemetry_stack_free : 0xFFFFFFFFU;
+        c->communication_stack_min_words = g_system_runtime_status.communication_stack_free;
+        c->telemetry_stack_min_words = g_system_runtime_status.telemetry_stack_free;
         c->internal_fault_reason = (uint32_t)fault.first_reason; c->internal_fault_count = fault.count;
         c->tx_busy_count = transport.tx_busy_count; c->tx_errors = transport.tx_errors;
         c->telemetry_overwrites = g_system_runtime_status.telemetry_overwrites;

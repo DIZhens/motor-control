@@ -3,17 +3,17 @@
   "status": "LOCAL_CLOSURE_PASS_PUBLICATION_PENDING",
   "date": "2026-10-22",
   "branch": "stage/g431-uart-protocol-freertos-v1",
-  "base_commit": "fae55f2d149265df34d703d18e5664277e0cb213",
-  "scope": "Final G431 native builds, integration/ownership/resources, evidence and documentation; no firmware source change, flash/reset or motion during P8",
+  "base_commit": "430cf6600f4a96f0d4ce2f4f86283235696abf5d",
+  "scope": "P8 local closure plus approved sessionless Stop/stack correction; new logical-only UART test; no powered P7 rerun",
   "acceptance": {
     "P0": "PASS",
     "P1": "PASS",
     "P2": "PASS",
-    "P3": "PASS",
+    "P3": "PASS_WITH_STACK_SENTINEL_CORRECTION",
     "P4": "PASS",
-    "P5": "PASS",
+    "P5": "PASS_WITH_SESSIONLESS_STOP_CORRECTION",
     "P6": "PASS_REVISED_250_HZ_SCOPE_ORIGINAL_500_HZ_FAIL",
-    "P7": "PASS",
+    "P7": "PRIOR_IMAGE_PASS_NOT_REPEATED_PER_APPROVED_CORRECTION_SCOPE",
     "P8": "LOCAL_CHECKS_PASS_PR_MERGE_PENDING"
   },
   "acceptance_change": "Project owner approved 250 Hz communication acceptance; 500 Hz original <1% requirement remains FAIL, retained as capacity boundary. No device deadline/safety limit relaxed.",
@@ -40,8 +40,8 @@
       "firmware/app/communication/core_protocol.h": "1e1a31e82a90ab6e3ba99d7b48bf2cdd7d9d7e0119a250483f0ce01c43d8d9ea",
       "firmware/app/communication/core_protocol_values.c": "30efdf3c47efeaaac9485e5f76ba01578bdd43e6d369ad0d4eb60853c433b856",
       "firmware/app/communication/core_protocol_values.h": "6e32e0670c6527b789dc47fe0afd56d26eaf59875ab8597695232feae29292df",
-      "firmware/app/communication/core_server.c": "1ecfe88eef11a04006826cfa7eaffa36229a869fe1d58ffd169456e016be2694",
-      "firmware/app/communication/core_server.h": "b72727375999c0038d5f04165598bcfda0ca44f50ee72d4aaf06e8f22ed825a9",
+      "firmware/app/communication/core_server.c": "44babc606a90a0546eaab85369276babbb0072c700fb695db885ab2689e67fc5",
+      "firmware/app/communication/core_server.h": "93693267accf1070b2c885dee2321153577bcba12b401f5254a8cda8162ee024",
       "firmware/app/motor/control_runtime.c": "39e464600350904f919a3610ce80b309a47ba8035ac2bf860819379cf69a2f79",
       "firmware/app/motor/control_runtime.h": "58477d77c7cf69d7f44822cae980abfd03a72f248873b2cc20582905aa30d3cd",
       "firmware/app/motor/motor.c": "61143f69ca71d005f49a600677c40d5a3c296cb7e38dff8b0da67e273b56809f",
@@ -54,7 +54,7 @@
       "firmware/app/system_runtime/runtime_parameters.c": "7ab9c9717930323dcc12bd3730769d0a974571451c54304c42cc14bcbce7f13a",
       "firmware/app/system_runtime/runtime_parameters.h": "413d698d4df2006a4321911ce008d6b49773281e35fd9d65a3e371d62bb6ac8a",
       "firmware/app/system_runtime/speed_commissioning.h": "33daa16b14d3bc9560cb2ba72502be363aaca568cdfd251dc779379b603d16aa",
-      "firmware/app/system_runtime/system_runtime.c": "19a306603740272043a85a606c34796466ac724be9380167144192ea66d63a11",
+      "firmware/app/system_runtime/system_runtime.c": "3b6441b91bf4809502cbf46d11a211ac1179eb41280b6ab01bc90c76aa0af03f",
       "firmware/app/system_runtime/system_runtime.h": "3e20adc1e93c8edb96d83581e5f99c4cbd17774d6d48d2168b16a48112aaeaa3",
       "firmware/app/system_runtime/system_runtime_target.h": "f3f2fb72c6880d0fd8c213502928e6881909430b5eb4bf0490e14e6d5534ae50",
       "firmware/app/system_runtime/telemetry_mailbox.h": "90cab0f62890639fd58832e76df291577b289f45230204bfc610a399880ffc8d",
@@ -201,7 +201,7 @@
       "firmware/targets/BLDC_G431/runtime/irq_timing.h": "a8e2f62107a8e58ce2919e35c7fd183266915432d5455711bee08732cff2a975",
       "firmware/targets/BLDC_G431/runtime/runtime_timing.h": "ab00618b2c00d0740f4c02b1b2948a2d8d25a5bb93c34cfa72621b6f5db6001b",
       "firmware/targets/BLDC_G431/runtime/stage_budget.h": "b051ad5fc6b0ab31d34693311396b64bafb383e3bfb4358a310a8699526da319",
-      "firmware/targets/BLDC_G431/runtime/target_core_server.c": "7759d36763823d2a1e3bfdcffc9463c9e2cf3201149c7d83acd80ea02093b340",
+      "firmware/targets/BLDC_G431/runtime/target_core_server.c": "e97bbcd69f16a175b7a17b1a68839ffbfb1b2fe231ef303df599a97ceaf2e63c",
       "firmware/targets/BLDC_G431/runtime/target_core_server.h": "0314a96f3e15805b13d0a2c7252c54ff1f01695a9e58f92977f6261311ebfc0e",
       "firmware/targets/BLDC_G431/runtime/target_runtime.c": "03daecea5218241d14275ce7f6f94a3bd5d587e4904159c0bbf98d2dee1b4684",
       "firmware/targets/BLDC_G431/runtime/target_runtime.h": "a73d692a811532615cc2e67d7f3f1f826d74ef929fa2eeb6100e004c2aa6aeaf",
@@ -228,8 +228,8 @@
       "firmware/third_party/FreeRTOS/Source/queue.c": "4613e2dd8c099ee689ff4fabc1d4979c0c22683a95f3e85283c6ef1b92a32bd8",
       "firmware/third_party/FreeRTOS/Source/tasks.c": "6f540b927668e4c87a064749c03f6ee0ca7370b9dfae7d9d5e96ebd0fdf12b8d"
     },
-    "full_sha256": "fd763adb40fa8964a33c5769cf8d7d23686f595562b510e6bbd9722df3603087",
-    "firmware_build_id": "0xfd763adb40fa8964"
+    "full_sha256": "ac7c5cfe4d3d6ed3a6d931819357f5221e042de274fc50e2c910c5267e146e6c",
+    "firmware_build_id": "0xac7c5cfe4d3d6ed3"
   },
   "closure_audit": {
     "status": "PASS",
@@ -237,28 +237,28 @@
     "scope": "G431 Run and three independent Validation targets; F405 unchanged/out of this stage",
     "native": [
       {
-        "target": "BLDC_G431_Run",
         "exit_code": 0,
         "summary": "\"build\\run\\BLDC_G431_Run.axf\" - 0 Error(s), 0 Warning(s).",
-        "size": "Program Size: Code=65558 RO-data=1054 RW-data=444 ZI-data=20748  "
+        "size": "Program Size: Code=65574 RO-data=1054 RW-data=496 ZI-data=20688  ",
+        "target": "BLDC_G431_Run"
       },
       {
-        "target": "BLDC_G431_Observe",
         "exit_code": 0,
         "summary": "\"build\\observe\\BLDC_G431_Observe.axf\" - 0 Error(s), 0 Warning(s).",
-        "size": "Program Size: Code=77876 RO-data=1372 RW-data=448 ZI-data=26032  "
+        "size": "Program Size: Code=77876 RO-data=1372 RW-data=448 ZI-data=26032  ",
+        "target": "BLDC_G431_Observe"
       },
       {
-        "target": "BLDC_G431_Timing",
         "exit_code": 0,
         "summary": "\"build\\timing\\BLDC_G431_Timing.axf\" - 0 Error(s), 0 Warning(s).",
-        "size": "Program Size: Code=47110 RO-data=958 RW-data=364 ZI-data=9252  "
+        "size": "Program Size: Code=47110 RO-data=958 RW-data=364 ZI-data=9252  ",
+        "target": "BLDC_G431_Timing"
       },
       {
-        "target": "BLDC_control V1",
         "exit_code": 0,
         "summary": "\"BLDC_control V1\\BLDC_control V1.axf\" - 0 Error(s), 0 Warning(s).",
-        "size": "Program Size: Code=56384 RO-data=860 RW-data=424 ZI-data=19064  "
+        "size": "Program Size: Code=56384 RO-data=860 RW-data=424 ZI-data=19064  ",
+        "target": "BLDC_control V1"
       }
     ],
     "targets": {
@@ -346,12 +346,12 @@
           "firmware/third_party/FreeRTOS/Source/portable/RVDS/ARM_CM4F/port.c"
         ],
         "vector_owners": {
-          "SVC_Handler": "SVC_Handler                              0x08000299   Thumb Code    28  port.o(.emb_text)",
-          "PendSV_Handler": "PendSV_Handler                           0x080002f5   Thumb Code    88  port.o(.emb_text)",
-          "SysTick_Handler": "SysTick_Handler                          0x08005321   Thumb Code    38  port.o(i.SysTick_Handler)"
+          "SVC_Handler": "SVC_Handler                              0x080002b9   Thumb Code    28  port.o(.emb_text)",
+          "PendSV_Handler": "PendSV_Handler                           0x08000315   Thumb Code    88  port.o(.emb_text)",
+          "SysTick_Handler": "SysTick_Handler                          0x08005341   Thumb Code    38  port.o(i.SysTick_Handler)"
         },
-        "flash_loaded_bytes": 66628,
-        "ram_static_bytes": 21192,
+        "flash_loaded_bytes": 66648,
+        "ram_static_bytes": 21184,
         "allocations_bytes": {
           "server": 2832,
           "rx": 512,
@@ -363,10 +363,10 @@
           "single_mailbox_storage": 96
         },
         "artifacts_sha256": {
-          ".hex": "ec3a17d9c2ebc45b4c6c0e8d7f446c00318cf460e0063b51ec1e853a08b54890",
-          ".axf": "dcda2f42ec1d4738bd4ef58234e0cad37e7b9cf62f2f23ca86350d94d68f6af5",
-          ".map": "cc5be6d7e42966933c2f015f74c3f471c8ac685672f7649209dae04f8e411ba4",
-          ".htm": "a7146b9f18fca533f514173da5e0ba4f55b65a4cd7bc454ec3a6fcacacc6bd88"
+          ".hex": "9491e86beef0770a1c93d91ca83b9d0954e12d03b8bb360c41234439fe15f4a7",
+          ".axf": "ba3996ea10e84e45182e7a1627a6935d07280c942f70fbbf762ac1999b5169bb",
+          ".map": "edd8bf891f449f9cb6d02d79e2e7d713df57f1102ed1988e1c3b303d56eb53da",
+          ".htm": "e86ae62f1cd5ef1393a5c50dcf1d9f86e5f4f05a800454b1962868da3a01c9df"
         }
       },
       "BLDC_control V1": {
@@ -448,9 +448,9 @@
         "allocations_bytes": {},
         "artifacts_sha256": {
           ".hex": "59ed624ba9982cea25711b295e027ea1e5375cf969982052ddac89eddaea14fb",
-          ".axf": "757b2fd05eb5cd6a18da2d3124faaf125bb96d3c6f0425012b99464b782ee35d",
+          ".axf": "8ee75c9533d22cc885bba79d6b27adb5de2782e37f77aab6ffea86143557831a",
           ".map": "0a38af60a9dadfe3f022eb53e0835cc3ea75b8773ccff4471c4e068e8cd822c2",
-          ".htm": "eca8d46e5b9a0afe05924a748502062122aa838d7b719eea752fbe7bc947c9e6"
+          ".htm": "4ab62fef8f3710b18b393f5c489d3bad27740e811439cedb98e96a68eab20116"
         }
       },
       "BLDC_G431_Observe": {
@@ -543,9 +543,9 @@
         "allocations_bytes": {},
         "artifacts_sha256": {
           ".hex": "64b37ee62e10947d180e68226fc30674ec1cb194ba04b436dfea788c1854d0cb",
-          ".axf": "6d1ff12153df5a256f985803f05e9f56bc35e14a3230b658bec5f5aba9d331f6",
+          ".axf": "59036ce7f5f5850f66c006d6431649f09736ce4f7dc2aaeda6b31c2c7eef2660",
           ".map": "4ddff578932554bc2a040860b036236a011b2b4a3b186749a18e45552011e2dc",
-          ".htm": "0e59afad90222e321dd6ae8b1b082908681e6daf0f720c6627b4a00ca8715347"
+          ".htm": "f1025de5bf5f2bc7fac88e9e36ddf191a523ef1fa5d642479fee5b45680eb1d1"
         }
       },
       "BLDC_G431_Timing": {
@@ -629,19 +629,49 @@
         "allocations_bytes": {},
         "artifacts_sha256": {
           ".hex": "f110c3c307983ce3daa1c22b0f2289d73a2209dc169639f0b0f3b6cd3010f8a8",
-          ".axf": "d65d688f3f2dbd6cba9233ed94da5d71cfa18280f91b41a60069db2576274bdb",
+          ".axf": "542f1dfe99bc178247177c4be294df2a932bda4365d17b76255d1a3643161b76",
           ".map": "61d946c3bab41621463a081a564b697555782940e61b96a6ce71785eafa2ec9a",
-          ".htm": "57222d72da41719f414efefdfef088a729f8a2554b2dbfb64852707bcc8cd325"
+          ".htm": "75c577402159a0e5402f14800002b33a857d87ca3b0652b2e2c776b02f22c651"
         }
       }
     },
-    "same_flash_as_p7": true,
+    "same_flash_as_p7": false,
+    "p7_scope": "Old P7 evidence remains bound to its old image; powered P7 explicitly not required for this correction",
     "unmodified_supplier_files": 24,
     "protected_user_files_sha256": {
       "firmware/targets/BLDC_G431/MDK-ARM/BLDC_G431_Validation.uvprojx": "114517d91e26571922bb9b41befc2cf7679347096009d406691c3beabd4c162c",
       "firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1.uvoptx": "bb0411550fa2074e91479b0d3c73c9fe894a0a3b4b520566d9bc4bbb6cefbdef"
     },
-    "model_source_reuse": {
+    "realtime_direct_callgraph": {
+      "roots": [
+        "ADC1_2_IRQHandler",
+        "DMA1_Channel1_IRQHandler",
+        "TIM1_UP_TIM16_IRQHandler",
+        "TIM1_BRK_TIM15_IRQHandler",
+        "SPI1_IRQHandler",
+        "TIM6_DAC_IRQHandler",
+        "TIM7_IRQHandler",
+        "sample_ready",
+        "trip_notify"
+      ],
+      "no_kernel_api_reachable": true,
+      "scope": "Linker direct callgraph plus explicitly bound sample_ready/trip_notify; not exhaustive proof of unknown indirect targets or WCET"
+    },
+    "known_task_stack_depth_bytes": {
+      "bootstrap_task": 304,
+      "communication_task": 1224,
+      "telemetry_task": 408,
+      "prvIdleTask": 40
+    },
+    "validation_user_change_compile_impact": "Only Flash2 debugger DLL differs from HEAD; XML trees identical with this debug field omitted; compiler settings and members unchanged; user file not staged",
+    "formal_source_delta": [
+      "firmware/app/communication/core_server.c",
+      "firmware/app/communication/core_server.h",
+      "firmware/app/system_runtime/system_runtime.c",
+      "firmware/targets/BLDC_G431/runtime/target_core_server.c"
+    ],
+    "frozen_control_and_dma_inputs_unchanged": true,
+    "model_source_verification": {
       "codec": {
         "status": "PASS",
         "groups": 12,
@@ -656,35 +686,39 @@
           "firmware/app/communication/tests/verify_core_protocol.py": "9f0e4ee7867b06fd43229f34ae5a612ac20d905cc17e9b7af18fe0103766a9b6"
         },
         "scope": "Unicorn 2.1.4",
-        "local_evidence": "20261022-protocol-p6/codec-model.json"
+        "local_evidence": "20261022-protocol-stop-stack/p1-model.json",
+        "executed_this_increment": true
       },
       "server_client": {
         "status": "PASS",
-        "groups": 28,
+        "groups": 34,
         "all_recorded_source_hashes_match": true,
         "source_sha256": {
-          "firmware/app/communication/tests/verify_core_server.py": "f98ab394d96feac989a44fcf791c3b4e3342b463a619e7ee0cedde2ecf95d5e5",
-          "firmware/app/communication/core_server.c": "1ecfe88eef11a04006826cfa7eaffa36229a869fe1d58ffd169456e016be2694",
+          "firmware/app/communication/tests/verify_core_server.py": "a410713bffafe69d807df3e02db65d5aff4f8fce37e333fcfa96480d93518ffb",
+          "firmware/app/communication/core_server.c": "44babc606a90a0546eaab85369276babbb0072c700fb695db885ab2689e67fc5",
           "firmware/app/communication/core_protocol.c": "c47e85e6a481af6565c05f231a8f3e91fde4a7256ede3d1fb20f7425fc982b21",
           "firmware/app/communication/core_protocol_values.c": "30efdf3c47efeaaac9485e5f76ba01578bdd43e6d369ad0d4eb60853c433b856",
-          "firmware/app/communication/tests/core_server_model.c": "9882370ff02f2ae27a638b862941bafec396201bc44bc73dd2103f4da69fba77",
+          "firmware/app/communication/tests/core_server_model.c": "fe12c03f09d142eaa06fe4a15a90f726543dece8254f132af39ef16f6af04e6b",
+          "firmware/app/communication/tests/target_core_mapping_model.c": "8e849a03f96bd8a556560ad93cdfa765bef550327f7a39e4ad4ce44e31ab80a9",
+          "firmware/targets/BLDC_G431/runtime/target_core_server.c": "e97bbcd69f16a175b7a17b1a68839ffbfb1b2fe231ef303df599a97ceaf2e63c",
           "firmware/app/system_runtime/runtime_exchange.c": "0cba50949e712585c9fa2efe6f9b44777eb2c9276cea0b0f7e70f86fcdabeb3e",
           "firmware/app/system_runtime/runtime_parameters.c": "7ab9c9717930323dcc12bd3730769d0a974571451c54304c42cc14bcbce7f13a",
           "firmware/app/motor/motor.c": "61143f69ca71d005f49a600677c40d5a3c296cb7e38dff8b0da67e273b56809f",
-          "host/protocol/client.py": "4b0ed13dd022925b540fc40cb09939b8fb6c2c326b2ac8230b250c566c0b9287",
+          "host/protocol/client.py": "6f9b69c1d51a362f89f58871cf63ea81ac7e283ec5b49f030e709b4ed29f157d",
           "host/protocol/codec.py": "3be7df0d34e0c4fdeb0fd3916285b73955f270efa3fd93519d06dcb04231f43a"
         },
-        "scope": "ARMCC Cortex-M4F + Unicorn; simulated Transport/real-time stepping and bytewise library copy substitute",
-        "local_evidence": "20261022-protocol-p6-tx/server-model.json"
+        "scope": "ARMCC Cortex-M4F + Unicorn; real Target object mapping with substituted read inputs; simulated Transport/real-time stepping and bytewise library copy substitute",
+        "local_evidence": "20261022-protocol-stop-stack/p5-model.json",
+        "executed_this_increment": true
       },
       "system_runtime": {
         "status": "PASS",
-        "groups": 14,
+        "groups": 15,
         "all_recorded_source_hashes_match": true,
         "source_sha256": {
-          "firmware/targets/BLDC_G431/runtime/tests/verify_system_runtime.py": "3a37edca56d3d5f990509ab87f86f85cea45cd18d422fcc5370d2a148571ad73",
+          "firmware/targets/BLDC_G431/runtime/tests/verify_system_runtime.py": "5c7bcabbdf98c9c3858284c80ba6bbc51567fc1d5ef736da48244dd233ee059b",
           "firmware/targets/BLDC_G431/runtime/tests/system_runtime_model.c": "f91131628368e70ef6f800fd5101a530fe967e7cecad6c9b3165955cd9656748",
-          "firmware/app/system_runtime/system_runtime.c": "19a306603740272043a85a606c34796466ac724be9380167144192ea66d63a11",
+          "firmware/app/system_runtime/system_runtime.c": "3b6441b91bf4809502cbf46d11a211ac1179eb41280b6ab01bc90c76aa0af03f",
           "firmware/third_party/FreeRTOS/Source/tasks.c": "8cb1eabe18f130b2b8980e880847f773fb12a4071c763d26c51624223b32a3a4",
           "firmware/third_party/FreeRTOS/Source/queue.c": "06a153c1ce111213af32dfc8797bd2e5c7819e264dfa338b4049f058dc1edb11",
           "firmware/third_party/FreeRTOS/Source/list.c": "e735517f308fad5dd77d03b6858c16bdbc937bb9d0754735849fc7799ebe2b59",
@@ -692,7 +726,8 @@
           "firmware/targets/BLDC_G431/runtime/FreeRTOSConfig.h": "994d2c2cdcbc8a2fea95957c4347e07f8d2604d145edbe5206e55cc704c84885"
         },
         "scope": "ARM model; not electrical or WCET proof",
-        "local_evidence": "20261022-protocol-p6/system-model.json"
+        "local_evidence": "20261022-protocol-stop-stack/p3-model.json",
+        "executed_this_increment": true
       },
       "runtime_exchange": {
         "status": "PASS",
@@ -720,7 +755,8 @@
           "firmware/targets/BLDC_G431/runtime/tests/runtime_exchange_cases.py": "e3229d42497e731c428d19b1b52516354ae99a00cc7a0a0dd5021e2b0a7e9289"
         },
         "scope": "ARM model; not electrical or WCET proof",
-        "local_evidence": "20261022-protocol-p6-tx/runtime-model.json"
+        "local_evidence": "20261022-protocol-stop-stack/p2-model.json",
+        "executed_this_increment": true
       },
       "uart_dma": {
         "status": "PASS",
@@ -732,67 +768,32 @@
           "firmware/targets/BLDC_G431/runtime/tests/uart_dma_model.c": "900b44245f53e038a42b55878ccac46abc2c1b0a4b12018447e29069e764a544",
           "firmware/targets/BLDC_G431/runtime/tests/verify_uart_dma.py": "02c519788af561fbc300a2cc1880485a996f562da81626d085fc50e7d71bf238"
         },
+        "executed_this_increment": false,
         "public_evidence": "p4.json",
         "scope": "Unchanged DMA unit model inputs; not re-attributing old physical UART test to final HEX"
       }
-    },
-    "realtime_direct_callgraph": {
-      "roots": [
-        "ADC1_2_IRQHandler",
-        "DMA1_Channel1_IRQHandler",
-        "TIM1_UP_TIM16_IRQHandler",
-        "TIM1_BRK_TIM15_IRQHandler",
-        "SPI1_IRQHandler",
-        "TIM6_DAC_IRQHandler",
-        "TIM7_IRQHandler",
-        "sample_ready",
-        "trip_notify"
-      ],
-      "no_kernel_api_reachable": true,
-      "scope": "Linker direct callgraph plus explicitly bound sample_ready/trip_notify; not exhaustive proof of unknown indirect targets or WCET"
-    },
-    "known_task_stack_depth_bytes": {
-      "bootstrap_task": 304,
-      "communication_task": 1224,
-      "telemetry_task": 408,
-      "prvIdleTask": 40
-    },
-    "validation_user_change_compile_impact": "Only Flash2 debugger DLL differs from HEAD; XML trees identical with this debug field omitted; compiler settings and members unchanged; user file not staged",
-    "p7_axf_comparison": {
-      "old_sha256": "6f124777168ac7a8c90721cdeb2cb46873aed0e02d5ea3e104c1835dc6e91c89",
-      "new_sha256": "dcda2f42ec1d4738bd4ef58234e0cad37e7b9cf62f2f23ca86350d94d68f6af5",
-      "all_allocated_progbits_equal": true,
-      "differing_nonallocated_sections": [
-        ".comment"
-      ],
-      "map_identical": true,
-      "scope": "Different AXF hashes retained; exact old AXF remains in P7 frozen artifacts; final HEX/allocated bytes and MAP unchanged"
     }
   },
-  "final_flash_bytes": 66628,
-  "final_static_ram_bytes": 21192,
+  "final_flash_bytes": 66648,
+  "final_static_ram_bytes": 21184,
   "stack_watermarks": {
-    "unit": "32-bit word; smallest remaining, not used depth",
+    "unit": "32-bit word; remaining",
     "initial": {
       "Bootstrap": 768,
       "Communication": 768,
       "Telemetry": 384,
       "Idle": 128
     },
-    "final_image_all_pressure_windows_minimum": {
+    "corrected_image_logic_uart_minimum": {
       "Bootstrap": 690,
-      "Communication": 438,
-      "Telemetry": 254,
-      "Idle": 109
-    },
-    "P7_motion_minimum": {
-      "Bootstrap": 690,
-      "Communication": 464,
+      "Communication": 440,
       "Telemetry": 271,
       "Idle": 109
     },
-    "all_at_least_25_percent": true,
-    "scope": "Observed final-image workloads including failed 500Hz delivery pressure; not full WCET/worst-case scheduling proof"
+    "unknown_value": 4294967295,
+    "real_zero_is_preserved": true,
+    "all_measured_at_least_25_percent": true,
+    "scope": "Logical-only Stop load; previous pressure/P7 watermarks retained separately and not attributed to corrected HEX"
   },
   "communication": {
     "50": {
@@ -979,9 +980,127 @@
     ],
     "final_idle_off_six_low_moe_zero": true,
     "guard_internal_timing_faults_zero": true,
-    "frozen_angle_zero_unchanged": true
+    "frozen_angle_zero_unchanged": true,
+    "evidence_hex_sha256": "ec3a17d9c2ebc45b4c6c0e8d7f446c00318cf460e0063b51ec1e853a08b54890",
+    "repeated_on_corrected_image": false
   },
   "fifo_high_water_final_image": {
+    "Response": {
+      "capacity": 4,
+      "observed": 1
+    },
+    "Completion": {
+      "capacity": 4,
+      "observed": 1
+    },
+    "Event": {
+      "capacity": 8,
+      "observed": 0
+    },
+    "TelemetryMailbox": {
+      "capacity": 1,
+      "logical_uart_overwrites": 0
+    },
+    "scope": "Corrected-image logical Stop run only; previous pressure/Event values retained separately"
+  },
+  "documents_updated": [
+    "interface/CORE_PROTOCOL_V1.md",
+    "firmware/app/communication/README.md",
+    "host/protocol/README.md",
+    "firmware/targets/BLDC_G431/runtime/RTOS_INTEGRATION.md",
+    "firmware/targets/BLDC_G431/VALIDATION.md"
+  ],
+  "publication": {
+    "pushed_this_step": false,
+    "pr_created_this_step": false,
+    "merged_this_step": false,
+    "scope": "Local reviewable checkpoint only; publication/merge remain separate actions"
+  },
+  "not_proven": [
+    "500Hz original <1% delivery gate",
+    "negative motion or independent time-limit expiry on final protocol/RTOS image",
+    "physical fault Event injection, exact fail-close delay and 2turn guard boundary",
+    "full ISR WCET/worst-case scheduling",
+    "absolute current accuracy, continuous/loaded operation, persistent calibration/fault recovery",
+    "CAN hardware, Qt Host and F405 parity"
+  ],
+  "local_evidence": "validation/local-evidence/20261022-protocol-stop-stack; .git/g431-protocol-stop-stack-path; complete logs and frozen artifacts not distributed",
+  "local_audit_sha256": "7906eda2b012e2d6603dddc5a2d24f0187b8f177043062ae5807939af937d958",
+  "reused_public_evidence": [
+    "p0.json",
+    "p1.json",
+    "p2.json",
+    "p3.json",
+    "p4.json",
+    "p5.json",
+    "p6.json",
+    "p6-tx.json",
+    "p7.json"
+  ],
+  "verification_policy": "P1/P2/P3/P5 executed again for this correction; all 4 native builds and logical-only repeated Stop HIL passed. Unchanged control/DMA source inputs checked; old 500Hz failure and powered P7 retain their original image attribution.",
+  "final_checks": {
+    "status": "PASS",
+    "local_document_links": 332,
+    "strict_protocol_json_reports": 11,
+    "three_validation_hex_unchanged": true,
+    "recorded_model_sources_match": true,
+    "205_formal_inputs_match": true,
+    "frozen_control_motor_hcc_dma_kernel_inputs_unchanged": true,
+    "user_settings_preserved": true,
+    "powered_P7_repeated": false
+  },
+  "prior_p8_checkpoint": {
+    "commit": "430cf6600f4a96f0d4ce2f4f86283235696abf5d",
+    "build_id": "0xfd763adb40fa8964",
+    "hex_sha256": "ec3a17d9c2ebc45b4c6c0e8d7f446c00318cf460e0063b51ec1e853a08b54890",
+    "scope": "Original P8 construction and old pressure/P7 data remain in that commit; only final source/build audit is superseded by this correction"
+  },
+  "latest_correction": "stop-stack.json",
+  "prior_image_stack_watermarks": {
+    "unit": "32-bit word; smallest remaining, not used depth",
+    "initial": {
+      "Bootstrap": 768,
+      "Communication": 768,
+      "Telemetry": 384,
+      "Idle": 128
+    },
+    "final_image_all_pressure_windows_minimum": {
+      "Bootstrap": 690,
+      "Communication": 438,
+      "Telemetry": 254,
+      "Idle": 109
+    },
+    "P7_motion_minimum": {
+      "Bootstrap": 690,
+      "Communication": 464,
+      "Telemetry": 271,
+      "Idle": 109
+    },
+    "all_at_least_25_percent": true,
+    "scope": "Observed final-image workloads including failed 500Hz delivery pressure; not full WCET/worst-case scheduling proof"
+  },
+  "inherited_delivery_evidence_hex_sha256": "ec3a17d9c2ebc45b4c6c0e8d7f446c00318cf460e0063b51ec1e853a08b54890",
+  "correction_acceptance": {
+    "P1_groups": 12,
+    "P2_groups": 19,
+    "P3_groups": 15,
+    "P5_groups": 34,
+    "four_native_targets": "0 errors / 0 warnings",
+    "logical_uart_identical_stops": "PASS, motor calls 0->2, session unchanged",
+    "motion_commands": 0
+  },
+  "previous_documents_updated": [
+    "README.md",
+    "DEVELOPMENT.md",
+    "firmware/README.md",
+    "firmware/app/communication/README.md",
+    "firmware/targets/BLDC_G431/runtime/README.md",
+    "firmware/targets/BLDC_G431/VALIDATION.md",
+    "host/README.md",
+    "interface/README.md",
+    "interface/DEVICE_CONTRACT.md"
+  ],
+  "prior_image_fifo_high_water": {
     "Response": {
       "capacity": 4,
       "observed": 1
@@ -1000,58 +1119,5 @@
       "500_hz_overwrites": 96
     }
   },
-  "documents_updated": [
-    "README.md",
-    "DEVELOPMENT.md",
-    "firmware/README.md",
-    "firmware/app/communication/README.md",
-    "firmware/targets/BLDC_G431/runtime/README.md",
-    "firmware/targets/BLDC_G431/VALIDATION.md",
-    "host/README.md",
-    "interface/README.md",
-    "interface/DEVICE_CONTRACT.md"
-  ],
-  "publication": {
-    "pushed_this_step": false,
-    "pr_created_this_step": false,
-    "merged_this_step": false,
-    "scope": "Local reviewable checkpoint only; publication/merge remain separate actions"
-  },
-  "not_proven": [
-    "500Hz original <1% delivery gate",
-    "negative motion or independent time-limit expiry on final protocol/RTOS image",
-    "physical fault Event injection, exact fail-close delay and 2turn guard boundary",
-    "full ISR WCET/worst-case scheduling",
-    "absolute current accuracy, continuous/loaded operation, persistent calibration/fault recovery",
-    "CAN hardware, Qt Host and F405 parity"
-  ],
-  "local_evidence": "validation/local-evidence/20261022-protocol-p8, frozen/{target}/HEX+AXF+MAP+callgraph; .git/g431-protocol-p8-path (not distributed)",
-  "local_audit_sha256": "95e353f05e80103b23da7203cb94bf6392222583968829def88f6cc194cdd07f",
-  "reused_public_evidence": [
-    "p0.json",
-    "p1.json",
-    "p2.json",
-    "p3.json",
-    "p4.json",
-    "p5.json",
-    "p6.json",
-    "p6-tx.json",
-    "p7.json"
-  ],
-  "verification_policy": "All four native Rebuilds executed in P8. Previously passed targeted models reused only after recorded source hashes matched. Physical results remain bound to their own images; no old waveform rerun.",
-  "final_checks": {
-    "status": "PASS",
-    "first_party_documents": 38,
-    "local_link_targets_checked": 329,
-    "strict_protocol_json_reports": 10,
-    "native_targets": 4,
-    "reused_model_groups": {
-      "codec": 12,
-      "server_client": 28,
-      "system_runtime": 14,
-      "runtime_exchange": 19,
-      "uart_dma": 11
-    },
-    "hardware_access": false
-  }
+  "current_telemetry_rate_hz": 250
 }

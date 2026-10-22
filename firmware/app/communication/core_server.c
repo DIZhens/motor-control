@@ -130,6 +130,8 @@ static bool replay(CoreServer *s, const CoreFrame *f)
         }
         return true;
     }
+    /* 无会话Stop只在途去重；终态形成后，同一帧必须能再次请求关断。 */
+    if (f->session_id == 0U) { return false; }
     for (index = 0U; index < CORE_CACHE_CAPACITY; ++index) {
         entry = &s->cache[index];
         if (!entry->valid || !same_identity(f, &entry->request)) { continue; }
@@ -253,7 +255,7 @@ static void received(void *context, CoreStatus status, const CoreFrame *f)
         s->highest_sequence = f->sequence;
     }
     if (decoded != CORE_RESULT_OK) { error_answer(s, f, decoded, false, true); return; }
-    dispatch(s, f, is_stop, true);
+    dispatch(s, f, is_stop, !sessionless_stop);
 }
 
 void core_server_init(CoreServer *s) { memset(s, 0, sizeof(*s)); core_parser_init(&s->parser); }
@@ -295,7 +297,7 @@ static void completed(CoreServer *s, const RuntimeCommandCompletion *c)
             s->answer.value.telemetry_config.generation = c->value.telemetry.generation;
         }
     }
-    retire(s, &p->request, stop, p->request.session_id == s->session || p->request.session_id == 0U);
+    retire(s, &p->request, stop, p->request.session_id != 0U && p->request.session_id == s->session);
     p->active = false;
 }
 static void event(CoreServer *s, uint16_t message, uint32_t first, uint32_t second, uint64_t time)

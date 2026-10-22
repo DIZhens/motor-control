@@ -84,7 +84,11 @@ OPEN_SESSION Header.session_id=0，proposed_session_id非0。普通事务在途�
 Host建会话后重新读MOTOR_SNAPSHOT（含fault_flags）、SPEED_PI_STAGED/ACTIVE，不恢复旧运动请求。
 
 除OPEN_SESSION外，只有 `session_id=0 + EXECUTE_COMMAND(STOP)` 可以无会话执行。
-它仍完整通过COBS/长度/CRC/Header/payload检查，保持幂等，不建会话、不清Fault。
+它仍完整通过COBS/长度/CRC/Header/payload检查，关断效果幂等，不建会话、不清Fault，
+不改变当前Session或其Sequence水位。无会话Stop仅在途去重：同一帧在途时可返回IN_PROGRESS，
+不创建第二个并发Stop；终态形成并释放在途记录后，相同帧再次到达须作为新Stop提交。
+不为session0保存或查询完成缓存；迟到的旧Stop也可以再次执行安全关断，不能将其应答
+解释为跨执行次数的恰好一次证明。
 响应是最佳努力，响应丢失不撤销Stop；它不替代Hardware Trip、TIM6或物理断电。
 其他session0业务返回SESSION_REQUIRED，不同于当前会话的非0 ID返回SESSION_INVALID。
 
@@ -92,7 +96,7 @@ Host建会话后重新读MOTOR_SNAPSHOT（含fault_flags）、SPEED_PI_STAGED/AC
 用尽前Host重建会话。Request、Telemetry、Event拥有独立序号空间。Telemetry/Event耗尽时
 停止相应发送并等待新会话，不回绕、不自动改变会话或Motor。
 
-完成缓存深度4，保存Session、Sequence、完整规范化请求和完整逻辑终态Response。
+有效非0 Session内的完成缓存深度4，保存Session、Sequence、完整规范化请求和完整逻辑终态Response。
 相同Session/Sequence且请求完全相同：处理中返回IN_PROGRESS，完成后重发原终态，不重复执行。
 相同身份但内容不同返回SEQUENCE_CONFLICT。已退休且不在缓存的旧序号返回SEQUENCE_INVALID。
 规范化内容包括version/kind/flags/header_size/message_id及精确payload，不用CRC替代请求比较。
@@ -100,7 +104,8 @@ Host建会话后重新读MOTOR_SNAPSHOT（含fault_flags）、SPEED_PI_STAGED/AC
 新请求。外来/失效Session的拒绝不改变当前会话的序号水位。
 
 V1只保留一个普通在途事务及一条独立Stop交接路径，不靠多普通请求队列提高吞吐。
-不同Stop在已有Stop在途时可返回BUSY，但不得覆盖或撤销已排队Stop。重复的同一Stop按去重处理。
+不同Stop在已有Stop在途时可返回BUSY，但不得覆盖或撤销已排队Stop。
+session-bound Stop继续按Session/Sequence及完成缓存去重；sessionless Stop仅按上述在途规则去重。
 会话替换、请求重发和串口恢复都不延长运行时限。
 
 ## 4. 对象
@@ -170,7 +175,8 @@ communication_stack_min_words telemetry_stack_min_words internal_fault_reason in
 tx_busy_count tx_errors
 ```
 
-栈以32 bit word计，尚未有效测量时为0xFFFFFFFF。internal_fault_reason为首次内部原因：
+栈以32 bit word计，尚未有效测量时为0xFFFFFFFF；真实测量值0必须保持0，不作未测量解释。
+internal_fault_reason为首次内部原因：
 NONE=0、BOOTSTRAP=1、RTOS_INTERNAL=2、STACK_OVERFLOW=3、COMPLETION_OVERFLOW=4、
 RESPONSE_OVERFLOW=5、TRANSACTION_CORRUPT=6、TRANSPORT_INTERNAL=7、RUNTIME_TIMEOUT=8。
 计数为内部Fail-closed调用次数；外部坏帧不进入该计数或故障域。

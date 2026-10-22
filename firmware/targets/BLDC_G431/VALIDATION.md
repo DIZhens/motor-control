@@ -8,8 +8,9 @@
 
 当前Run已接入原生FreeRTOS、460800/8N1 UART DMA及Core Protocol事务Server，关闭旧VOFA装配；
 对象、请求应答及50/250Hz遥测已有逻辑供电证据；本阶段按250Hz完成通信验收。
-500Hz仍未达原门槛，作为容量边界保留。新协议＋FreeRTOS镜像已完成一次正向有限启停调速，
-收到两条状态变化Event；故障Event及复杂竞态仍限于模型。旧实物记录继续绑定各自HEX。
+500Hz仍未达原门槛，作为容量边界保留。修正前的协议＋FreeRTOS镜像已有一次正向有限启停
+调速及两条状态变化Event证据；当前Stop/栈修正版完成无功率UART联调，不重做带电P7。
+故障Event及复杂竞态仍限于模型。旧实物记录继续绑定各自HEX。
 
 `validation/` 台架经 HCC 使用 Platform，不是正式 Motor / ControlRuntime。
 旧功率包与保护注入要求电机三相断开；有限开环仅按[专用流程](validation/OPEN_LOOP.md)接电机。
@@ -33,7 +34,7 @@
 | Session/事务/线上对象 | [P5构建、模型和实物证据](validation/evidence/protocol/p5.json)；七对象、参数去重/原结果重放、Stop/Clear、Python客户端/JSONL | 纯逻辑供电；本轮未发送Start/Update，无Telemetry/Event或协议压力验收 |
 | Telemetry/Event/通信压力 | [P6初测](validation/evidence/protocol/p6.json)、[TX优化及验收调整](validation/evidence/protocol/p6-tx.json)；50Hz×10s及250Hz×30s零缺帧，按250Hz完成本阶段通信验收 | 500Hz×10s缺96/5001帧，与96次覆盖一致，1.92%仍未通过原<1%门槛；本轮无运动，Event变化仅模型验证 |
 | 自研协议＋FreeRTOS有限闭环 | [P7实物证据](validation/evidence/protocol/p7.json)、[457帧观测](validation/evidence/protocol/p7-samples.csv)；同身份重复Start只启动一次，+60→+40 rpm→无会话Stop，225帧RUN全有效、零缺帧 | 固定空载正向单次；两条状态Event通过，故障注入、反向和独立时限触发未在本镜像复测，不作性能验收 |
-| 最终工程与资源核对 | [P8本地收尾证据](validation/evidence/protocol/p8.json)；四个Target原生Rebuild零错误零警告，Run/Validation隔离，最终HEX与P7一致 | 仅本地收尾；推送、PR和合并未执行；500Hz及其余实物限制保持 |
+| 最终工程与资源核对 | [P8本地收尾证据](validation/evidence/protocol/p8.json)、[Stop/栈修正](validation/evidence/protocol/stop-stack.json)；四个Target原生Rebuild零错误零警告，Run/Validation隔离，新镜像无功率重复Stop通过 | 新源码身份与旧P7分开；按修正范围不重做带电P7；推送、PR和合并未执行，原500Hz失败保持 |
 
 表中旧UART正向及反向两次正式 Run 实物记录属于 HEX
 `0e73f54e03ceaa9b21f3ae7cfc305c1ca50ecc9577613cc47f974d54fd2eee76`。
@@ -41,7 +42,34 @@
 受影响的命令交接、后台通信与实时路径分别用针对性检查确认，不重跑无关底层波形。
 本页后续保留各轮测量条件、失败首因与镜像，读者不必依赖未分发的本地日志判断上述边界。
 
-## 最终构建与隔离核对
+## Sessionless Stop及栈未测量值修正
+
+sessionless Stop仅在途去重，不查写完成缓存，终态后完全相同的帧可以再次提交；BUSY拒绝
+也不缓存。非0 Session的普通请求及Stop继续按原Session/Sequence/完整内容去重与重放。
+Session、水位、单Stop槽及全部COBS/CRC/Header/Payload检查保持，未扩大Header或对象布局。
+四个栈字段初始化为0xFFFFFFFF，测量后原样更新；通信状态映射保留真实0，不把它改为未知值。
+
+P1/P2/P3/P5真实ARM模型分别12/19/15/34组通过，覆盖无会话Stop在途一次提交、完成后
+相同帧再次完成、不改变当前Session，以及尚无Session、BUSY后重试和普通会话Stop缓存。
+栈模型证明初始未知值、测量返回0及实际Target对象映射；没有在实物上故意耗尽任务栈。
+四个Keil Target再次Rebuild均零错误零警告，三个验证Target的HEX与前次一致。
+
+正式Run新build ID为`0xac7c5cfe4d3d6ed3`，HEX为
+`9491e86beef0770a1c93d91ca83b9d0954e12d03b8bb360c41234439fe15f4a7`，
+Flash装载66648 B、静态RAM21184 B；最终205项输入仅Server代码/头、SystemRuntime初始化和
+Target通信状态映射4项变化，Motor/ControlRuntime/HCC/Platform/DMA及RTOS配置均未改变。
+
+操作者确认OUTPUT关闭、退压后ST-Link独立逻辑3V3及串口条件。烧录与前后独立Flash读回
+66648 B匹配；两次相同session0/Sequence/完整字节Stop均返回ACCEPTED，Motor调用0→2，
+当前Session不变，后续普通请求有效，无自动重试。接受启动0，末态IDLE、目标0、六路LOW/
+MOE0，guard/内部/时序首因0。初次关断快照记录后台三项栈尚未测量为0xFFFFFFFF；后续最小
+剩余栈690/440/271/109 word已测量且超过25%。本轮没有Start/Update/Clear或带电P7。
+
+[修正证据](validation/evidence/protocol/stop-stack.json)与[P8](validation/evidence/protocol/p8.json)
+保存新源码身份、模型及UART读回；旧50/250/500Hz压力和P7继续绑定修正前HEX。
+500Hz的1.92%失败记录未改写，也未将旧运动记录当作新镜像重新实测。
+
+## 修正前的构建与隔离核对
 
 正式Run及独立验证工程的三个Target均完成原生Rebuild，全部零错误、零警告。
 本轮只核对构建、链接、资源及说明，没有修改固件源码、连接设备、烧录、复位或发送运动命令。
