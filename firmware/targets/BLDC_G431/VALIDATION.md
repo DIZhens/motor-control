@@ -8,9 +8,8 @@
 
 当前Run已接入原生FreeRTOS、460800/8N1 UART DMA及Core Protocol事务Server，关闭旧VOFA装配；
 对象、请求应答及50/250Hz遥测已有逻辑供电证据；本阶段按250Hz完成通信验收。
-500Hz仍未达原门槛，作为容量边界保留；Event竞态仅有模型证据。
-旧实物启停记录
-继续绑定各自HEX，不改写为新协议镜像的运动验收。
+500Hz仍未达原门槛，作为容量边界保留。新协议＋FreeRTOS镜像已完成一次正向有限启停调速，
+收到两条状态变化Event；故障Event及复杂竞态仍限于模型。旧实物记录继续绑定各自HEX。
 
 `validation/` 台架经 HCC 使用 Platform，不是正式 Motor / ControlRuntime。
 旧功率包与保护注入要求电机三相断开；有限开环仅按[专用流程](validation/OPEN_LOOP.md)接电机。
@@ -27,18 +26,46 @@
 | 命令交接与一致性观测 | Run / Observe 模型，正式 UART 实物记录 | 单普通请求槽、Stop 优先；最近结果不是逐请求可靠应答 |
 | 保护与时序 | 原 Platform 保护实测、故障模型、独立守卫和正式 Run 停机读回 | 正式 Run 故障注入、2 圈触界及完整 ISR WCET 尚无实物验收 |
 | 性能与长期能力 | 既有台架速度曲线和电阻量级交叉检查 | 原 15 rpm 峰值初筛失败保留；持续运行、带载、独立电流精度、持久标定和故障恢复未完成 |
-| 自研协议编解码 | [协议合同](../../../interface/CORE_PROTOCOL_V1.md)、[P1 离线证据](validation/evidence/protocol/p1.json)；真实 ARM C 与 Python、30 个黄金帧对照 | 独立库，尚未接入Run；会话事务后续实现，离线库通过不等于实物通过 |
-| 内部命令与参数交接 | [P2构建和ARM证据](validation/evidence/protocol/p2.json)；ticket、Stop取消、Completion4、PI Staged/Active、1kHz观测和内部关断 | 尚无线上参数入口或会话去重；P2为离线交接验收，本轮启动检查不代替带电命令验收 |
-| FreeRTOS启动与时间域 | [P3构建、模型和实物证据](validation/evidence/protocol/p3.json)；TIM7 HAL、SysTick Kernel、静态任务/Mailbox、唯一异常入口、默认关断 | 启动负载证据；不代替协议负载、运动下调度压力或WCET证明 |
+| 自研协议编解码 | [协议合同](../../../interface/CORE_PROTOCOL_V1.md)、[P1 离线证据](validation/evidence/protocol/p1.json)；真实 ARM C 与 Python、30 个黄金帧对照，已接入Run | 离线库验证与后续实物证据分开归属 |
+| 内部命令与参数交接 | [P2构建和ARM证据](validation/evidence/protocol/p2.json)、[P7有限实测](validation/evidence/protocol/p7.json)；ticket、Stop取消、Completion4、PI Staged/Active | Stop取消/内部破坏等竞态主要由模型覆盖；P7只证明本轮有限请求生命周期 |
+| FreeRTOS启动与时间域 | [P3启动证据](validation/evidence/protocol/p3.json)、[P7有限实测](validation/evidence/protocol/p7.json)；TIM7 HAL、SysTick Kernel、静态任务/Mailbox、默认关断 | 已覆盖名义通信与一次有限运动，不能替代WCET或最坏调度证明 |
 | UART DMA字节流 | [P4构建、模型和实物证据](validation/evidence/protocol/p4.json)；512 B RX、130 B单帧TX、460800回环、覆盖/帧错误恢复、冻结TX关断 | 字节流证据不代替Server/事务、50/250/500 Hz协议压力或运动负载 |
 | Session/事务/线上对象 | [P5构建、模型和实物证据](validation/evidence/protocol/p5.json)；七对象、参数去重/原结果重放、Stop/Clear、Python客户端/JSONL | 纯逻辑供电；本轮未发送Start/Update，无Telemetry/Event或协议压力验收 |
 | Telemetry/Event/通信压力 | [P6初测](validation/evidence/protocol/p6.json)、[TX优化及验收调整](validation/evidence/protocol/p6-tx.json)；50Hz×10s及250Hz×30s零缺帧，按250Hz完成本阶段通信验收 | 500Hz×10s缺96/5001帧，与96次覆盖一致，1.92%仍未通过原<1%门槛；本轮无运动，Event变化仅模型验证 |
+| 自研协议＋FreeRTOS有限闭环 | [P7实物证据](validation/evidence/protocol/p7.json)、[457帧观测](validation/evidence/protocol/p7-samples.csv)；同身份重复Start只启动一次，+60→+40 rpm→无会话Stop，225帧RUN全有效、零缺帧 | 固定空载正向单次；两条状态Event通过，故障注入、反向和独立时限触发未在本镜像复测，不作性能验收 |
 
-以上两次正式 Run 实物记录属于 HEX
+表中旧UART正向及反向两次正式 Run 实物记录属于 HEX
 `0e73f54e03ceaa9b21f3ae7cfc305c1ca50ecc9577613cc47f974d54fd2eee76`。
 源码整理或新构建不会把旧证据改写成新镜像已实测。未受影响的功能证据继续保留；
 受影响的命令交接、后台通信与实时路径分别用针对性检查确认，不重跑无关底层波形。
 本页后续保留各轮测量条件、失败首因与镜像，读者不必依赖未分发的本地日志判断上述边界。
+
+## 自研协议＋FreeRTOS：单次有限闭环通过
+
+沿用P6 TX优化后的已安装镜像，未改固件、未重新烧录。操作者确认12.0 V/0.20 A、ST-Link
+3V3断开且SWD/GND保留，原三相与编码器、固定空载、无外部注入，RST后静止、VOFA断开。
+前检4096点校零READY、IDLE/OFF、六路LOW/MOE0且无故障，软件母线约12.009 V；
+独立Flash在前后均读回66628 B匹配，build ID为`0xfd763adb40fa8964`，HEX为
+`ec3a17d9c2ebc45b4c6c0e8d7f446c00318cf460e0063b51ec1e853a08b54890`。
+
+新Session读回设备及状态，整组PI写0.001/0.004使Staged generation从1增至2，遥测250Hz。
+仅发一次新身份Start +60 rpm，并立即背靠背重复完全相同的帧与sequence；约0.400秒改
++40 rpm，约0.900秒发送session_id=0的Stop。四条原始命令终态均按身份/subject核对，
+两条Start终态内容一致；无自动重发、Clear、第二次新身份Start或反向。
+MCU accepted_starts仅0→1，Motor调用计数0→3，恰为Start/Update/Stop。
+
+完整记录457帧遥测，线上序号1..457连续，含配置切换前5帧及新generation的452帧；
+225帧RUN全部valid_flags=0x3ff，目标60/40 rpm分别100/125帧，均引用Active generation 2。
+两条STATE_CHANGED为IDLE→RUN、RUN→IDLE，独立事件序号1/2连续；无FAULT_LATCHED。
+通信错误/覆盖/事件丢弃与Host解析错误均0，终态无重发。这里只验收通信、参数及有限运行
+的集成；速度峰值约70.57 rpm，不作为性能调参或跟踪指标通过的依据。
+
+Stop后IDLE、目标0、Runtime OFF、六路LOW/MOE0、guard/内部/Motor/时序首因均0，
+TIM6原时基保持；Active generation为2且不在使用，电角标定配置及冻结零偏前后逐字节/值
+一致。最小剩余栈690/464/271/109 word均超过25%，操作者反馈“无异常”。
+[P7证据](validation/evidence/protocol/p7.json)保存身份、请求/终态、前后读回和范围，
+[观测CSV](validation/evidence/protocol/p7-samples.csv)使用MCU控制时间，不以Host到达时间代替。
+本轮没有验证持续带载、故障恢复、故障Event、2圈触界、独立时限触发或完整ISR WCET。
 
 ## TX优化：250Hz通信验收通过，500Hz保留容量边界
 
