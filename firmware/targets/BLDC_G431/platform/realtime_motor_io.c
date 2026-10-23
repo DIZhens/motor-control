@@ -11,6 +11,7 @@
 #include "position_observation_internal.h"
 #include "realtime_motor_io_config.h"
 #include "realtime_motor_io_internal.h"
+#include "raw_adc_capture.h"
 #if defined(BLDC_G431_DIAGNOSTICS)
 #include "irq_timing.h"
 #endif
@@ -58,6 +59,68 @@ static uint32_t s_consumer_entry_cycles;
 static uint32_t s_consumer_exit_cycles;
 static uint32_t s_auxiliary_exit_cycles;
 volatile G431TimingFailure g_g431_timing_failure;
+
+#if defined(BLDC_G431_RAW_ADC_CAPTURE)
+volatile uint32_t g_g431_raw_adc_request;
+volatile G431RawAdcCapture g_g431_raw_adc_capture;
+
+/* 调用者已有 PRIMASK。只复制本拍已经读取的整数码；不重复读取 ADC，
+ * 不改变采样/输出/RTOS。正常构建完全排除；终态发布后数组保持冻结。 */
+static void raw_adc_capture_sample(uint32_t raw_b, uint32_t raw_c, bool valid,
+    ControlTime time)
+{
+    volatile G431RawAdcCapture *capture = &g_g431_raw_adc_capture;
+    uint32_t count, reason = G431_RAW_ADC_OK, terminal, elapsed;
+    uint32_t started;
+
+    if (capture->state != G431_RAW_ADC_COLLECTING
+        && (capture->state != G431_RAW_ADC_IDLE
+            || g_g431_raw_adc_request != G431_RAW_ADC_CAPTURE_REQUEST)) {
+        return;
+    }
+    started = DWT->CYCCNT;
+    terminal = capture->state == G431_RAW_ADC_IDLE
+        ? G431_RAW_ADC_REJECTED : G431_RAW_ADC_ABORTED;
+    g_g431_raw_adc_request = 0U;
+    count = capture->count;
+    if (s_power_enabled || (htim1.Instance->BDTR & TIM_BDTR_MOE) != 0U) {
+        reason = G431_RAW_ADC_POWER;
+    } else if (s_timing_faulted || !s_slot_valid || s_callback_slot != s_slot_sequence) {
+        reason = G431_RAW_ADC_TIMING;
+    } else if (!valid || raw_b > 4095U || raw_c > 4095U) {
+        reason = G431_RAW_ADC_INVALID_PAIR;
+    } else if (s_callback_epoch != s_actuation_epoch
+        || (count != 0U && capture->epoch != s_actuation_epoch)) {
+        reason = G431_RAW_ADC_EPOCH;
+    } else if (count >= G431_RAW_ADC_CAPTURE_PAIRS) {
+        reason = G431_RAW_ADC_BOUNDS;
+    } else if (count != 0U && (s_callback_slot != capture->last_slot + 1U
+        || time != capture->last_time + REALTIME_MOTOR_IO_FAST_TICK_PERIOD_TICKS)) {
+        reason = G431_RAW_ADC_DISCONTINUITY;
+    }
+    if (reason == G431_RAW_ADC_OK) {
+        if (count == 0U) {
+            capture->first_slot = s_callback_slot;
+            capture->first_time = time;
+            capture->first_entry_cycles = s_callback_start_cycles;
+            capture->epoch = s_actuation_epoch;
+        }
+        capture->raw[count][0] = (uint16_t)raw_b;
+        capture->raw[count][1] = (uint16_t)raw_c;
+        capture->last_slot = s_callback_slot;
+        capture->last_time = time;
+        capture->last_entry_cycles = s_callback_start_cycles;
+        capture->count = count + 1U;
+        terminal = count + 1U == G431_RAW_ADC_CAPTURE_PAIRS
+            ? G431_RAW_ADC_COMPLETE : G431_RAW_ADC_COLLECTING;
+    }
+    capture->reason = reason;
+    elapsed = DWT->CYCCNT - started;
+    if (elapsed > capture->max_copy_cycles) { capture->max_copy_cycles = elapsed; }
+    __DMB();
+    capture->state = terminal;
+}
+#endif
 
 void realtime_motor_io_stage_anchor(uint32_t *cycles, uint32_t *entry_count)
 {
@@ -696,7 +759,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     PhaseCurrentObservation observation;
     ControlTime observation_time;
-    uint32_t raw_b;
+    uint32_t raw_b = 0U;
     uint32_t raw_c;
     uint32_t primask;
     bool adc2_complete;
@@ -767,6 +830,9 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
      */
     primask = __get_PRIMASK();
     __disable_irq();
+#if defined(BLDC_G431_RAW_ADC_CAPTURE)
+    raw_adc_capture_sample(raw_b, raw_c, observation.acquisition_valid, observation_time);
+#endif
     s_stage_window_open = (s_callback_epoch == s_actuation_epoch)
         && staging_time_available();
     restore_interrupts(primask);

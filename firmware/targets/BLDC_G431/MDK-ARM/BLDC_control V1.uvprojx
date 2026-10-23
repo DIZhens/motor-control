@@ -334,7 +334,8 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>USE_HAL_DRIVER,STM32G431xx,BLDC_G431_RUNTIME_ENTRY,BLDC_G431_FINITE_RUN,BLDC_G431_FREERTOS</Define>
+              <!-- 本轮无功率原码诊断候选；采集分析完成后移除 RAW_ADC_CAPTURE 宏。 -->
+              <Define>USE_HAL_DRIVER,STM32G431xx,BLDC_G431_RUNTIME_ENTRY,BLDC_G431_FINITE_RUN,BLDC_G431_FREERTOS,BLDC_G431_RAW_ADC_CAPTURE</Define>
               <Undefine></Undefine>
               <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../runtime;../../../app/motor;../../../../protocol/uart_v1;../../../../protocol/can_v1;../../../../protocol/common;../../../app/communication;../../../../protocol/ports;../../../app/system_runtime;../../../../control;..\..\..\third_party\FreeRTOS\Source\include;..\..\..\third_party\FreeRTOS\Source\portable\RVDS\ARM_CM4F</IncludePath>
             </VariousControls>

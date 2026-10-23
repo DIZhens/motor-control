@@ -1,0 +1,794 @@
+{
+  "status": "TWO_DEFAULT_OFF_RAW_ADC_CAPTURES_COMPLETE_NOT_FOC_TUNING_PASS",
+  "purpose": "用连续10kHz原码区分默认关断共同扰动是否依赖电机运动、UART活动及供电条件。",
+  "diagnostic_build": {
+    "build_id": "0x5770b102921a0651",
+    "full_sha256": "5770b102921a06512818a3e56dea8ef9364568c56af0ec1c6036a677b8c73033",
+    "hex_sha256": "07893620749edf4dbe20d6f87a4a032b5d43d84d6604988998bced07e45ac64f",
+    "flash_load_bytes": 67040,
+    "static_ram_bytes": 23200,
+    "record_bytes": 2104,
+    "request_bytes": 4,
+    "changed_production_inputs_from_ki600": [
+      "firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1.uvprojx",
+      "firmware/targets/BLDC_G431/platform/raw_adc_capture.h",
+      "firmware/targets/BLDC_G431/platform/realtime_motor_io.c"
+    ],
+    "control_config": {
+      "offsets": [
+        204,
+        208
+      ],
+      "bindings": [
+        "g431_cordic_sincos",
+        "s_cordic_math"
+      ]
+    },
+    "numeric_control_config_unchanged": true,
+    "compile_macro": "BLDC_G431_RAW_ADC_CAPTURE"
+  },
+  "native_builds": [
+    {
+      "summary": "\"build\\run\\BLDC_G431_Run.axf\" - 0 Error(s), 0 Warning(s).",
+      "target": "BLDC_G431_Run",
+      "exit_code": 0,
+      "size": "Program Size: Code=65966 RO-data=1054 RW-data=504 ZI-data=22696  "
+    },
+    {
+      "summary": "\"build\\observe\\BLDC_G431_Observe.axf\" - 0 Error(s), 0 Warning(s).",
+      "target": "BLDC_G431_Observe",
+      "exit_code": 0,
+      "size": "Program Size: Code=77120 RO-data=1368 RW-data=448 ZI-data=25928  "
+    },
+    {
+      "summary": "\"build\\timing\\BLDC_G431_Timing.axf\" - 0 Error(s), 0 Warning(s).",
+      "target": "BLDC_G431_Timing",
+      "exit_code": 0,
+      "size": "Program Size: Code=46354 RO-data=962 RW-data=364 ZI-data=9156  "
+    },
+    {
+      "summary": "\"BLDC_control V1\\BLDC_control V1.axf\" - 0 Error(s), 0 Warning(s).",
+      "target": "BLDC_control V1",
+      "exit_code": 0,
+      "size": "Program Size: Code=55628 RO-data=860 RW-data=424 ZI-data=18960  "
+    }
+  ],
+  "models": {
+    "existing_platform_cases": 107,
+    "raw_capture_cases": 9,
+    "status": "PASS",
+    "record_boundaries": "默认静默、完整512对、冻结不重采、功率拒绝/中止、无效配对、epoch/连续性/边界检查",
+    "instruction_scope": "模型每tick较无宏版本：诊断静默+27，采集中+96..100条ARM指令；不代表cycle/WCET"
+  },
+  "runtime": {
+    "no_motor_commands": true,
+    "no_pi_change": true,
+    "default_off_before_after": true,
+    "captures_per_boot": 1,
+    "raw_reads_twice_identical": true,
+    "complete_each": 512,
+    "driver_rail_current_not_independently_measured": true,
+    "measured_internal_copy_max_cycles": 143,
+    "measured_internal_copy_max_us": 0.8411764705882353,
+    "timing_scope": "内部复制段最大观测值，非完整函数或IRQ WCET，既有时序首因/Guard均0"
+  },
+  "conditions": {
+    "logic": {
+      "supply": "ST-Link单独逻辑3V3，无外部母线供电",
+      "host_actions": "本轮脚本未连接串口或创建会话；逻辑轮未另读Server计数",
+      "analysis": {
+        "status": "LOGIC_ONLY_CAPTURE_COMPLETE",
+        "build_id": "0x5770b102921a0651",
+        "metadata": {
+          "state": 2,
+          "count": 512,
+          "reason": 0,
+          "first_slot": 259480,
+          "last_slot": 259991,
+          "epoch": 4,
+          "max_copy_cycles": 143,
+          "reserved": 0,
+          "first_time": 518960,
+          "last_time": 519982,
+          "first_entry_cycles": 584863959,
+          "last_entry_cycles": 593550959
+        },
+        "sampling": {
+          "pairs": 512,
+          "nominal_sample_hz": 10000,
+          "window_periods_ms": 51.2,
+          "first_to_last_ms": 51.1,
+          "scheduler_phase": "slot % 10; SSI/Bus 在 phase0 的 current callback 尾部调度；不是物理边沿时间"
+        },
+        "b_counts": {
+          "mean": 2003.25,
+          "std": 1.14564392373896,
+          "min": 2000,
+          "max": 2007,
+          "peak_to_peak": 7
+        },
+        "c_counts": {
+          "mean": 2014,
+          "std": 1.114534656257938,
+          "min": 2011,
+          "max": 2017,
+          "peak_to_peak": 6
+        },
+        "bc_correlation": 0.02600373472842498,
+        "nominal_ampere_per_count": 0.0011432271327291898,
+        "shared_component_variance_counts2": 0.6552734375,
+        "differential_component_variance_counts2": 0.6220703125,
+        "phase_means_explained_fraction": {
+          "b": 0.025627558715789832,
+          "c": 0.04561823519925581
+        },
+        "phase_groups": [
+          {
+            "phase": 0,
+            "count": 52,
+            "b": {
+              "mean": 2003.2692307692307,
+              "std": 1.162149609979856,
+              "min": 2001,
+              "max": 2007,
+              "peak_to_peak": 6
+            },
+            "c": {
+              "mean": 2014.076923076923,
+              "std": 0.8513824469684098,
+              "min": 2012,
+              "max": 2016,
+              "peak_to_peak": 4
+            }
+          },
+          {
+            "phase": 1,
+            "count": 52,
+            "b": {
+              "mean": 2003.1923076923076,
+              "std": 1.2095527071935683,
+              "min": 2000,
+              "max": 2006,
+              "peak_to_peak": 6
+            },
+            "c": {
+              "mean": 2014.4807692307693,
+              "std": 1.117868586871817,
+              "min": 2011,
+              "max": 2016,
+              "peak_to_peak": 5
+            }
+          },
+          {
+            "phase": 2,
+            "count": 51,
+            "b": {
+              "mean": 2003.1764705882354,
+              "std": 0.9011078661236124,
+              "min": 2001,
+              "max": 2006,
+              "peak_to_peak": 5
+            },
+            "c": {
+              "mean": 2013.7450980392157,
+              "std": 0.9870363096982917,
+              "min": 2012,
+              "max": 2016,
+              "peak_to_peak": 4
+            }
+          },
+          {
+            "phase": 3,
+            "count": 51,
+            "b": {
+              "mean": 2002.8823529411766,
+              "std": 0.9213600097624103,
+              "min": 2000,
+              "max": 2005,
+              "peak_to_peak": 5
+            },
+            "c": {
+              "mean": 2013.8431372549019,
+              "std": 0.9776432048876792,
+              "min": 2012,
+              "max": 2015,
+              "peak_to_peak": 3
+            }
+          },
+          {
+            "phase": 4,
+            "count": 51,
+            "b": {
+              "mean": 2003.0392156862745,
+              "std": 1.0657002542510738,
+              "min": 2001,
+              "max": 2005,
+              "peak_to_peak": 4
+            },
+            "c": {
+              "mean": 2014.2745098039215,
+              "std": 1.0860692097353906,
+              "min": 2011,
+              "max": 2017,
+              "peak_to_peak": 6
+            }
+          },
+          {
+            "phase": 5,
+            "count": 51,
+            "b": {
+              "mean": 2003.450980392157,
+              "std": 1.1257019681888096,
+              "min": 2001,
+              "max": 2006,
+              "peak_to_peak": 5
+            },
+            "c": {
+              "mean": 2013.9019607843138,
+              "std": 1.2564328896941799,
+              "min": 2011,
+              "max": 2017,
+              "peak_to_peak": 6
+            }
+          },
+          {
+            "phase": 6,
+            "count": 51,
+            "b": {
+              "mean": 2003.3725490196077,
+              "std": 1.2201058185179643,
+              "min": 2000,
+              "max": 2006,
+              "peak_to_peak": 6
+            },
+            "c": {
+              "mean": 2013.7058823529412,
+              "std": 1.1930208427589222,
+              "min": 2011,
+              "max": 2017,
+              "peak_to_peak": 6
+            }
+          },
+          {
+            "phase": 7,
+            "count": 51,
+            "b": {
+              "mean": 2003.4901960784314,
+              "std": 1.1777770523671534,
+              "min": 2001,
+              "max": 2007,
+              "peak_to_peak": 6
+            },
+            "c": {
+              "mean": 2014.1960784313726,
+              "std": 1.0293650783064068,
+              "min": 2012,
+              "max": 2016,
+              "peak_to_peak": 4
+            }
+          },
+          {
+            "phase": 8,
+            "count": 51,
+            "b": {
+              "mean": 2003.1960784313726,
+              "std": 1.268310715984018,
+              "min": 2000,
+              "max": 2007,
+              "peak_to_peak": 7
+            },
+            "c": {
+              "mean": 2013.8823529411766,
+              "std": 1.1486916483040635,
+              "min": 2011,
+              "max": 2017,
+              "peak_to_peak": 6
+            }
+          },
+          {
+            "phase": 9,
+            "count": 51,
+            "b": {
+              "mean": 2003.4313725490197,
+              "std": 1.1923761408243743,
+              "min": 2001,
+              "max": 2006,
+              "peak_to_peak": 5
+            },
+            "c": {
+              "mean": 2013.8823529411766,
+              "std": 1.1823383083671635,
+              "min": 2011,
+              "max": 2016,
+              "peak_to_peak": 5
+            }
+          }
+        ],
+        "largest_rectangular_dft_bins": {
+          "b": [
+            [
+              3808.59375,
+              3855.389465951109
+            ],
+            [
+              566.40625,
+              3849.3576868014006
+            ],
+            [
+              996.09375,
+              2654.1422346335894
+            ],
+            [
+              19.53125,
+              2618.7422639167526
+            ],
+            [
+              273.4375,
+              2516.224447103668
+            ]
+          ],
+          "c": [
+            [
+              1503.90625,
+              3089.7996607091773
+            ],
+            [
+              1054.6875,
+              2820.145536251498
+            ],
+            [
+              2734.375,
+              2813.4533203342003
+            ],
+            [
+              390.625,
+              2702.81893673193
+            ],
+            [
+              4453.125,
+              2548.695601388782
+            ]
+          ],
+          "common": [
+            [
+              19.53125,
+              1989.3109133852822
+            ],
+            [
+              566.40625,
+              1679.4360889864236
+            ],
+            [
+              2988.28125,
+              1379.928729492809
+            ],
+            [
+              3808.59375,
+              1319.1896702339036
+            ],
+            [
+              1054.6875,
+              1294.206988004295
+            ]
+          ]
+        },
+        "internal_copy_max_us": 0.8411764705882353,
+        "conclusions": [
+          "逻辑3V3、默认关断、无活动UART会话的本次短窗口，两路各约1.1码标准差，相关系数约0.026。",
+          "1kHz调度分相均值只能解释小部分方差；该窗口不支持两路被共同1kHz活动主导。",
+          "与此前12V、活动UART遥测会话中的IDLE反演结果条件不同，不能把差异直接归因于供电。"
+        ],
+        "limitations": [
+          "不是电流增益精度标定，也不能归因所有速度纹波。",
+          "512点短窗不足以排除低频、间歇性或仅带电/运动时出现的扰动。",
+          "143 cycle是内部记录段观测最大值，不包含完整函数调用/IRQ/Flash等待最坏情况，不能称WCET。",
+          "写请求工具报错，随后双份完整冻结记录一致且前后关断/无故障；未重发或复位补采。"
+        ],
+        "next_comparison": "同一固件12V默认关断、仍无活动UART会话，先隔离供电条件；需要操作者另行确认切换，不启动电机。",
+        "raw_csv_sha256_lf": "1b17b5cadc7bd4cfef2f1a90a6bcd82ac617cd8b3091355e345a024118aba8b3"
+      }
+    },
+    "powered": {
+      "supply": "12V/0.20A，ST-Link3V3断开，SWD/GND保留；原三相、编码器和固定空载条件",
+      "bus_voltage": {
+        "voltage_v": 12.017094612121582,
+        "valid": 1,
+        "source": "MCU ADC-derived RAM; not a DMM reading"
+      },
+      "uart": {
+        "session": 0,
+        "active_epoch": 0,
+        "stats": {
+          "rx_bytes": 0,
+          "tx_bytes": 0,
+          "rx_discontinuities": 0,
+          "buffer_overruns": 0,
+          "parity_errors": 0,
+          "framing_errors": 0,
+          "noise_errors": 0,
+          "hardware_rx_overruns": 0,
+          "tx_busy_count": 0,
+          "tx_errors": 0,
+          "produced_bytes": 0,
+          "consumed_bytes": 0,
+          "continuity_epoch": 0
+        }
+      },
+      "analysis": {
+        "status": "12V_STATIC_CAPTURE_COMPLETE",
+        "build_id": "0x5770b102921a0651",
+        "metadata": {
+          "state": 2,
+          "count": 512,
+          "reason": 0,
+          "first_slot": 613273,
+          "last_slot": 613784,
+          "epoch": 4,
+          "max_copy_cycles": 143,
+          "reserved": 0,
+          "first_time": 1226546,
+          "last_time": 1227568,
+          "first_entry_cycles": 3919750085,
+          "last_entry_cycles": 3928437084
+        },
+        "sampling": {
+          "pairs": 512,
+          "nominal_sample_hz": 10000,
+          "window_periods_ms": 51.2,
+          "first_to_last_ms": 51.1,
+          "scheduler_phase": "slot % 10; SSI/Bus 在 phase0 的 current callback 尾部调度；不是物理边沿时间"
+        },
+        "b_counts": {
+          "mean": 2002.8203125,
+          "std": 3.1916237877205624,
+          "min": 1992,
+          "max": 2007,
+          "peak_to_peak": 15
+        },
+        "c_counts": {
+          "mean": 2013.859375,
+          "std": 3.203963304935779,
+          "min": 2003,
+          "max": 2019,
+          "peak_to_peak": 16
+        },
+        "bc_correlation": 0.878797767497711,
+        "nominal_ampere_per_count": 0.0011432271327291898,
+        "shared_component_variance_counts2": 9.606185913085938,
+        "differential_component_variance_counts2": 0.6197357177734375,
+        "phase_means_explained_fraction": {
+          "b": 0.008008295603348004,
+          "c": 0.013604434110059339
+        },
+        "phase_groups": [
+          {
+            "phase": 0,
+            "count": 51,
+            "b": {
+              "mean": 2002.9019607843138,
+              "std": 2.9188696574005326,
+              "min": 1994,
+              "max": 2007,
+              "peak_to_peak": 13
+            },
+            "c": {
+              "mean": 2013.686274509804,
+              "std": 2.9538289944690326,
+              "min": 2005,
+              "max": 2018,
+              "peak_to_peak": 13
+            }
+          },
+          {
+            "phase": 1,
+            "count": 51,
+            "b": {
+              "mean": 2002.6274509803923,
+              "std": 3.2896795500040312,
+              "min": 1995,
+              "max": 2007,
+              "peak_to_peak": 12
+            },
+            "c": {
+              "mean": 2014.078431372549,
+              "std": 3.1860180892295817,
+              "min": 2004,
+              "max": 2018,
+              "peak_to_peak": 14
+            }
+          },
+          {
+            "phase": 2,
+            "count": 51,
+            "b": {
+              "mean": 2002.8039215686274,
+              "std": 2.8834865051220664,
+              "min": 1992,
+              "max": 2007,
+              "peak_to_peak": 15
+            },
+            "c": {
+              "mean": 2014.137254901961,
+              "std": 2.924002144812505,
+              "min": 2005,
+              "max": 2018,
+              "peak_to_peak": 13
+            }
+          },
+          {
+            "phase": 3,
+            "count": 52,
+            "b": {
+              "mean": 2003.326923076923,
+              "std": 2.462965331638282,
+              "min": 1993,
+              "max": 2006,
+              "peak_to_peak": 13
+            },
+            "c": {
+              "mean": 2014.6346153846155,
+              "std": 2.7317847515853226,
+              "min": 2004,
+              "max": 2018,
+              "peak_to_peak": 14
+            }
+          },
+          {
+            "phase": 4,
+            "count": 52,
+            "b": {
+              "mean": 2002.8461538461538,
+              "std": 3.4046609194354964,
+              "min": 1992,
+              "max": 2007,
+              "peak_to_peak": 15
+            },
+            "c": {
+              "mean": 2013.9807692307693,
+              "std": 3.243279350710568,
+              "min": 2003,
+              "max": 2019,
+              "peak_to_peak": 16
+            }
+          },
+          {
+            "phase": 5,
+            "count": 51,
+            "b": {
+              "mean": 2002.7058823529412,
+              "std": 3.0761200265158246,
+              "min": 1994,
+              "max": 2007,
+              "peak_to_peak": 13
+            },
+            "c": {
+              "mean": 2013.8431372549019,
+              "std": 3.6534836935188517,
+              "min": 2003,
+              "max": 2018,
+              "peak_to_peak": 15
+            }
+          },
+          {
+            "phase": 6,
+            "count": 51,
+            "b": {
+              "mean": 2002.7843137254902,
+              "std": 3.2134138312075406,
+              "min": 1993,
+              "max": 2006,
+              "peak_to_peak": 13
+            },
+            "c": {
+              "mean": 2013.8823529411766,
+              "std": 3.305652074876969,
+              "min": 2004,
+              "max": 2019,
+              "peak_to_peak": 15
+            }
+          },
+          {
+            "phase": 7,
+            "count": 51,
+            "b": {
+              "mean": 2003.2941176470588,
+              "std": 3.1516825114255775,
+              "min": 1993,
+              "max": 2007,
+              "peak_to_peak": 14
+            },
+            "c": {
+              "mean": 2013.6666666666667,
+              "std": 3.1787694416863097,
+              "min": 2004,
+              "max": 2017,
+              "peak_to_peak": 13
+            }
+          },
+          {
+            "phase": 8,
+            "count": 51,
+            "b": {
+              "mean": 2002.4705882352941,
+              "std": 3.499876418974945,
+              "min": 1993,
+              "max": 2006,
+              "peak_to_peak": 13
+            },
+            "c": {
+              "mean": 2013.450980392157,
+              "std": 3.297733776161906,
+              "min": 2005,
+              "max": 2017,
+              "peak_to_peak": 12
+            }
+          },
+          {
+            "phase": 9,
+            "count": 51,
+            "b": {
+              "mean": 2002.4313725490197,
+              "std": 3.7167079148020665,
+              "min": 1992,
+              "max": 2007,
+              "peak_to_peak": 15
+            },
+            "c": {
+              "mean": 2013.2156862745098,
+              "std": 3.2618635686968886,
+              "min": 2004,
+              "max": 2017,
+              "peak_to_peak": 13
+            }
+          }
+        ],
+        "largest_rectangular_dft_bins": {
+          "b": [
+            [
+              1210.9375,
+              28614.148088741003
+            ],
+            [
+              58.59375,
+              23910.226756549822
+            ],
+            [
+              1250.0,
+              22872.824155949627
+            ],
+            [
+              2500.0,
+              21026.000000000648
+            ],
+            [
+              4863.28125,
+              20429.742022784514
+            ]
+          ],
+          "c": [
+            [
+              1250.0,
+              31942.966501834093
+            ],
+            [
+              1210.9375,
+              28806.796400107985
+            ],
+            [
+              1855.46875,
+              22333.770922319276
+            ],
+            [
+              898.4375,
+              20684.5670529098
+            ],
+            [
+              97.65625,
+              18360.727424884193
+            ]
+          ],
+          "common": [
+            [
+              1210.9375,
+              28654.531952128746
+            ],
+            [
+              1250.0,
+              26993.880303893788
+            ],
+            [
+              898.4375,
+              20218.23723250243
+            ],
+            [
+              1855.46875,
+              18735.728811376965
+            ],
+            [
+              97.65625,
+              18359.287683778854
+            ]
+          ]
+        },
+        "internal_copy_max_us": 0.8411764705882353,
+        "conclusions": [
+          "12V默认关断条件下，B/C原码共同扰动已出现，不需要电机运动。",
+          "本启动UART RX/TX字节均为0、Session/active_epoch均0；活动UART遥测不是本窗口共同扰动的必要条件。",
+          "更换供电条件时共同扰动明显增强，优先检查板上供电/参考/地及其与前端采样的相互影响；尚不能区分这些模拟来源。"
+        ],
+        "limitations": [
+          "不是电流增益精度标定，也不能归因所有速度纹波。",
+          "512点短窗不足以排除低频、间歇性或仅带电/运动时出现的扰动。",
+          "143 cycle是内部记录段观测最大值，不包含完整函数调用/IRQ/Flash等待最坏情况，不能称WCET。",
+          "写请求工具报错，随后双份完整冻结记录一致且前后关断/无故障；未重发或复位补采。"
+        ],
+        "next_comparison": "先分析12V原码与1kHz调度相位；后续测量围绕板上3V3/参考/地及模拟前端，不继续扩大PI扫描。",
+        "raw_csv_sha256_lf": "b5cab2836e92ec520cae3feed87c1c8b457ee5502dabf528ce0dee535d4ee90c"
+      }
+    }
+  },
+  "key_comparison": {
+    "b_std_ratio": 2.785877637533552,
+    "c_std_ratio": 2.8747094466251237,
+    "common_component_variance_ratio": 14.65981277943368,
+    "differential_component_variance_ratio": 0.9962470565149136
+  },
+  "conclusions": [
+    "同一诊断固件两种供电下默认关断。12V共同原码扰动重现，电机运动不是必要条件。",
+    "12V本启动UART收发全部为0，无Session，因此活动UART遥测也不是该扰动的必要条件。",
+    "共同分量方差升高约14.66倍，差分方差基本不变；优先调查板上供电/参考/地与模拟前端，而不是继续扫描PI。",
+    "1kHz分相均值仅解释12V B/C约0.8%/1.36%的方差，该短窗不支持固定1kHz调度相位主导共同扰动。"
+  ],
+  "limits": [
+    "尚未区分3V3/VDDA/VREF/地/OPAMP/ADC输入串扰等模拟路径；没有示波器电源纹波或独立电流标定。",
+    "两种供电会同时改变板内供电路径和DRV等器件状态，不能直接把差异指定为某颗稳压芯片故障。",
+    "两次各51.2ms，不是长期统计或完整频响；不证明共同扰动造成所有速度纹波。",
+    "本轮未试转、未重新验证P7；P6性能仍未通过，500Hz原1.92%失败记录不变。"
+  ],
+  "request_tool_error": {
+    "count": 2,
+    "details": "两次唯一w32都返回Failed to download data；未重发。固件清零请求字，随后RAM均为COMPLETE/512且双读完全一致。",
+    "cause_inference": "符合工具写后读回与固件清零竞态；没有验证CubeProgrammer内部实现。",
+    "recovery": "只读完成记录与关断/Flash身份；未自动复位或重试"
+  },
+  "analysis_crosscheck": {
+    "status": "PASS",
+    "method": "Python标准库统计/DFT与MATLAB独立复算",
+    "matlab": [
+      {
+        "condition": "ST-Link 逻辑 3V3",
+        "status": "PASS",
+        "b_std": 1.14564392373896,
+        "c_std": 1.114534656257938,
+        "bc_correlation": 0.02600373472842498,
+        "common_variance": 0.6552734375,
+        "difference_variance": 0.6220703125
+      },
+      {
+        "condition": "母线约 12 V，ST-Link 3V3 断开",
+        "status": "PASS",
+        "b_std": 3.1916237877205624,
+        "c_std": 3.203963304935779,
+        "bc_correlation": 0.878797767497711,
+        "common_variance": 9.606185913085938,
+        "difference_variance": 0.6197357177734375
+      }
+    ]
+  },
+  "artifacts": {
+    "raw-adc-logic.csv": {
+      "sha256": "1b17b5cadc7bd4cfef2f1a90a6bcd82ac617cd8b3091355e345a024118aba8b3",
+      "bytes": 15316
+    },
+    "raw-adc-12v-static.csv": {
+      "sha256": "b5cab2836e92ec520cae3feed87c1c8b457ee5502dabf528ce0dee535d4ee90c",
+      "bytes": 15828
+    },
+    "raw-adc-comparison.png": {
+      "sha256": "92a6e559a5c15324f15195951c806e540c4cac2c05cc6b50de89abfa0faec9b2",
+      "bytes": 242736
+    }
+  },
+  "local_evidence": "firmware/targets/BLDC_G431/validation/local-evidence/20261023-raw-adc",
+  "next": "分析已足以缩小范围。撤去正式Run诊断宏并离线核对基线一致性；后续围绕供电/参考/地做定向测量，不扩大PI扫描。"
+}

@@ -53,6 +53,14 @@ Observe / Run 用 `BLDC_G431_RUNTIME_ENTRY` 选择同一 Core 装配入口；Run
 Timing 使用 `BLDC_G431_TIMING_ENTRY`。`main()` 和 IRQ 的 USER CODE 选择互斥入口。
 两份工程共用 CubeMX 配置、Platform、Motor 和控制算法源，不复制实现或同时绑定两个 consumer。
 
+另有编译期开关 `BLDC_G431_RAW_ADC_CAPTURE`，仅用于 Target 私有的无功率原码诊断候选，
+不是正式运行功能。开启时按 `platform/raw_adc_capture.h` 保存一次 512 对 B/C 原码，
+占 2104 B 记录和 4 B 请求字；只接受 MOE 关闭、软件功率关闭且连续有效的同步采样。
+终态冻结后经 SWD 读回，不能重复请求重采；失去采样时由主机超时退出。
+ISR 只作整数复制和状态检查，分析留在主机。正常构建不定义此宏，排除其代码与 RAM；
+诊断候选明确记录宏和源码身份，分析完成后撤去宏。它不改变 HCC、电流换算、Motor 或控制参数。
+对应 ARM 模型命令为 `python firmware/targets/BLDC_G431/validation/tests/verify_raw_adc_capture.py`。
+
 ## 有限运行入口
 
 正式 Run 的 `ControlRuntimeConfig` 位于 `g431_control_profile.c/.h`，集中持有采样节拍、
