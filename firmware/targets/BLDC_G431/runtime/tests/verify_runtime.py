@@ -119,7 +119,7 @@ runtime_group = next(group for group in observe.findall("./Groups/Group")
                      if group.findtext("GroupName") == "Application/User/Runtime")
 runtime_sources = {member.findtext("FileName") for member in runtime_group.findall("./Files/File")}
 if OPTIONS.finite_run:
-    assert runtime_sources == {"target_runtime.c", "target_system_runtime.c", "cordic_math.c", "uart_dma_transport.c", "target_core_server.c"}
+    assert runtime_sources == {"target_runtime.c", "target_system_runtime.c", "cordic_math.c", "uart_dma_transport.c", "target_core_server.c", "target_motor_node_binding.c"}
     assert 'BLDC_G431_FREERTOS' in defines
     assert not {"Application/User/Validation", "Application/User/Timing"} & {
         group.findtext("GroupName") for group in observe.findall("./Groups/Group")}

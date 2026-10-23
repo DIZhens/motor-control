@@ -2,8 +2,7 @@
 #define CORE_SERVER_H
 
 #include "core_protocol_values.h"
-#include "runtime_exchange.h"
-#include "telemetry_mailbox.h"
+#include "protocol_device_port.h"
 
 #define CORE_RESPONSE_CAPACITY 4U
 #define CORE_CACHE_CAPACITY 4U
@@ -15,7 +14,7 @@ typedef struct { CoreEvent value; uint32_t sequence; uint16_t message; } CoreQue
 typedef struct { CoreFrame request, response; bool valid; } CoreCompletedRequest;
 typedef struct {
     CoreFrame request;
-    RuntimeRequestKind kind;
+    ProtocolRequestKind kind;
     uint32_t ticket, started_ms;
     bool active;
 } CorePendingRequest;
@@ -43,7 +42,7 @@ typedef struct {
     CoreRequest decoded;
     CoreResponse answer;
     CoreFrame output;
-    RuntimeRequest runtime_request;
+    ProtocolDeviceRequest device_request;
     uint8_t wire[CORE_WIRE_MAX];
 } CoreServer;
 
@@ -58,12 +57,5 @@ void core_server_observe(CoreServer *server);
 
 /* 链接期窄集成；没有运行期Ops表。对象取得一致副本，写请求只交给实时所有者。 */
 CoreResult core_server_port_read_object(uint16_t object, CoreObject *value);
-RuntimeExchangeResult core_server_port_submit(const RuntimeRequest *request,
-    uint32_t *ticket, uint32_t *cancelled_ticket);
-bool core_server_port_completion(RuntimeCommandCompletion *completion);
-bool core_server_port_permitted(void);
-void core_server_port_fail_closed(RuntimeInternalFaultReason reason);
-bool core_server_port_telemetry_peek(RuntimeTelemetryValue *value);
-void core_server_port_telemetry_retire(void);
 
 #endif

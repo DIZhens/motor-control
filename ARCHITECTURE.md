@@ -84,6 +84,9 @@ Qt GUI
 control/
     可移植算法，只回答“怎么算”。
 
+protocol/
+    可移植设备Profile、链路Frontend/事务/Codec与窄Transport Port；不依赖Firmware、HAL或RTOS。
+
 interface/
     Firmware 与 Host 共同遵守的 Device / Protocol Contract。
 
@@ -667,14 +670,19 @@ Protocol Contract
 Device Contract 高于具体 Transport。
 
 ```text
-Device Contract
+Device Contract / Motor Node Profile
       ↓
-Core Protocol
+UART Frontend 或 CAN Frontend
       ↓
-Transport
- ┌────┼────┬────┐
-UART USB  TCP   CAN
+Byte-stream Port 或 CAN-frame Port
+      ↓
+Target硬件实现
 ```
+
+`protocol/`拥有线格式和事务状态，Firmware Communication只负责共享设备值与
+RuntimeRequest/ticket/Completion绑定；Target负责具体UART DMA或CAN控制器。
+Device Port不泄漏Firmware类型，Runtime交接不加入链路身份。一个镜像以构建期静态选择唯一
+Frontend和控制所有者，不建立运行时探测或Transport Registry。
 
 UART、USB CDC、TCP 可以自然复用字节流 framing；CAN 是帧式链路，允许使用自己的分包/映射方式，但不得因此重新定义设备业务语义。
 
@@ -682,7 +690,8 @@ UART、USB CDC、TCP 可以自然复用字节流 framing；CAN 是帧式链路�
 
 自研协议沿用上述边界，区分 Object、Command、Telemetry 和 Event。对象写入也要经过 Device / Motor 的权限、范围与状态判断；可写目标最终形成完整业务请求，不直接改 Runtime 目标、PI 状态或功率寄存器。请求关联与会话内重复检测属于通信事务语义，不改变 Motor 状态所有权，也不承诺跨复位恰好执行一次。
 
-Core Protocol的字段、编号、对象与事务规则以[Wire Contract](interface/CORE_PROTOCOL_V1.md)为准；
+共享业务编号、结果与能力子集以[Motor Node Profile](interface/MOTOR_NODE_PROFILE_V1.md)为准；
+UART精确表示与事务规则以[UART Mapping](interface/UART_MAPPING_V1.md)为准；
 [设计说明](interface/PROTOCOL_DESIGN.md)解释边界，不重复维护线格式。协议实现和实物范围分别验收，
 不能由合同冻结推断已接入串口或完成调度验证；Device Contract继续拥有设备业务语义。
 

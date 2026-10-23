@@ -105,8 +105,9 @@ Run已装配[SystemRuntime交接](../../../app/system_runtime/README.md)：非�
 内部可信性丢失立即safe-off并撤销Session逻辑资格，下一ADC把bit7合入Motor；
 首因与计数单独保存，不改变Clear或现有有限保护。API边界见`target_runtime.h`。
 
-当前请求由唯一Communication任务的Server使用，`target_core_server.c`完成对象快照映射、
-准确ticket交接及协议无关Fail-closed连接；不从后台修改PI实例。原VOFA装配只保留在验证
+当前请求由唯一Communication任务的Server使用，公共`motor_node_binding.c`完成设备值、
+RuntimeRequest/Completion和Fail-closed映射；`target_motor_node_binding.c`连接本机只读与提交端口，
+`target_core_server.c`保留UART专属统计与服务装配。不从后台修改PI实例。原VOFA装配只保留在验证
 入口与兼容模型中，不是Run的第二个后台所有者。新协议已完成对象/事务、名义通信及一次
 固定空载正向启停调速，仍按各自HEX保存证据；持续运行、带载和完整保护尚未验收。
 

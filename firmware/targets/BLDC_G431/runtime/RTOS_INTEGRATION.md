@@ -1,7 +1,8 @@
 # G431 后台运行时集成合同
 
 本文件固定Target资源、启动和依赖选择；已实现及实机范围见[验证页](../VALIDATION.md)。
-线上唯一合同见[Core Protocol V1](../../../../interface/CORE_PROTOCOL_V1.md)。
+共享业务编号见[Motor Node Profile](../../../../interface/MOTOR_NODE_PROFILE_V1.md)，
+UART线上合同见[UART Mapping V1](../../../../interface/UART_MAPPING_V1.md)。
 现有有限FOC参数及硬件能力合同保持不变。
 
 ## 供应包与集成方式
@@ -84,7 +85,9 @@ Telemetry在有效会话中按配置周期生成Mailbox值和单写产生计数�
 服务先处理RX、截止及Completion，再尝试续帧，最后读取最佳努力Event快照；不在TX完成
 IRQ中编码、复制整帧或做统计，事件FIFO选择优先级及单帧传输所有权不变。
 Motor装配和任务句柄就绪后，Bootstrap初始化
-唯一Server，再执行Transport初始化、事件绑定及RX DMA启动，最后自删除。Parser、Session、
+唯一Server，再执行Transport初始化、事件绑定及RX DMA启动，最后自删除。共享Device Port
+通过Firmware `motor_node_binding.c`转换Runtime请求与完成；Target连接一致publication及关断，
+协议头不包含Runtime、Motor或内核类型。Parser、Session、
 事务、参数映射和响应缓存都在Communication上下文，无ISR协议工作。物理控制时间仍来自
 PWM/ADC，HAL/RTOS tick不参与FOC dt，后台1ms睡眠上限不是调度延迟/WCET证明。
 

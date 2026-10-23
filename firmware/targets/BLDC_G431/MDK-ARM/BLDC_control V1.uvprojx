@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G431xx,BLDC_G431_RUNTIME_ENTRY,BLDC_G431_FINITE_RUN,BLDC_G431_FREERTOS</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../runtime;../../../app/motor;../../../../protocol/uart_v1;../../../../protocol/ports;../../../app/system_runtime;../../../../control;..\..\..\third_party\FreeRTOS\Source\include;..\..\..\third_party\FreeRTOS\Source\portable\RVDS\ARM_CM4F</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../runtime;../../../app/motor;../../../../protocol/uart_v1;../../../../protocol/common;../../../app/communication;../../../../protocol/ports;../../../app/system_runtime;../../../../control;..\..\..\third_party\FreeRTOS\Source\include;..\..\..\third_party\FreeRTOS\Source\portable\RVDS\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -769,9 +769,24 @@
               <FilePath>../runtime/uart_dma_transport.c</FilePath>
             </File>
             <File>
+              <FileName>target_motor_node_binding.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/target_motor_node_binding.c</FilePath>
+            </File>
+            <File>
               <FileName>target_core_server.c</FileName>
               <FileType>1</FileType>
               <FilePath>../runtime/target_core_server.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Application/User/Communication</GroupName>
+          <Files>
+            <File>
+              <FileName>motor_node_binding.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../../../app/communication/motor_node_binding.c</FilePath>
             </File>
           </Files>
         </Group>

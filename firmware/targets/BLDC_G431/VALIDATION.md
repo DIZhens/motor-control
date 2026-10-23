@@ -25,6 +25,14 @@
 21184 B不变，可装载内容仅build ID的8字节常量改变，其余逐字节相同。
 本增量未连接设备或烧录，无新增UART实物、CAN或调优证据；旧实物记录仍绑定原镜像。
 
+[P2共享绑定](validation/evidence/protocol-can/p2.json)将业务编号/结果/设备值与Device Port置于
+`protocol/common/`，Firmware负责RuntimeRequest/Completion规范化，Target只接本机端口与
+UART统计。Codec 12组、Server/Client及真实绑定36组、实时交接19组、静态RTOS 15组通过；
+纯协议正式源只使用`protocol/`头目录编译。Run全量构建零错误零警告，Flash 67320 B
+（增加672 B转换代码）、静态RAM仍21184 B；Communication已知静态调用深度仍1224 B，
+不代表新镜像栈实测。UART黄金字节/Host Codec不变，控制/保护/RTOS/DMA源码未修改。
+本检查点无硬件操作，CAN与调优尚未验证。
+
 ## 当前能力与证据矩阵
 
 | 能力 | 已有证据 | 当前限制 |

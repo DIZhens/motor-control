@@ -10,16 +10,20 @@ Validation保留裸机115200/VOFA验证入口，两个协议没有自动探测�
 ## 目录与迁移边界
 
 ```text
+protocol/common/         共享设备Profile与Device Port
 protocol/uart_v1/        UART framing、固定值编解码、Parser与事务Server
 protocol/ports/          链接期字节流合同
 protocol/tests/uart_v1/  ARM C / Python 对照与事务模型
 ```
 
-本检查点只迁移既有实现，保留 `core_*` 名称、所有线上字节和事务算法；尚未引入CAN。
-Codec与字节流合同不依赖Firmware。Server当前仍通过 `runtime_exchange.h` 和
-`telemetry_mailbox.h` 使用既有运行时值类型；后续共享Device Port将隔离这些依赖，
-不把当前过渡依赖描述为已经完成的纯协议边界。
-Firmware实际绑定仍位于G431的 `target_core_server.c`；VOFA保留在独立Validation构建。
+`common/`拥有共享业务编号、结果、设备值与窄Device Port；纯协议不包含Motor、
+RuntimeRequest/Completion、HAL或RTOS头文件。历史`core_*`名称保留兼容。
+Firmware的`motor_node_binding.c`负责与原Runtime交接转换；协议只拥有线上身份和事务。
+G431的`target_motor_node_binding.c`提供本机publication/提交/关断连接，
+`target_core_server.c`保留UART专属统计和静态服务装配。
+
+当前实际Frontend仍为UART。CAN映射将使用共享Profile与Device Port，不共享COBS/Header；
+在CAN实现及对应证据形成前不宣称已具备CAN能力。
 
 ## UART编解码库
 
@@ -28,7 +32,7 @@ Firmware实际绑定仍位于G431的 `target_core_server.c`；VOFA保留在独�
 - [byte_stream_transport.h](ports/byte_stream_transport.h)：Target字节流合同，G431已实现RX/TX DMA。
 
 编号、单位、有效位、精确长度及会话规则以
-[Wire Contract](../interface/CORE_PROTOCOL_V1.md)为准；C 类型不是线上结构体。
+[Wire Contract](../interface/UART_MAPPING_V1.md)为准；C 类型不是线上结构体。
 `CoreObject` 仅是本次编解码的值容器，不保存设备参数或承担对象数据库职责。
 通信状态按字段名称装配，序列化逐字段确定偏移，不发送 C 内存布局。
 
@@ -75,7 +79,7 @@ Codec模型覆盖全部固定布局、逐字段值、所有分片点、连续帧
 ## 事务Server
 
 [core_server.h](uart_v1/core_server.h)由唯一Communication任务持有，不依赖HAL或FreeRTOS。
-通过链接期窄端口读一致对象、提交完整RuntimeRequest及消费准确ticket Completion，
+通过链接期Device Port读一致对象、提交完整设备意图及消费规范化ticket Completion，
 不直接访问Motor/PI私有状态。G431装配在`target_core_server.c`，不建立运行期Ops注册表。
 
 Server保留一个普通在途和一个Stop在途、完成缓存4、终态Response4。规范化比较包含全部

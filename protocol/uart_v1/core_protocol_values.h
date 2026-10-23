@@ -2,42 +2,7 @@
 #define CORE_PROTOCOL_VALUES_H
 
 #include "core_protocol.h"
-
-typedef enum {
-    CORE_RESULT_OK = 0,
-    CORE_BAD_REQUEST = 0x0101, CORE_UNKNOWN_MESSAGE, CORE_BAD_PAYLOAD,
-    CORE_UNSUPPORTED_FLAGS, CORE_UNSUPPORTED_VERSION, CORE_UNKNOWN_COMMAND,
-    CORE_SESSION_REQUIRED = 0x0201, CORE_SESSION_INVALID, CORE_SEQUENCE_CONFLICT,
-    CORE_IN_PROGRESS, CORE_SEQUENCE_INVALID, CORE_SESSION_BUSY,
-    CORE_UNKNOWN_OBJECT = 0x0301, CORE_READ_ONLY, CORE_BAD_VALUE,
-    CORE_OBJECT_WRONG_STATE, CORE_LENGTH_MISMATCH,
-    CORE_BUSY = 0x0401, CORE_CANCELLED_BY_STOP, CORE_PRECONDITION_FAILED,
-    CORE_SYSTEM_FAIL_CLOSED = 0x0501, CORE_INTERNAL_ERROR
-} CoreResult;
-
-enum {
-    CORE_DEVICE_INFO = 0x0001, CORE_MOTOR_SNAPSHOT = 0x0002,
-    CORE_COMMUNICATION_STATUS = 0x0003, CORE_SPEED_PI_DEFAULT = 0x0101,
-    CORE_SPEED_PI_STAGED = 0x0102, CORE_SPEED_PI_ACTIVE = 0x0103,
-    CORE_TELEMETRY_CONFIG = 0x0201
-};
-enum {
-    CORE_START_VELOCITY = 1, CORE_UPDATE_VELOCITY = 2,
-    CORE_STOP = 3, CORE_CLEAR_FAULT = 4
-};
-
-typedef struct {
-    uint16_t protocol_version, device_contract_version, target_id, control_profile_id;
-    uint32_t capability_flags, control_time_ticks_per_second;
-    uint64_t firmware_build_id;
-} CoreDeviceInfo;
-
-typedef struct {
-    uint64_t control_time_ticks;
-    uint32_t control_time_ticks_per_second, motor_state, fault_flags;
-    uint32_t motor_command_result, valid_flags;
-    float target_velocity_rpm, velocity_rpm, id_a, iq_a, bus_voltage_v;
-} CoreMotorSnapshot;
+#include "motor_node_profile.h"
 
 /* 与传输/协议统计装配时按名称赋值，线上顺序由序列化器明确给出。 */
 typedef struct {
@@ -68,9 +33,6 @@ typedef struct {
     uint32_t tx_busy_count;
     uint32_t tx_errors;
 } CoreCommunicationStatus;
-typedef struct { float kp, ki; uint32_t generation; bool currently_in_use; } CoreSpeedPi;
-typedef struct { uint8_t enabled; uint16_t rate_hz; uint32_t generation; } CoreTelemetryConfig;
-
 /* 仅为编解码值容器，不是对象存储、参数权威或 Motor 私有状态。 */
 typedef union {
     CoreDeviceInfo device_info;
@@ -111,16 +73,6 @@ CoreResult core_response_encode(uint16_t message_id, const CoreResponse *respons
     uint8_t *output, size_t capacity, size_t *length);
 CoreResult core_response_decode(uint16_t message_id, const uint8_t *data,
     size_t length, CoreResponse *response);
-
-typedef struct {
-    uint32_t sample_sequence;
-    uint64_t control_time_ticks, position_observation_time;
-    float target_velocity_rpm, velocity_rpm, mechanical_position_turns;
-    float iq_reference_a, iq_feedback_a, id_feedback_a, bus_voltage_v;
-    uint32_t motor_state, fault_flags, valid_flags;
-    uint16_t limit_flags;
-    uint32_t active_profile_generation, telemetry_config_generation;
-} CoreSpeedSample;
 
 /* 缺有效位或非有限浮点在编码时规范为 NaN 并清位；解码严格核对规范值。 */
 CoreResult core_sample_encode(const CoreSpeedSample *sample, uint8_t *output,
