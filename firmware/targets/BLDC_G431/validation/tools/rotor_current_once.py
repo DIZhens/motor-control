@@ -22,7 +22,7 @@ LIMITS = {'iq_max_nominal_a':0.2,'voltage_request_upper_bound_v':1.8,'phase_trip
     'kp_v_per_a':0.5,'ki_v_per_a_s':300.0,'integral_limit_v':1.5,
     'velocity_limit_rpm':300.0,'displacement_limit_turns':2.0,'trajectory_s':1.0,
     'independent_deadline_s':1.5,'position_max_age_s':0.0015,'actuation_prediction_s':0.000125}
-DEFAULT_MAPPING = Path(__file__).resolve().parents[1]/'evidence/current-survey/excitation-comparison.json'
+DEFAULT_MAPPING = Path(__file__).resolve().parents[1] / 'evidence/current-survey/excitation-comparison.json'
 
 
 def parameters(iq, offset):
@@ -68,11 +68,11 @@ def prepare(build, output, gdb, mapping, expected=None):
         require(0x20000000<=layout[name]<layout[name]+size<=0x20008000,'转子DQ地址越界')
     (output/'mapping-evidence.json').write_bytes(mapping.read_bytes())
     report.update(rotor_current_schema=1,rotor_current_layout=layout,rotor_current_limits=LIMITS,
-        rotor_current_tool_sha256=loop.candidate.digest(Path(__file__)),
+        rotor_current_tool_sha256=loop.candidate.digest(Path(__file__).resolve().parent / 'rotor_current_once.py'),
         open_loop_tool_sha256=loop.candidate.digest(Path(loop.__file__)),
         mapping_evidence_sha256=loop.candidate.digest(mapping),
         mapping_candidate=candidate)
-    report['source_files']['validation/tools/rotor_current_once.py']=loop.candidate.digest(Path(__file__))
+    report['source_files']['validation/tools/rotor_current_once.py']=loop.candidate.digest(Path(__file__).resolve().parent / 'rotor_current_once.py')
     loop.common.save(output/'prepared.json',report)
     return report
 
@@ -84,7 +84,7 @@ class Session(loop.Session):
         frozen,_=loop.load_prepared(prepared)
         require(frozen.get('rotor_current_schema')==1 and frozen.get('rotor_current_limits')==LIMITS,
             '不是本版有限转子DQ候选')
-        require(frozen['rotor_current_tool_sha256']==loop.candidate.digest(Path(__file__))
+        require(frozen['rotor_current_tool_sha256']==loop.candidate.digest(Path(__file__).resolve().parent / 'rotor_current_once.py')
             and frozen['open_loop_tool_sha256']==loop.candidate.digest(Path(loop.__file__))
             and frozen['mapping_evidence_sha256']==loop.candidate.digest(prepared.parent/'mapping-evidence.json'),
             '工具或映射证据已改变，须重新冻结')

@@ -1,0 +1,875 @@
+{
+  "status": "OFFLINE_RESTRUCTURE_PASS",
+  "stage": "Showcase v1 第一阶段，仅结构归位",
+  "branch": "stage/showcase-v1",
+  "baseline": "4a9d20528b777ba97b65286cc66f9fcb34f85175",
+  "hardware_access": false,
+  "installed": false,
+  "old_hil_evidence_reassigned": false,
+  "moved_tracked_files": 212,
+  "native_builds": [
+    {
+      "profile": "uart",
+      "target": "BLDC_G431_Run",
+      "status": "PASS",
+      "errors": 0,
+      "warnings": 0,
+      "code": 66006,
+      "ro": 1054,
+      "rw": 496,
+      "zi": 20608,
+      "flash_load_bytes": 67080,
+      "static_ram_bytes": 21104,
+      "firmware_build_id": "0xcb04339e37c61b1c",
+      "full_source_sha256": "cb04339e37c61b1cab9e36fc7c12066805918dd127e43654ab220d8b1c3a1281",
+      "artifacts": [
+        {
+          "file": "uart/BLDC_G431_Run.axf",
+          "sha256": "c71554a41d65deda5fde5da4fefcb937f8e60c0e157563ab20e28572703e764d",
+          "bytes": 1822888
+        },
+        {
+          "file": "uart/BLDC_G431_Run.hex",
+          "sha256": "928f2ba55949ffd4bf73deb9dd66367ca9e64edbc747a74f57c61aa9936bbf48",
+          "bytes": 188737
+        },
+        {
+          "file": "uart/BLDC_G431_Run.map",
+          "sha256": "e3a1c92d9ee9b32f1ccca17c147e3f2838e871a03301239f464a89f9523b51e1",
+          "bytes": 584307
+        },
+        {
+          "file": "uart/BLDC_G431_Run.htm",
+          "sha256": "7d93d8cc52aee8e2bbe1aa0006a521705938bb427a675f222d5671386630042b",
+          "bytes": 305010
+        }
+      ],
+      "installed": false,
+      "project": "firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1.uvprojx"
+    },
+    {
+      "project": "firmware/targets/BLDC_G431/MDK-ARM/BLDC_G431_Validation.uvprojx",
+      "target": "BLDC_G431_Observe",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "BLDC_G431_Observe.log",
+      "code": 77788,
+      "ro": 1372,
+      "rw": 448,
+      "zi": 25976,
+      "static_ram_bytes": 26424,
+      "artifacts": [
+        {
+          "file": "BLDC_G431_Observe/BLDC_G431_Observe.axf",
+          "sha256": "26b6c8cfd5bbd18a3618708155c2b95a44ec1df565e5b12824e15d0b4c25c119",
+          "bytes": 1596804
+        },
+        {
+          "file": "BLDC_G431_Observe/BLDC_G431_Observe.hex",
+          "sha256": "7ce1d18f2d467c69ba9c260c0e8ed5da0954e7dbb05c17e46c7e2d099980ce9e",
+          "bytes": 222749
+        },
+        {
+          "file": "BLDC_G431_Observe/BLDC_G431_Observe.map",
+          "sha256": "4971c3b2983fe06be3bb0d376bea9e167f101ae162121918e98e24e389699169",
+          "bytes": 498509
+        },
+        {
+          "file": "BLDC_G431_Observe/BLDC_G431_Observe.htm",
+          "sha256": "2c7845fa8cc5720c6f90f490c1b82c592f89ad611f09b546566afaaa20fdf20a",
+          "bytes": 226125
+        }
+      ],
+      "flash_load_bytes": 79172
+    },
+    {
+      "project": "firmware/targets/BLDC_G431/MDK-ARM/BLDC_G431_Validation.uvprojx",
+      "target": "BLDC_G431_Timing",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "BLDC_G431_Timing.log",
+      "code": 46710,
+      "ro": 958,
+      "rw": 364,
+      "zi": 9188,
+      "static_ram_bytes": 9552,
+      "artifacts": [
+        {
+          "file": "BLDC_G431_Timing/BLDC_G431_Timing.axf",
+          "sha256": "1d61d5835d8aa9af9cc3caebcb01be83af2a3bfbd805ad0b3c8cf2f7515ae748",
+          "bytes": 1451844
+        },
+        {
+          "file": "BLDC_G431_Timing/BLDC_G431_Timing.hex",
+          "sha256": "4d4d6fa1ab0bede723c2e2ad8021b9b25685ed85d6ebe3c62389eb9ffa3d41b5",
+          "bytes": 134151
+        },
+        {
+          "file": "BLDC_G431_Timing/BLDC_G431_Timing.map",
+          "sha256": "46ddb8225d79d3551b32670e0bf7fd6599978343d435a9f60f21a3d7069ae9c3",
+          "bytes": 442475
+        },
+        {
+          "file": "BLDC_G431_Timing/BLDC_G431_Timing.htm",
+          "sha256": "ae0b298bb9aa17e6c626eb1914329eb89eb5556efc75d1572fc10c85826b6975",
+          "bytes": 184583
+        }
+      ],
+      "flash_load_bytes": 47680
+    },
+    {
+      "project": "firmware/targets/BLDC_G431/MDK-ARM/BLDC_G431_Validation.uvprojx",
+      "target": "BLDC_control V1",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "BLDC_control_V1.log",
+      "code": 55628,
+      "ro": 860,
+      "rw": 424,
+      "zi": 18960,
+      "static_ram_bytes": 19384,
+      "artifacts": [
+        {
+          "file": "BLDC_control_V1/BLDC_control V1.axf",
+          "sha256": "bea4eb773b585febf8b4809d5a0f3e72d8e4b90a26066c44551dd69be584aaad",
+          "bytes": 1477120
+        },
+        {
+          "file": "BLDC_control_V1/BLDC_control V1.hex",
+          "sha256": "60a4ceff9307302fb71158d0fae6114d889901848f744f45860f074a3d05be8a",
+          "bytes": 158967
+        },
+        {
+          "file": "BLDC_control_V1/BLDC_control V1.map",
+          "sha256": "1dd396a29d39df2d54db26f2c0f2d1b613a5174abdb19eb29b98190480258c39",
+          "bytes": 451423
+        },
+        {
+          "file": "BLDC_control_V1/BLDC_control V1.htm",
+          "sha256": "2cc9435bdc7a174e748e08529c4c6e695dcfe07ac5a03ddf4b1001d8db840fa9",
+          "bytes": 200310
+        }
+      ],
+      "flash_load_bytes": 56500
+    },
+    {
+      "project": "firmware/targets/ODRIVE_V36_405_M0/MDK-ARM/ODRIVE_V36_405_M0.uvprojx",
+      "target": "ODRIVE_V36_405_M0",
+      "status": "PASS",
+      "returncode": 0,
+      "log": "ODRIVE_V36_405_M0.log",
+      "code": 15790,
+      "ro": 450,
+      "rw": 200,
+      "zi": 5688,
+      "static_ram_bytes": 5888,
+      "artifacts": [
+        {
+          "file": "ODRIVE_V36_405_M0/ODRIVE_V36_405_M0.axf",
+          "sha256": "bdeb35651ee87415ad5b652a2b804db979bfbd05826713588b510f426b567ddc",
+          "bytes": 905768
+        },
+        {
+          "file": "ODRIVE_V36_405_M0/ODRIVE_V36_405_M0.hex",
+          "sha256": "268a4b387c78a0fc8e86ea790043cc785b260e7f7322841b92f5c5c0df9a857e",
+          "bytes": 46295
+        },
+        {
+          "file": "ODRIVE_V36_405_M0/ODRIVE_V36_405_M0.map",
+          "sha256": "e7c063876a4ce8fc7844f32f749e8dc4cadf8ba221e3c0e9d44ba21e4223b1a1",
+          "bytes": 237785
+        },
+        {
+          "file": "ODRIVE_V36_405_M0/ODRIVE_V36_405_M0.htm",
+          "sha256": "76c03f796a99a3302a9b158ac9ade3f431c6e0171368c59772c4d8945ea85191",
+          "bytes": 109541
+        }
+      ],
+      "flash_load_bytes": 16440
+    }
+  ],
+  "can_normal_snapshot_build": {
+    "profile": "can",
+    "target": "BLDC_G431_Run",
+    "status": "PASS",
+    "errors": 0,
+    "warnings": 0,
+    "code": 59962,
+    "ro": 946,
+    "rw": 480,
+    "zi": 17328,
+    "flash_load_bytes": 60928,
+    "static_ram_bytes": 17808,
+    "firmware_build_id": "0x310470ba9c1ff193",
+    "full_source_sha256": "310470ba9c1ff1933d5b79f481883d3f114ee644f40d40030baac35be57a9250",
+    "artifacts": [
+      {
+        "file": "can/BLDC_G431_Run.axf",
+        "sha256": "d502fbfcfdf6d4426247de2c9e89491887c41bac4178d525c878bc0d3ffaea6b",
+        "bytes": 1801380
+      },
+      {
+        "file": "can/BLDC_G431_Run.hex",
+        "sha256": "5a8fa202d57bf0beb52671eae2b4eaa8fdaccc8b9cb75fe3c8e08f5e22e9eb98",
+        "bytes": 171411
+      },
+      {
+        "file": "can/BLDC_G431_Run.map",
+        "sha256": "9aa89f81bf54ec01df862a9439fb3e3231dc37ccf781249cd7dd969462c96c46",
+        "bytes": 578881
+      },
+      {
+        "file": "can/BLDC_G431_Run.htm",
+        "sha256": "1f81286a44bccca1c58bc12fa7aa707c858e9ee5245bc3ce606195dde4147dc2",
+        "bytes": 290817
+      }
+    ],
+    "installed": false
+  },
+  "models": [
+    {
+      "file": "firmware/control/tests/verify_foc_math.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 1.13,
+      "log": "firmware__control__tests__verify_foc_math.py.log",
+      "round": "final",
+      "log_sha256": "6fc4f205edae9949b521f2af2a4c5ba5fc6fcac94c713477783ec49f1628230e"
+    },
+    {
+      "file": "firmware/control/tests/verify_current_measurement.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 1.92,
+      "log": "firmware__control__tests__verify_current_measurement.py.log",
+      "round": "final",
+      "log_sha256": "3726fae9298f3e7c4b316a5afeefcecafd01914bf96af3c6cc6469b5eb0d8dad"
+    },
+    {
+      "file": "firmware/control/tests/verify_position_estimator.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.87,
+      "log": "firmware__control__tests__verify_position_estimator.py.log",
+      "round": "final",
+      "log_sha256": "eef0409df920061a2a13757f5bc8f6af51ac0968fe16e1fe6a34619b22f102d0"
+    },
+    {
+      "file": "firmware/control/tests/verify_speed_controller.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 1.51,
+      "log": "firmware__control__tests__verify_speed_controller.py.log",
+      "round": "final",
+      "log_sha256": "460d716326c13b8f34d2d4e111fe7e6122840c56cdad836802c01c1a367e49ea"
+    },
+    {
+      "file": "firmware/control/tests/verify_electrical_angle.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 3.75,
+      "log": "firmware__control__tests__verify_electrical_angle.py.log",
+      "round": "final",
+      "log_sha256": "b29e5ddfc48d90933dee9170c57e01a6215ff5770a69e501e5a0acfd3fad9dfa"
+    },
+    {
+      "file": "firmware/control/tests/verify_svpwm_comparisons.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 2.41,
+      "log": "firmware__control__tests__verify_svpwm_comparisons.py.log",
+      "round": "final",
+      "log_sha256": "7d552b593aaf16ccf0f76685e7d2ee9f7d0394ae04467fa9429634a7ada7e271"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/vofa/verify_motor_vofa.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.98,
+      "log": "firmware__targets__BLDC_G431__validation__tests__vofa__verify_motor_vofa.py.log",
+      "round": "final",
+      "log_sha256": "fd6339f31410431adf406c3d73d1149fe731316e1f8d51362a778c5dda64c65c"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/vofa/verify_vofa.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.82,
+      "log": "firmware__targets__BLDC_G431__validation__tests__vofa__verify_vofa.py.log",
+      "round": "final",
+      "log_sha256": "98ba6e6a2c7d381d275bd4e3864377e5eaef5603811cc4566304c3b89923c336"
+    },
+    {
+      "file": "firmware/control/tests/verify_current_controller.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 4.67,
+      "log": "firmware__control__tests__verify_current_controller.py.log",
+      "round": "final",
+      "log_sha256": "be4b592d75762837cef67aa285fb1b7e978cb94982ce432990627a56d4906bf5"
+    },
+    {
+      "file": "firmware/motor/tests/verify_motor.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.77,
+      "log": "firmware__motor__tests__verify_motor.py.log",
+      "round": "final",
+      "log_sha256": "d53d96e5ba5984f5d55192eee7fe98fa1777a2f16c4eba9d268f97e22405101d"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/test_current_capture_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.69,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__test_current_capture_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "6a7e69f5e8589cfd6dd2571688c41de8efcfea3f40be9d1cd5ce8ddd1c3066ec"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/test_runtime_timing_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.59,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__test_runtime_timing_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "b2e1ffff38852249a7391d349f57d9281f70bcef03a6d95a7ea6b922763f897b"
+    },
+    {
+      "file": "firmware/control/commissioning/tests/verify_rotor_alignment.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 2.02,
+      "log": "firmware__control__commissioning__tests__verify_rotor_alignment.py.log",
+      "round": "final",
+      "log_sha256": "0126d49e417696a2ace67c49395ed7f40b6ba3086be1efdd81079230aa12ef35"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/test_compute_probe_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 1.94,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__test_compute_probe_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "1ca15d54bd5d54dbe02c76d43413c88f92ce30f4e62fcc522a5bdbb36092fde8"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/test_stage_budget_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.65,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__test_stage_budget_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "db1c9f15b14edd8c475e51245feb5e81fa4edd4ae848bc2342dba935f5143c2b"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_cordic_math.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 1.63,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_cordic_math.py.log",
+      "round": "final",
+      "log_sha256": "a5ca416805189423a1c73b2cc3beba421481e5df3f711b11d766c9d042143a17"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_compute_probe_model.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 3.13,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_compute_probe_model.py.log",
+      "round": "final",
+      "log_sha256": "6d325df6890b86420d6bbe30f9263fe8fef49d2482d66fae77f510549283fbd8"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_current_capture_model.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 1.02,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_current_capture_model.py.log",
+      "round": "final",
+      "log_sha256": "370869cc59f2517256058eade2d41c21f15b2e768b61da109971d434e0cd6a71"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_controller_profile.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 3.22,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_controller_profile.py.log",
+      "round": "final",
+      "log_sha256": "e75e837279eaf849098d40381d36343d5255fa51d27cf79a95239dd08f68219d"
+    },
+    {
+      "file": "firmware/control/commissioning/tests/verify_voltage_open_loop.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 5.72,
+      "log": "firmware__control__commissioning__tests__verify_voltage_open_loop.py.log",
+      "round": "final",
+      "log_sha256": "df96df9a5c5e499a5ae362faac84eb8f32b77c8e60dfb6b2e36bd876170dd9dc"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_irq_timing.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 1.24,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_irq_timing.py.log",
+      "round": "final",
+      "log_sha256": "a3bdb6e589d5c3a2e22f3a23333ebf1f6a40f793efeb4b25cfc0f0ee29738d0c"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_fdcan_transport.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 4.12,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_fdcan_transport.py.log",
+      "round": "final",
+      "log_sha256": "8f20f821c6834ea4eadad150e80d3e76776bbb7807bf1b22ba421edaa901c175"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_runtime_timing.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 5.76,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_runtime_timing.py.log",
+      "round": "final",
+      "log_sha256": "b1a18341177855b6a9a1cbc2ded5a22cf32b3c0ab051c777352bfe4de14a86a1"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_stage_budget.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 3.91,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_stage_budget.py.log",
+      "round": "final",
+      "log_sha256": "d61f8cdccfd5b98fc23810d143a5c166fff8c5d884e0126d316b493bd2bd9756"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_system_runtime.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 2.29,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_system_runtime.py.log",
+      "round": "final",
+      "log_sha256": "39b98d4c243580cffa6c85761b0dc401435d70aa2d01f8a624d7c61ffae2505e"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_uart_dma.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 1.72,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_uart_dma.py.log",
+      "round": "final",
+      "log_sha256": "859c04d165f3bc2cd83b2e70df3f18a7864a5361c7de7d5b98b2795d3303523d"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_timing_entry.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 4.82,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_timing_entry.py.log",
+      "round": "final",
+      "log_sha256": "48baa3d9212724e3986ec574b7a550fb2d20e0d779980447b37f78784c729484"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_angle_survey_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 3.07,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_angle_survey_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "fe27d241c104bcb6449e37d2878ac804dcfeff24f15ee7d84497b23cea59ec2c"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_bus.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 1.64,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_bus.py.log",
+      "round": "final",
+      "log_sha256": "05cb8a1991e2cf8d5b16d9791eeff83a5825db3243be2f7ee87b262d9d9225bf"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_candidate_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 1.53,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_candidate_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "2c50dd5647d495cf92605507af1013e0c0da7e5619ee37158dfc094ee64fc399"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_runtime.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 15.61,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_runtime.py.log",
+      "round": "fixture-cleanup",
+      "log_sha256": "cf618c46b6253844c6ea0f625489b3986b476b9c9f68ee8dfedf9754564b6afe"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_current_hold_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 2.39,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_current_hold_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "1636e73e3e88c638876c800910a0ded272a7dc9a623cfd2d6d61b1d2622b135a"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_current_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.24,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_current_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "63da720aeeb81f49d4222194c4132e3ad9b2fdf9bef706061c95d094a199e979"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_logic_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.11,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_logic_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "4b7861c8bd2c017f464aaae49583be24abc5c9d25dc6793de26656491ce3bc85"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_current_survey_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 2.87,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_current_survey_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "6358f77219b38725ac0a8c9c9e363126002b8866abbf445f922af7444e45b0d2"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_open_loop_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.64,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_open_loop_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "83f7d713de866ffe9f886ceeb6b062c49e27598ab267ae04c48d84c36b3d8f7f"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_core_irq.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 7.54,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_core_irq.py.log",
+      "round": "final",
+      "log_sha256": "382cc430d0147c83487fd85e90ad5c907cad2e44b77e6d6a35b3d721cc24cf09"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_platform.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 2.71,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_platform.py.log",
+      "round": "final",
+      "log_sha256": "d0fd5237d92638193057249c0cd608035ca5e2989a069d6655f720ad24c6f7f7"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_probe_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.31,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_probe_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "0885b0acaed7f66c0a6a14ab95b6be070763aea3be12c8559a175e8c0320bcac"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_pwm_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.26,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_pwm_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "166dbe18fa673323544979fc58348addc09a023f5077a12bd051540a24221499"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_position.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 1.93,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_position.py.log",
+      "round": "final",
+      "log_sha256": "e20a2102ac4720cc9b5aa8666209aa65fdf6e9ee4f9136d40053a2db71b441c4"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_rotor_current_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 3.34,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_rotor_current_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "2834e00e0fd76e7356720cd7de3b44b9e0fd35ea913cedad4acee000e68c2554"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_raw_adc_capture.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 5.51,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_raw_adc_capture.py.log",
+      "round": "final",
+      "log_sha256": "4582266c86eea9aec6c8111df2f098a003f5455ab729ea1977fd7f5b25aca4df"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_timing.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 2.8,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_timing.py.log",
+      "round": "final",
+      "log_sha256": "6b8958a702648a3dbeea0af84c5d8f204db4e37d40bb935b1b5228c9986b1339"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_timing_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.68,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_timing_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "5b415240c08b06fa5b54491a4924353e36eebf3f37a132953f173ecc72e5a5a3"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_trip_snapshot.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 1.47,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_trip_snapshot.py.log",
+      "round": "final",
+      "log_sha256": "b0ba4c1026ec4259a983074f5d64e786ea9bfeb9403c239d43df6c49e335524b"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_rotor_speed_tool.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 7.04,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_rotor_speed_tool.py.log",
+      "round": "tool-path-closure",
+      "log_sha256": "bc9c787e854bf3d14308d72ec20fef38e9b4313d6e43aeac5219e3549921cf58"
+    },
+    {
+      "file": "firmware/targets/ODRIVE_V36_405_M0/validation/tools/verify_target.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.18,
+      "log": "firmware__targets__ODRIVE_V36_405_M0__validation__tools__verify_target.py.log",
+      "round": "final",
+      "log_sha256": "1856be22969380385e79e29cf862532bc710e3fe7ac45ee38d1b4b8d6f946f69"
+    },
+    {
+      "file": "communication/host/vofa/test_analyze.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.28,
+      "log": "communication__host__vofa__test_analyze.py.log",
+      "round": "final",
+      "log_sha256": "e48eeba8064d0297963b1c8145b87352e1f6df457aa7cc0cd450501282f95462"
+    },
+    {
+      "file": "communication/host/vofa/test_bridge.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.48,
+      "log": "communication__host__vofa__test_bridge.py.log",
+      "round": "final",
+      "log_sha256": "3b93f37f9315b08ce22c8fd3c770e7e535560c494859ce98d03e27cb55d6eedf"
+    },
+    {
+      "file": "communication/host/vofa/test_replay.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.3,
+      "log": "communication__host__vofa__test_replay.py.log",
+      "round": "final",
+      "log_sha256": "d8e679598e1f53eaedd9255b3d3a92438a0bafee4050b9cfc5bf25bd80a0417b"
+    },
+    {
+      "file": "firmware/targets/ODRIVE_V36_405_M0/validation/tests/verify_model.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 2.13,
+      "log": "firmware__targets__ODRIVE_V36_405_M0__validation__tests__verify_model.py.log",
+      "round": "final",
+      "log_sha256": "4906c3cee33c1f4e424d223d117bc662e7b3d3a348d7d14e7eae2ad82dd3d75c"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_foc_runtime.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 36.31,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_foc_runtime.py.log",
+      "round": "final",
+      "log_sha256": "72df943ea49c2d98f8ed6a85949d509afc49d4d0af1caad14e17fcffe37d5e3d"
+    },
+    {
+      "file": "communication/protocol/tests/uart/verify_core_protocol.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 2.36,
+      "log": "communication__protocol__tests__uart__verify_core_protocol.py.log",
+      "round": "final",
+      "log_sha256": "4a71365875cd464d9d8d9a5bfaecb6620899b43e5c90cd97432406f1763bcf45"
+    },
+    {
+      "file": "communication/protocol/tests/verify_boundaries.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 0.21,
+      "log": "communication__protocol__tests__verify_boundaries.py.log",
+      "round": "final",
+      "log_sha256": "94b5e2f3002423205317d0c046fd98881652de35c756a561e597619343bbf8ac"
+    },
+    {
+      "file": "communication/protocol/tests/can/verify_can.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 3.76,
+      "log": "communication__protocol__tests__can__verify_can.py.log",
+      "round": "final",
+      "log_sha256": "048fcfc7b198e858951dff35885a6962cbc2e85fbcf3ca807fe0f35f2fc92964"
+    },
+    {
+      "file": "communication/protocol/tests/uart/verify_core_server.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 4.26,
+      "log": "communication__protocol__tests__uart__verify_core_server.py.log",
+      "round": "final",
+      "log_sha256": "806227cd161777b7936d7364835ff58bdd48520404be4c6c92401bede71f6a78"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_runtime.py",
+      "args": [
+        "--finite-run"
+      ],
+      "status": "PASS",
+      "seconds": 13.51,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_runtime.py_finiterun.log",
+      "round": "fixture-cleanup",
+      "log_sha256": "8f34d483020eeca3bf68f8d49aee77adcaabccec3de3126560a1832746268ea4"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/runtime/verify_runtime.py",
+      "args": [
+        "--finite-run",
+        "--exchange"
+      ],
+      "status": "PASS",
+      "seconds": 13.04,
+      "log": "firmware__targets__BLDC_G431__validation__tests__runtime__verify_runtime.py_finiterun_exchange.log",
+      "round": "fixture-cleanup",
+      "log_sha256": "fd3a1e09ccf4b5cd8f445fd86cadcd25794873d56f21d081ffd7d8ec464de1d6"
+    },
+    {
+      "file": "firmware/targets/BLDC_G431/validation/tests/verify_model.py",
+      "args": [],
+      "status": "PASS",
+      "seconds": 114.94,
+      "log": "firmware__targets__BLDC_G431__validation__tests__verify_model.py.log",
+      "round": "final",
+      "log_sha256": "3b178c431993e3597f0bc6de24b60b73e7d473b81e73a8b2770ed697dee58c96"
+    }
+  ],
+  "behavior_preservation": {
+    "status": "PASS",
+    "baseline": "4a9d20528b777ba97b65286cc66f9fcb34f85175",
+    "unchanged_non_include_c_tokens": 177,
+    "reviewed_differences": [
+      {
+        "file": "firmware/targets/BLDC_G431/Core/Src/main.c",
+        "reason": "仅为已存在的Run/Observe选择不同头文件，执行语句不变"
+      },
+      {
+        "file": "firmware/targets/BLDC_G431/Core/Src/stm32g4xx_it.c",
+        "reason": "仅为已存在的Run/Observe选择不同头文件，执行语句不变"
+      },
+      {
+        "file": "firmware/targets/BLDC_G431/runtime/firmware_build_identity.h",
+        "reason": "新路径与依赖闭包重新生成身份，旧镜像证据不重新归属"
+      },
+      {
+        "file": "firmware/targets/BLDC_G431/runtime/target_runtime.c",
+        "reason": "原条件分支分别归入Run和Observe；原生Run移除三个不生效的旧VOFA夹具调用后，所选分支C标记仍一致"
+      },
+      {
+        "file": "firmware/targets/BLDC_G431/runtime/target_runtime.h",
+        "reason": "仅将DIAGNOSTICS声明移至Observe头文件，正式Run公共声明不变"
+      },
+      {
+        "file": "firmware/targets/BLDC_G431/validation/communication/can_loopback.c",
+        "reason": "仅为已存在的Run/Observe选择不同头文件，执行语句不变"
+      }
+    ],
+    "byte_identical_immutable_files": 316,
+    "golden_vectors_byte_identical": true,
+    "drivers_freertos_ioc_historical_data_unchanged": true,
+    "run_observe_selected_c_tokens_equal": true,
+    "protected_uvoptx_sha256": "bb0411550fa2074e91479b0d3c73c9fe894a0a3b4b520566d9bc4bbb6cefbdef",
+    "user_flash2_change_preserved": true,
+    "hardware_access": false
+  },
+  "structure": {
+    "keil_targets": [
+      {
+        "target": "BLDC_G431_Run",
+        "members": 88,
+        "include_paths": 18
+      },
+      {
+        "target": "BLDC_control V1",
+        "members": 83,
+        "include_paths": 18
+      },
+      {
+        "target": "BLDC_G431_Observe",
+        "members": 84,
+        "include_paths": 17
+      },
+      {
+        "target": "BLDC_G431_Timing",
+        "members": 82,
+        "include_paths": 17
+      },
+      {
+        "target": "ODRIVE_V36_405_M0",
+        "members": 33,
+        "include_paths": 8
+      }
+    ],
+    "markdown_files": 47,
+    "local_links": 430,
+    "markdown_anchors": 43,
+    "broken_links": 0,
+    "python_syntax_files": 90,
+    "host_cli_import_smoke": [
+      "communication.host.protocol",
+      "communication.host.protocol.pressure",
+      "communication.host.vofa.bridge",
+      "communication.host.vofa.analyze",
+      "communication.host.vofa.replay"
+    ],
+    "legacy_source_path_forwarders": false,
+    "project_context": {
+      "status": "PASS",
+      "launched_outside_repository": true,
+      "git_index_unchanged": true,
+      "documentation_entries": 18
+    },
+    "git_diff_check": "PASS",
+    "known_stale_path_exceptions": [
+      {
+        "file": "firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1.uvoptx",
+        "scope": "受保护的用户Keil调试选项缓存，仍有旧app路径；不作为uvprojx工程成员或编译输入，本阶段未改写或提交用户设置"
+      }
+    ]
+  },
+  "historical_limits_unchanged": [
+    "500 Hz telemetry loss 1.92% FAIL against original <1%",
+    "P6 speed performance not accepted",
+    "external CAN bus not qualified"
+  ],
+  "next_stage": "仅经用户后续授权进行命名/API/主流程可读性重构"
+}

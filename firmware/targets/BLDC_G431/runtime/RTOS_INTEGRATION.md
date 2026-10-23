@@ -1,9 +1,9 @@
 # G431 后台运行时集成合同
 
-本文件固定Target资源、启动和依赖选择；已实现及实机范围见[验证页](../VALIDATION.md)。
-共享业务编号见[Motor Node Profile](../../../../interface/MOTOR_NODE_PROFILE_V1.md)，
-UART线上合同见[UART Mapping V1](../../../../interface/UART_MAPPING_V1.md)。
-CAN线上合同见[CAN Mapping V1](../../../../interface/CAN_MAPPING_V1.md)。
+本文件固定Target资源、启动和依赖选择；已实现及实机范围见[验证页](../validation/README.md)。
+共享业务编号见[Motor Node Profile](../../../../communication/spec/MOTOR_NODE_PROFILE_V1.md)，
+UART线上合同见[UART Mapping V1](../../../../communication/spec/UART_MAPPING_V1.md)。
+CAN线上合同见[CAN Mapping V1](../../../../communication/spec/CAN_MAPPING_V1.md)。
 现有有限FOC参数及硬件能力合同保持不变。
 
 ## 供应包与集成方式
@@ -134,11 +134,11 @@ Normal初始化之后、控制器Start之前改为Internal Loopback，并核对T
 继续拒绝发送扩展/RTR。验证后恢复UART并重新生成身份、Rebuild。
 
 FDCAN禁止整块寄存器dump：读取保留地址本身可触发ARA。诊断仅读取明确有效的配置/状态字，
-Message RAM也只读已配置的具体区域。实物通过范围与原失败记录见[验证页](../VALIDATION.md)。
+Message RAM也只读已配置的具体区域。实物通过范围与原失败记录见[验证页](../validation/README.md)。
 
 ## 字节流与后台边界
 
-[Byte-stream合同](../../../../protocol/ports/byte_stream_transport.h)不含HAL/RTOS/Motor类型，
+[Byte-stream合同](../../../../communication/protocol/transport/byte_stream_transport.h)不含HAL/RTOS/Motor类型，
 由Target链接期静态实现。事件Sink仅作对应上下文的有界通知；事件可重复/合并/延迟。
 权威事实为DMA生产位置、后台消费位置、连续性epoch和实际TX所有权。
 

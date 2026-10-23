@@ -4,7 +4,7 @@
 #include "tim.h"
 #include "realtime_motor_io.h"
 #include "system_runtime.h"
-#include "target_communication.h"
+#include "../communication/target_communication.h"
 
 uint32_t system_runtime_target_hal_tick(void) { return HAL_GetTick(); }
 

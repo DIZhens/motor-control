@@ -164,5 +164,5 @@ DAC 写入到证据采集之间无软件 MOE 写入，以及调用者在恢复�
 [构建清单](local-evidence/20261015-protection-probe/BUILD_MANIFEST.json)。
 
 以上清单是本机历史记录，不随仓库分发。后续模型新增 30%/70% 两项，当前验证范围及命令见
-[台架验证](../VALIDATION.md)，不能把后来的用例数改写到原始构建记录中。
+[台架验证](README.md)，不能把后来的用例数改写到原始构建记录中。
 公开原图见[证据索引](evidence/20261018-baseline/README.md)。

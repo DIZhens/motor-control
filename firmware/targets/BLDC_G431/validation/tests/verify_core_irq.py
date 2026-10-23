@@ -86,9 +86,9 @@ def run(image, runtime=False, rtos=False):
     cases += 1
     if rtos:
         assert not {'SVC_Handler', 'PendSV_Handler', 'SysTick_Handler'} & m.symbols.keys()
-    for entry,counter in [('DMA1_Channel2_IRQHandler','model_core_uart_rx_calls'),
-                          ('DMA1_Channel3_IRQHandler','model_core_uart_tx_calls'),
-                          ('USART1_IRQHandler','model_core_uart_calls')]:
+    # 两条DMA向量随UART Transport链接，不能伪装为Core拥有的入口。
+    assert 'DMA1_Channel2_IRQHandler' not in m.symbols and 'DMA1_Channel3_IRQHandler' not in m.symbols
+    for entry,counter in [('USART1_IRQHandler','model_core_uart_calls')]:
         m=Model(image);m.call(entry)
         assert m.word(counter)==int(rtos) and m.word('model_core_unexpected_irqs')==0
         assert m.word('model_control_time')==0 and not m.moe()
@@ -101,13 +101,13 @@ def run(image, runtime=False, rtos=False):
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="g431-core-irq-") as temporary:
         run(compile_image(Path(temporary), [ROOT / "Core/Src/stm32g4xx_it.c",
-            Path(__file__).with_name("core_irq_model.c")], ["PLATFORM_MODEL_CORE_IRQ"]))
+            Path(__file__).resolve().parent / 'core_irq_model.c'], ["PLATFORM_MODEL_CORE_IRQ"]))
     with tempfile.TemporaryDirectory(prefix="g431-run-core-irq-") as temporary:
         run(compile_image(Path(temporary), [ROOT / "Core/Src/stm32g4xx_it.c",
-            Path(__file__).with_name("core_irq_model.c")], ["PLATFORM_MODEL_CORE_IRQ",
+            Path(__file__).resolve().parent / 'core_irq_model.c'], ["PLATFORM_MODEL_CORE_IRQ",
             "BLDC_G431_RUNTIME_ENTRY", "BLDC_G431_FINITE_RUN"]), runtime=True)
     with tempfile.TemporaryDirectory(prefix="g431-rtos-core-irq-") as temporary:
         run(compile_image(Path(temporary), [ROOT / "Core/Src/stm32g4xx_it.c",
-            Path(__file__).with_name("core_irq_model.c")], ["PLATFORM_MODEL_CORE_IRQ",
+            Path(__file__).resolve().parent / 'core_irq_model.c'], ["PLATFORM_MODEL_CORE_IRQ",
             "BLDC_G431_RUNTIME_ENTRY", "BLDC_G431_FINITE_RUN", "BLDC_G431_FREERTOS"]),
             runtime=True, rtos=True)

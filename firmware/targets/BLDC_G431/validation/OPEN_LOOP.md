@@ -8,7 +8,7 @@
 
 使用现有 Keil Target `BLDC_control V1`。`target_validation.c` 增加单次开环命令，
 旧命令、20 字节邮箱和原诊断快照布局保持兼容，不增加第四个 Target。
-纯 C 的 `firmware/app/motor/voltage_open_loop.c` 只生成电压与 duty 意图，
+纯 C 的 `firmware/control/commissioning/voltage_open_loop.c` 只生成电压与 duty 意图，
 台架负责实际 staging、使能、独立期限及故障关断。它不是另一个长期电机应用。
 
 复用 20 kHz PWM、10 kHz 同步提交、硬件 Break、TIM6 独立守卫、母线采样与 SSI。
@@ -73,7 +73,7 @@ ADC 不再运行时，该快照可能停留在旧状态；独立 `g_target_valid
 ## 离线检查与工具
 
 ```powershell
-.\.venv\Scripts\python.exe -B -X utf8 firmware/app/motor/tests/verify_voltage_open_loop.py
+.\.venv\Scripts\python.exe -B -X utf8 firmware/control/commissioning/tests/verify_voltage_open_loop.py
 .\.venv\Scripts\python.exe -B -X utf8 firmware/targets/BLDC_G431/validation/tests/verify_model.py
 .\.venv\Scripts\python.exe -B -X utf8 firmware/targets/BLDC_G431/validation/tests/verify_open_loop_tool.py
 ```

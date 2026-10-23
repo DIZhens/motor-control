@@ -1,50 +1,26 @@
-# firmware
+# Firmware
 
-MCU 电机控制固件。
-
-## 实现边界
-
-G431 的正式工程只有 `BLDC_G431_Run`，装配公共 Motor / ControlRuntime 的有限空载配置、自研协议与原生静态FreeRTOS；当前镜像已完成一次正向启停调速。旧UART控制基线的正反启停及独立时限证据仍绑定旧镜像。观察、计时与旧台架保留在独立验证工程，共享 Platform、Motor 与控制算法，不复制业务实现。独立电流精度、故障恢复与持续运行仍未完成。公共 HCC 已定义不等于全部 Target 已完成实现或实机验收；各 Target 验收结论由对应验证入口维护。
-
-| 区域 | 职责与当前入口 | 验证或实现边界 |
-| --- | --- | --- |
-| `platform_contract/` | 实时电流/驱动、位置、母线、ControlTime 和可选 Hardware Trip 的能力合同 | 逐个 Target 核对实现、失败语义与物理验收 |
-| `targets/BLDC_G431/` | 正式 Run 装配、Platform、独立验证工程与工具 | [G431 验证结果与剩余门槛](targets/BLDC_G431/VALIDATION.md) |
-| `targets/ODRIVE_V36_405_M0/` | Platform 与功率关闭观测入口 | [F405 M0 说明](targets/ODRIVE_V36_405_M0/README.md)；不属于当前 V1 同功能验收 |
-| `app/` | Motor生命周期、实时控制链、协议编解码、后台交接与静态任务 | 模型与实物分别验收，故障恢复尚未实现 |
-
-公共应用使用 HCC，不直接依赖某一 Target 的 HAL、调试邮箱或保护注入命令。
-两板验证结果互不替代；模型、静态检查、目标编译和实物验证分别记录。
-Motor 内部有限静态定向核心及其尚未装配的执行边界见 [Motor 说明](app/motor/README.md)。
-协议无关ticket/Completion、参数生命周期和观测发布的当前边界见
-[SystemRuntime说明](app/system_runtime/README.md)。
-
-自研UART协议按纯Codec、实时交接、RTOS启动、UART DMA及事务逐项集成。Run提供七个对象、请求应答及Telemetry/Event，50/250Hz名义通信和一次协议控制的有限运动已有实物证据；500Hz未达原<1%门槛，按250Hz完成本阶段通信验收。旧VOFA不进入正式Run。调度与中断适配属于Target，Codec/Server不依赖RTOS，FOC保持硬件同步执行。长期边界见[总体架构](../ARCHITECTURE.md)，唯一Wire Contract见[Core Protocol V1](../interface/CORE_PROTOCOL_V1.md)。
-
-控制基线使用 G431、一台电机和 MT6701 的 FOC 电流内环与速度外环，以 UART 对接现成 VOFA 工具。正式构建、验证工程及限制见 [G431 runtime](targets/BLDC_G431/runtime/README.md)。CAN 实物接入、位置环、标准 Modbus / CANopen 栈和 F405 同功能验收在后续范围。
-
-## 长期结构
+公共算法和业务代码由具体 Target 的 Keil 工程直接引用，不复制到板级目录。
 
 ```text
 firmware/
-├── app/
-│   ├── motor/
-│   ├── communication/
-│   └── system_runtime/
-├── third_party/    原样供应源码及来源清单
-├── platform_contract/
-└── targets/
+├── control/       可移植算法；commissioning/ 保存独立试验算法
+├── motor/         Motor 生命周期、Snapshot 与正式 ControlRuntime
+├── platform/      跨 Target 的硬件能力公共头文件
+├── targets/       具体 MCU / 板卡工程、实现与验证
+└── third_party/   原样供应源码、许可和来源清单
 ```
 
-`app/` 保存与具体板卡尽量无关的 Firmware 业务与运行时。上图表达职责边界，目录和模块在有实际实现时建立，不要求先建全目录树。
+| 入口 | 阅读内容 |
+| --- | --- |
+| [control](control/README.md) | 电流换算后的校正、重构、FOC、PI、滤波及估计 |
+| [motor](motor/README.md) | Start / Update / Stop、反馈与实时状态所有权 |
+| [platform](platform/README.md) | 实时驱动、位置、母线、控制时间及可选 Trip 的物理语义 |
+| [G431](targets/BLDC_G431/README.md) | 正式 Run、Target Runtime/通信及独立 Validation |
+| [F405 M0](targets/ODRIVE_V36_405_M0/README.md) | 第二套 Platform 实现和功率关闭观测工程 |
 
-`platform_contract/` 保存当前 Control Profile 对硬件提出的 Hardware Capability Contract；它只定义公共能力语义，不包含任何具体 Target 的 HAL / Timer / ADC 实现。
+G431 的 SystemRuntime 和协议到设备的绑定目前随 G431 装配维护，分别位于该 Target 的 `runtime/` 和 `communication/`；F405 没有为目录对称预建后台任务或通信模块。
 
-`targets/<target>/` 保存某个确定 Target Configuration 的完整 CubeMX / Keil 工程和 `platform/` 实现。Target Configuration 由 MCU、功率级、相电流采样、位置源及静态时序/保护配置共同定义，不要求所有硬件位于同一块 PCB。
+可移植协议位于 [communication/protocol](../communication/protocol/README.md)，共享合同位于 [communication/spec](../communication/spec/README.md)。控制算法不依赖 HAL、RTOS 或协议；Motor 通过公共 Platform 能力运行，具体外设实现留在 Target。
 
-正式 Target 保留 `*.ioc`、`Core/`、`Drivers/`、`MDK-ARM/` 与 `platform/`；新增参与固件构建的源码要同步加入 Keil 工程并完成真实 Rebuild，具体规则见 [DEVELOPMENT.md](../DEVELOPMENT.md)。
-
-具体工程入口：
-
-- [BLDC_G431](targets/BLDC_G431/)：G431 自制板 Target；验收统一从 [VALIDATION.md](targets/BLDC_G431/VALIDATION.md) 进入。
-- [ODRIVE_V36_405_M0](targets/ODRIVE_V36_405_M0/README.md)：保留的 F405 M0 Target，独立记录实现与验收范围。
+G431 的构建与实测结论统一由 [Validation](targets/BLDC_G431/validation/README.md)记录。两板的编译、模型与实物结论分别验收，长期职责见[架构](../ARCHITECTURE.md)，工具链规则见[开发说明](../DEVELOPMENT.md)。

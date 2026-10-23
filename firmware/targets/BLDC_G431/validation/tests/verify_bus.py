@@ -16,25 +16,25 @@ ADC=0x50000000
 DMA=0x40020008
 cases=[]
 
-ioc=dict(line.split('=',1) for line in (ROOT/'BLDC_control V1.ioc').read_text(encoding='utf-8').splitlines() if '=' in line)
+ioc=dict(line.split('=',1) for line in (ROOT / 'BLDC_control V1.ioc').read_text(encoding='utf-8').splitlines() if '=' in line)
 for key,value in {'Instance':'DMA1_Channel1','Mode':'DMA_NORMAL','MemInc':'DMA_MINC_ENABLE',
     'PeriphDataAlignment':'DMA_PDATAALIGN_HALFWORD','MemDataAlignment':'DMA_MDATAALIGN_HALFWORD'}.items():
     assert ioc['Dma.ADC1.0.'+key]==value,key
 assert ioc['ADC1.NbrOfConversion']=='3' and ioc['ADC1.EOCSelection']=='ADC_EOC_SEQ_CONV'
 assert ioc['NVIC.DMA1_Channel1_IRQn']==ioc['NVIC.ADC1_2_IRQn'] and ioc['NVIC.PriorityGroup']=='NVIC_PRIORITYGROUP_4'
-for target in ET.parse(ROOT/'MDK-ARM/BLDC_G431_Validation.uvprojx').findall('.//Target'):
+for target in ET.parse(ROOT / 'MDK-ARM/BLDC_G431_Validation.uvprojx').findall('.//Target'):
     assert len([f for f in target.findall('.//File') if f.findtext('FileName')=='dma.c'])==1
 
 with tempfile.TemporaryDirectory(prefix='g431-bus-model-') as directory:
     temp=Path(directory);scatter=temp/'bus.sct'
     scatter.write_text('LR_IROM1 0x08000000 0x20000 { ER_IROM1 0x08000000 0x20000 { .ANY (+RO) } RW_IRAM1 0x20000000 0x8000 { .ANY (+RW +ZI) } }',encoding='utf-8')
-    settings=ET.parse(ROOT/'MDK-ARM/BLDC_G431_Validation.uvprojx').find('.//Cads/VariousControls')
-    command=[str(COMPILER/'armcc.exe'),'--cpu=Cortex-M4.fp','--c99','-O3','--split_sections','-g','-I',str(ROOT/'platform')]
+    settings=ET.parse(ROOT / 'MDK-ARM/BLDC_G431_Validation.uvprojx').find('.//Cads/VariousControls')
+    command=[str(COMPILER/'armcc.exe'),'--cpu=Cortex-M4.fp','--c99','-O3','--split_sections','-g','-I',str(ROOT / 'platform')]
     for include in settings.findtext('IncludePath').split(';'):
-        command+=['-I',str((ROOT/'MDK-ARM'/include.replace('\\','/')).resolve())]
+        command+=['-I',str((ROOT / 'MDK-ARM'/include.replace('\\','/')).resolve())]
     command+=['-D'+item for item in settings.findtext('Define').split(',')]
     objects=[]
-    for source in [ROOT/'validation/tests/bus_model.c',ROOT/'platform/bus_observation.c']:
+    for source in [ROOT / 'validation/tests/bus_model.c',ROOT / 'platform/bus_observation.c']:
         obj=temp/(source.stem+'.o');p=subprocess.run(command+['-c',str(source),'-o',str(obj)],capture_output=True,text=True)
         assert p.returncode==0 and 'warning' not in p.stderr.lower(),p.stderr
         objects.append(str(obj))

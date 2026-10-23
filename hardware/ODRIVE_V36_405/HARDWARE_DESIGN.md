@@ -515,7 +515,7 @@ independent gate-enable input
 | Maximum sampled current | 60 A | vendor claim only |
 | MOS rating | 60 V / 150 A | exact P/N unknown |
 | Current sensing | low-side, 1 mΩ, gain 20 | confirmed by schematic |
-| Encoder support | AS5600 / AS5047P / TLE5012B / MA730 / MT6701 / ABZ | physical interfaces exist; protocol success must be verified per firmware |
+| Encoder support | AS5600 / AS5047P / TLE5012B / MA730 / MT6701 / ABZ | physical interfaces exist; communication/protocol success must be verified per firmware |
 | ODrive compatibility | modified v0.5.1 / v0.5.6 binaries provided | firmware is board-specific modified build, not proof of official hardware equivalence |
 
 ---

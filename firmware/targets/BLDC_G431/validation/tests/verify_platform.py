@@ -35,7 +35,7 @@ STOP = 0x0801F000
 NEUTRAL = (2125, 2125, 2125)
 def physical_phase_channels():
     """从原始板卡网表和固定 LQFP48 引脚事实独立得到期望，不读取生产 C 赋值。"""
-    netlist = ROOT.parents[2] / "hardware/BLDC_G431/schematic/Netlist_Schematic1_2026-09-09.tel"
+    netlist = Path(__file__).resolve().parents[5] / 'hardware/BLDC_G431/schematic/Netlist_Schematic1_2026-09-09.tel'
     text = netlist.read_text(encoding="utf-8-sig")
     # ST CubeMX STM32G431C(6-8-B)Tx.xml：30/31/32=PA8/9/10，27/28/29=PB13/14/15。
     high = {30: 1, 31: 2, 32: 3}
@@ -62,18 +62,18 @@ def compile_image(directory, extra_sources=(), definitions=()):
         "LR_IROM1 0x08000000 0x00020000 {\n"
         " ER_IROM1 0x08000000 0x00020000 { .ANY (+RO) }\n"
         " RW_IRAM1 0x20000000 0x00008000 { .ANY (+RW +ZI) }\n}\n", encoding="utf-8")
-    settings = ET.parse(ROOT / "MDK-ARM/BLDC_G431_Validation.uvprojx").find(".//Cads/VariousControls")
+    settings = ET.parse(ROOT / 'MDK-ARM/BLDC_G431_Validation.uvprojx').find(".//Cads/VariousControls")
     command = [str(COMPILER / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3",
-               "--split_sections", "-g", "-I", str(ROOT / "platform"), "-I", str(ROOT / "runtime")]
+               "--split_sections", "-g", "-I", str(ROOT / 'platform'), "-I", str(ROOT / 'runtime')]
     for include in settings.findtext("IncludePath").split(";"):
-        command += ["-I", str((ROOT / "MDK-ARM" / include.replace("\\", "/")).resolve())]
+        command += ["-I", str((ROOT / 'MDK-ARM' / include.replace("\\", "/")).resolve())]
     command += ["-D" + item for item in settings.findtext("Define").split(",")]
     command += ["-D" + item for item in definitions]
     if 'BLDC_G431_FINITE_RUN' in definitions:
-        command += ['-I', str(ROOT.parents[1] / 'app/system_runtime')]
+        command += ['-I', str(ROOT / 'runtime')]
     objects = []
     # Compile the production translation unit unchanged; no stage/enable substitutes.
-    for source in [ROOT / "validation/tests/platform_model.c", ROOT / "platform/realtime_motor_io.c", *extra_sources]:
+    for source in [ROOT / 'validation/tests/platform_model.c', ROOT / 'platform/realtime_motor_io.c', *extra_sources]:
         obj = directory / (source.stem + ".o")
         result = subprocess.run(command + ["-c", str(source), "-o", str(obj)],
                                 capture_output=True, text=True)

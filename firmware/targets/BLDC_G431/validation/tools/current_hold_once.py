@@ -59,7 +59,7 @@ def prepare(build, output, gdb, expected=None):
     report = loop.prepare(build, output, gdb, expected)
     report["current_hold_layout"] = extra_layout(output/"artifacts", gdb, output)
     report["current_hold_schema"] = 1
-    report["current_hold_tool_sha256"] = loop.candidate.digest(Path(__file__))
+    report["current_hold_tool_sha256"] = loop.candidate.digest(Path(__file__).resolve().parent / 'current_hold_once.py')
     report["open_loop_tool_sha256"] = loop.candidate.digest(Path(loop.__file__))
     loop.common.save(output/"prepared.json", report)
     return report
@@ -73,7 +73,7 @@ class Session(loop.Session):
         frozen, _ = loop.load_prepared(prepared)
         require(frozen.get("current_hold_schema") == 1 and "current_hold_layout" in frozen,
             "旧候选没有电流环诊断；拒绝连接")
-        require(frozen["current_hold_tool_sha256"] == loop.candidate.digest(Path(__file__))
+        require(frozen["current_hold_tool_sha256"] == loop.candidate.digest(Path(__file__).resolve().parent / 'current_hold_once.py')
             and frozen["open_loop_tool_sha256"] == loop.candidate.digest(Path(loop.__file__)),
             "主机工具已改变，请重新离线冻结候选")
         # 父类仅复用身份读取，不以此占位值提交旋转命令。

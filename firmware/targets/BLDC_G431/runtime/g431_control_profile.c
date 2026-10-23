@@ -1,5 +1,5 @@
 #include "g431_control_profile.h"
-#include "cordic_math.h"
+#include "../platform/cordic_math.h"
 
 /* Target 装配持有后端上下文，其寿命覆盖 ControlRuntime；不成为可写参数接口。 */
 static G431CordicMath s_cordic_math;

@@ -1,0 +1,529 @@
+/* 用受控 HCC 替身执行正式 runtime / Motor / VOFA；无电气模型或 ST-Link。 */
+#if defined(BLDC_G431_FINITE_RUN)
+#include "target_runtime.h"
+#include "target_vofa.h"
+#else
+#include "target_observe_runtime.h"
+#endif
+#include "main.h"
+#include "tim.h"
+#include "motor.h"
+#include "control_runtime.h"
+#include "realtime_motor_io.h"
+#include "hardware_trip.h"
+#include "position_observation.h"
+#include "bus_observation.h"
+#include "cordic_math.h"
+#if defined(BLDC_G431_DIAGNOSTICS)
+#include "current_capture.h"
+#include "irq_timing.h"
+#include "controller_profile.h"
+#endif
+
+#include <stddef.h>
+
+uint32_t SystemCoreClock = 170000000U;
+TIM_HandleTypeDef htim6 = { TIM6 };
+uint32_t model_ms;
+uint32_t model_facts_ok = 1U;
+uint32_t model_facts_rate = 20000U;
+uint32_t model_facts_period = 2U;
+uint32_t model_bind_ok = 1U;
+uint32_t model_trip_bind_ok = 1U;
+uint32_t model_position_arm_ok = 1U;
+uint32_t model_bus_arm_ok = 1U;
+uint32_t model_io_arm_ok = 1U;
+uint32_t model_trip_arm_ok = 1U;
+uint32_t model_start_ok = 1U;
+uint32_t model_trip_available = 1U;
+uint32_t model_trip_active;
+uint32_t model_trip_causes;
+uint32_t model_bus_available = 1U;
+uint32_t model_bus_valid = 1U;
+uint32_t model_bus_age;
+uint32_t model_bus_future;
+float model_bus_voltage = 24.0f;
+/* 默认没有位置 publication；固定时间戳允许区分重复轮询与独立采集。 */
+uint32_t model_position_available;
+uint32_t model_position_valid = 1U;
+uint32_t model_position_referenced = 1U;
+uint32_t model_position_use_fixed_time = 1U;
+uint32_t model_position_age;
+uint32_t model_position_future;
+ControlTime model_position_time;
+float model_position_turns;
+uint32_t model_current_valid = 1U;
+uint32_t model_current_mask = PHASE_MASK_B | PHASE_MASK_C;
+float model_current_b;
+float model_current_c;
+uint32_t model_tick_cycles = 17000U;
+uint32_t model_current_time_step = 2U;
+uint32_t model_in_callback;
+uint32_t model_callback_count;
+uint32_t model_bind_count;
+uint32_t model_arm_count;
+uint32_t model_start_count;
+uint32_t model_safeoff_count;
+uint32_t model_stage_count;
+uint32_t model_enable_count;
+uint32_t model_rearm_count;
+uint32_t model_bus_read_count;
+uint32_t model_position_read_count;
+uint32_t model_trip_read_count;
+uint32_t model_notify_count;
+uint32_t model_cordic_ok = 1U;
+uint32_t model_cordic_runtime_ok = 1U;
+uint32_t model_cordic_phase_error;
+uint32_t model_cordic_init_count;
+uint32_t model_cordic_calls;
+uint32_t model_cordic_guard_after_call;
+uint32_t model_cordic_irq_after_call;
+uint32_t model_cordic_irq_slot;
+ControlTime model_control_time;
+
+const uint32_t model_motor_offsets[] = {
+    offsetof(Motor, state), offsetof(Motor, faults), offsetof(Motor, command_result),
+    offsetof(Motor, command_count), offsetof(Motor, target_velocity_rpm)
+};
+/* 由正式结构导出诊断偏移，测试不假设布局，也不为产品增加访问入口。 */
+#define CURRENT_OFFSET(member) (offsetof(ControlRuntime, current_measurement) \
+    + offsetof(CurrentMeasurement, member))
+const uint32_t model_current_offsets[] = {
+    CURRENT_OFFSET(state), CURRENT_OFFSET(failure), CURRENT_OFFSET(sample_count),
+    CURRENT_OFFSET(offset_a), CURRENT_OFFSET(mean_a),
+    CURRENT_OFFSET(output) + offsetof(CurrentMeasurementOutput, phase_a),
+    CURRENT_OFFSET(output) + offsetof(CurrentMeasurementOutput, alpha_a),
+    CURRENT_OFFSET(output) + offsetof(CurrentMeasurementOutput, beta_a),
+    CURRENT_OFFSET(output) + offsetof(CurrentMeasurementOutput, valid),
+    offsetof(ControlRuntime, current_zero_counter)
+};
+const uint32_t model_current_field_sizes[] = {
+    sizeof(CurrentMeasurementState), sizeof(CurrentMeasurementFailure), sizeof(bool)
+};
+/* 角度只从真实 Runtime 实例读取；测试参数不代表板卡装配标定。 */
+const uint32_t model_angle_offsets[] = {
+    offsetof(ControlRuntime, electrical_angle) + offsetof(ElectricalAngle, output)
+        + offsetof(ElectricalAngleOutput, electrical_turns),
+    offsetof(ControlRuntime, electrical_angle) + offsetof(ElectricalAngle, output)
+        + offsetof(ElectricalAngleOutput, sin_theta),
+    offsetof(ControlRuntime, electrical_angle) + offsetof(ElectricalAngle, output)
+        + offsetof(ElectricalAngleOutput, cos_theta),
+    offsetof(ControlRuntime, electrical_angle) + offsetof(ElectricalAngle, output)
+        + offsetof(ElectricalAngleOutput, valid),
+    offsetof(ControlRuntime, position_estimator) + offsetof(PositionEstimator, velocity_valid)
+};
+const uint32_t model_observation_counter_offset = offsetof(ControlRuntime, observation_counter);
+const uint32_t model_velocity_offset = offsetof(ControlRuntime, position_estimator)
+    + offsetof(PositionEstimator, velocity_rpm);
+#if defined(BLDC_G431_DIAGNOSTICS)
+const uint32_t model_capture_offsets[] = {
+    offsetof(ObserveCurrentCaptureResult, request_sequence),
+    offsetof(ObserveCurrentCaptureResult, state),
+    offsetof(ObserveCurrentCaptureResult, failure),
+    offsetof(ObserveCurrentCaptureResult, sample_count),
+    offsetof(ObserveCurrentCaptureResult, first_sample_time),
+    offsetof(ObserveCurrentCaptureResult, last_sample_time),
+    offsetof(ObserveCurrentCaptureResult, offset_b_a),
+    offsetof(ObserveCurrentCaptureResult, offset_c_a),
+    offsetof(ObserveCurrentCaptureResult, phase_b),
+    offsetof(ObserveCurrentCaptureResult, phase_c)
+};
+const uint32_t model_capture_field_sizes[] = {
+    sizeof(ObserveCurrentCaptureResult), sizeof(ObserveCurrentCaptureState),
+    sizeof(ObserveCurrentCaptureFailure)
+};
+const uint32_t model_compute_offsets[] = {
+    offsetof(ObserveComputeComparisonResult, request_sequence),
+    offsetof(ObserveComputeComparisonResult, state),
+    offsetof(ObserveComputeComparisonResult, failure),
+    offsetof(ObserveComputeComparisonResult, completed_steps),
+    offsetof(ObserveComputeComparisonResult, software) + offsetof(ObserveComputeProbeResult, cases),
+    sizeof(ObserveComputeProbeState), sizeof(ObserveComputeProbeFailure),
+    sizeof(ObserveComputeComparisonResult), sizeof(ObserveComputeProbeCaseResult),
+    offsetof(ObserveComputeComparisonResult, sweep_count),
+    offsetof(ObserveComputeComparisonResult, cordic) + offsetof(ObserveComputeProbeResult, cases),
+    offsetof(ObserveComputeComparisonResult, max_sine_error),
+    offsetof(ObserveComputeComparisonResult, schema_version)
+};
+const uint32_t model_compute_timing_offsets[] = {
+    offsetof(ObserveComputeProbeCaseResult, segments), sizeof(ObserveComputeProbeTiming),
+    offsetof(ObserveComputeProbeTiming, count), offsetof(ObserveComputeProbeTiming, clean_count),
+    offsetof(ObserveComputeProbeTiming, irq_entries)
+};
+const uint32_t model_controller_profile_layout[] = {
+    sizeof(ObserveControllerProfileResult), offsetof(ObserveControllerProfileResult, timing)
+};
+#endif
+/* 集成检查只读真实观察实例；不借用隔离试具的 RUN/标定状态。 */
+const uint32_t model_runtime_offsets[] = {
+    offsetof(ControlRuntime, phase),
+    offsetof(ControlRuntime, config) + offsetof(ControlRuntimeConfig, control)
+        + offsetof(ControlRuntimeControlConfig, enabled),
+    offsetof(ControlRuntime, config) + offsetof(ControlRuntimeConfig, control)
+        + offsetof(ControlRuntimeControlConfig, current_calibration_confirmed),
+    offsetof(ControlRuntime, config) + offsetof(ControlRuntimeConfig, control)
+        + offsetof(ControlRuntimeControlConfig, timing_confirmed),
+    offsetof(ControlRuntime, config) + offsetof(ControlRuntimeConfig, electrical_calibration_confirmed),
+    offsetof(ControlRuntime, current_time_available), offsetof(ControlRuntime, last_current_time),
+    offsetof(ControlRuntime, observation_counter)
+};
+#if defined(BLDC_G431_DIAGNOSTICS)
+const uint32_t model_stage_budget_layout[] = {
+    sizeof(G431StageBudgetResult), offsetof(G431StageBudgetResult, rows)
+};
+#endif
+ControlRuntime model_unpermitted_runtime;
+Motor model_unpermitted_motor;
+uint32_t model_unpermitted_init_ok;
+ControlRuntime model_angle_runtime;
+Motor model_angle_motor;
+uint32_t model_angle_init_ok;
+uint32_t model_angle_calibration_confirmed = 1U;
+uint32_t model_angle_pole_pairs = 7U;
+int32_t model_angle_direction = 1;
+float model_angle_offset = 0.125f;
+float model_angle_prediction_limit_s = 0.002f;
+uint32_t model_angle_faults;
+uint32_t model_angle_snapshot_id_valid;
+uint32_t model_angle_snapshot_iq_valid;
+static PhaseCurrentSampleReadyHandler s_sample_handler;
+static void *s_sample_context;
+static HardwareTripHandler s_trip_handler;
+static void *s_trip_context;
+
+uint32_t HAL_GetTick(void)
+{
+    return model_ms;
+}
+
+/* Target 集成替身只验证生命周期；真实寄存器协议由独立 cordic_math 模型覆盖。 */
+bool g431_cordic_math_init(G431CordicMath *context)
+{
+    model_cordic_init_count++;
+    context->initialized = model_cordic_ok != 0U;
+    return context->initialized;
+}
+
+bool g431_cordic_sincos(void *context, float turns, float *sine, float *cosine)
+{
+    G431CordicMath *math = context;
+    model_cordic_calls++;
+    if (model_cordic_guard_after_call == model_cordic_calls) {
+        g_target_runtime_guard_faults |= 4U;
+    }
+#if defined(BLDC_G431_DIAGNOSTICS)
+    if (model_cordic_irq_after_call == model_cordic_calls) {
+        g_target_runtime_irq_entries[model_cordic_irq_slot & 7U]++;
+    }
+#endif
+    if (!math->initialized || model_cordic_runtime_ok == 0U) {
+        return false;
+    }
+    if (model_cordic_phase_error != 0U) {
+        turns += 0.25f;
+        if (turns >= 1.0f) {
+            turns -= 1.0f;
+        }
+    }
+    return electrical_angle_sincos_software(NULL, turns, sine, cosine);
+}
+
+bool realtime_motor_io_get_facts(RealtimeMotorIoFacts *facts)
+{
+    if (model_facts_ok == 0U) {
+        return false;
+    }
+    facts->normal_voltage_utilization = 0.45f;
+    facts->control_time_ticks_per_second = model_facts_rate;
+    facts->fast_tick_period_ticks = model_facts_period;
+    return true;
+}
+
+bool realtime_motor_io_bind_sample_ready(PhaseCurrentSampleReadyHandler handler, void *context)
+{
+    model_bind_count++;
+    if (model_bind_ok == 0U) {
+        return false;
+    }
+    s_sample_handler = handler;
+    s_sample_context = context;
+    return true;
+}
+
+bool realtime_motor_io_arm(void)
+{
+    model_arm_count++;
+    return model_io_arm_ok != 0U;
+}
+
+bool realtime_motor_io_start_drive_timing(void)
+{
+    model_start_count++;
+    return model_start_ok != 0U;
+}
+
+void realtime_motor_io_safe_off(void)
+{
+    model_safeoff_count++;
+    TIM1->BDTR &= ~TIM_BDTR_MOE;
+}
+
+bool realtime_motor_io_stage_phase_duty(const PhaseDutyRequest *request)
+{
+    (void)request;
+    model_stage_count++;
+    return true;
+}
+
+/* 寄存器模型仅提供确定的旧锚点；真实cycle验收由实机诊断完成。 */
+void realtime_motor_io_stage_anchor(uint32_t *cycles, uint32_t *entry_count)
+{
+    *cycles = DWT->CYCCNT - 100U;
+    *entry_count = 4200U;
+}
+
+bool realtime_motor_io_power_enable(void)
+{
+    model_enable_count++;
+    TIM1->BDTR |= TIM_BDTR_MOE;
+    return true;
+}
+
+bool hardware_trip_bind(HardwareTripHandler handler, void *context)
+{
+    if (model_trip_bind_ok == 0U) {
+        return false;
+    }
+    s_trip_handler = handler;
+    s_trip_context = context;
+    return true;
+}
+
+bool hardware_trip_arm(void)
+{
+    return model_trip_arm_ok != 0U;
+}
+
+bool hardware_trip_get_snapshot(HardwareTripSnapshot *snapshot)
+{
+    model_trip_read_count++;
+    if (model_trip_available == 0U) {
+        return false;
+    }
+    snapshot->condition_active = model_trip_active != 0U;
+    snapshot->causes = model_trip_causes;
+    return true;
+}
+
+bool hardware_trip_rearm(void)
+{
+    model_rearm_count++;
+    return true;
+}
+
+bool position_observation_arm(void)
+{
+    return model_position_arm_ok != 0U;
+}
+
+PositionTopology position_observation_get_topology(void)
+{
+    return POSITION_TOPOLOGY_PERIODIC;
+}
+
+bool position_observation_get_latest(PositionObservation *observation)
+{
+    model_position_read_count++;
+    if (model_position_available == 0U) {
+        return false;
+    }
+    observation->mechanical_position_turns = model_position_turns;
+    observation->observation_time = (model_position_use_fixed_time != 0U)
+        ? model_position_time
+        : model_control_time - model_position_age + model_position_future;
+    observation->referenced = model_position_referenced != 0U;
+    observation->acquisition_valid = model_position_valid != 0U;
+    return true;
+}
+
+bool bus_observation_arm(void)
+{
+    return model_bus_arm_ok != 0U;
+}
+
+bool bus_observation_get_latest(BusObservation *observation)
+{
+    model_bus_read_count++;
+    if (model_bus_available == 0U) {
+        return false;
+    }
+    observation->voltage_v = model_bus_voltage;
+    observation->observation_time = model_control_time - model_bus_age + model_bus_future;
+    observation->acquisition_valid = model_bus_valid != 0U;
+    return true;
+}
+
+void model_start(void)
+{
+    target_runtime_start();
+#if defined(BLDC_G431_FINITE_RUN)
+    /* 旧ASCII命令仅作为本模型的输入夹具，不进入正式Run装配。 */
+    target_vofa_init();
+#endif
+}
+
+void model_current_without_permission(void)
+{
+    const ControlRuntimeConfig config = {
+        20000U, 2U, 10U, 100U, 100U, { 3000.0f, 0.01f },
+        { CURRENT_MEASUREMENT_PHASE_BC, 2048U, 0.10f, 0.05f }, 100U, 5.0f, false,
+        { 0U, 0, 0.0f, 0.0f, 0.0f }, false, { 0 }
+    };
+    PhaseCurrentObservation current = { 0 };
+    uint32_t tick;
+
+    motor_init(&model_unpermitted_motor);
+    motor_finish_boot(&model_unpermitted_motor);
+    model_unpermitted_init_ok = control_runtime_init(&model_unpermitted_runtime,
+        &model_unpermitted_motor, &config) ? 1U : 0U;
+    current.measured_phases = PHASE_MASK_B | PHASE_MASK_C;
+    current.acquisition_valid = true;
+    /* 位置新鲜、静止且功率关闭仍不代替装配方明确给出的无外部电流许可。 */
+    model_position_available = 1U;
+    model_position_use_fixed_time = 0U;
+    for (tick = 1U; tick <= 500U; tick++) {
+        model_control_time = tick * 2U;
+        current.observation_time = tick * 2U;
+        (void)control_runtime_step(&model_unpermitted_runtime, tick * 2U,
+            &current, true, 0U, NULL, false);
+    }
+}
+
+void model_angle_start(void)
+{
+    ControlRuntimeConfig config = {
+        20000U, 2U, 10U, 100U, 100U, { 3000.0f, 0.01f },
+        { CURRENT_MEASUREMENT_PHASE_BC, 2048U, 0.10f, 0.05f }, 100U, 5.0f, false,
+        { 0U, 0, 0.0f, 0.0f, 0.0f }, false, { 0 }
+    };
+
+    config.electrical_calibration_confirmed = model_angle_calibration_confirmed != 0U;
+    config.electrical_angle.pole_pairs = model_angle_pole_pairs;
+    config.electrical_angle.encoder_direction = model_angle_direction;
+    config.electrical_angle.electrical_offset_turns = model_angle_offset;
+    config.electrical_angle.max_prediction_time_s = model_angle_prediction_limit_s;
+    config.electrical_angle.max_velocity_rpm = 3000.0f;
+    motor_init(&model_angle_motor);
+    motor_finish_boot(&model_angle_motor);
+    model_angle_init_ok = control_runtime_init(&model_angle_runtime,
+        &model_angle_motor, &config) ? 1U : 0U;
+}
+
+void model_angle_sample(void)
+{
+    PhaseCurrentObservation current = { 0 };
+
+    model_control_time += model_current_time_step;
+    current.phase_b_a = model_current_b;
+    current.phase_c_a = model_current_c;
+    current.measured_phases = (PhaseMask)model_current_mask;
+    current.observation_time = model_control_time;
+    current.acquisition_valid = model_current_valid != 0U;
+    (void)control_runtime_step(&model_angle_runtime, model_control_time,
+        &current, true, model_angle_faults, NULL, false);
+}
+
+void model_angle_command_start(void)
+{
+    const MotorCommand command = { MOTOR_COMMAND_START_VELOCITY, 120.0f };
+    PhaseCurrentObservation current = { 0 };
+    MotorSnapshot snapshot;
+
+    model_control_time += 2U;
+    current.measured_phases = PHASE_MASK_B | PHASE_MASK_C;
+    current.observation_time = model_control_time;
+    current.acquisition_valid = true;
+    (void)control_runtime_step(&model_angle_runtime, model_control_time,
+        &current, true, 0U, &command, true);
+    control_runtime_snapshot(&model_angle_runtime, model_control_time, true, &snapshot);
+    model_angle_snapshot_id_valid = snapshot.id_valid ? 1U : 0U;
+    model_angle_snapshot_iq_valid = snapshot.iq_valid ? 1U : 0U;
+}
+
+void model_sample(void)
+{
+    PhaseCurrentObservation current = { 0 };
+#if defined(BLDC_G431_DIAGNOSTICS)
+    bool measure;
+    uint32_t timing_request;
+
+    /* 正式 ADC IRQ 入口包装不在此替身内，显式补上其单写计数槽。 */
+    g_target_runtime_irq_entries[0]++;
+#endif
+    DWT->CYCCNT += model_tick_cycles;
+#if defined(BLDC_G431_DIAGNOSTICS)
+    /* 主后台对照先完成，再接受同身份IRQ窗口，避免插桩统计与后台计时互相干扰。 */
+    timing_request = g_target_runtime_compute_result.state == OBSERVE_COMPUTE_PROBE_COMPLETE &&
+        g_target_runtime_compute_result.request_sequence == g_target_runtime_compute_request
+        ? g_target_runtime_compute_request : 0U;
+    measure = g_target_irq_timing_result.state == G431_IRQ_TIMING_ACTIVE ||
+        (timing_request != 0U && timing_request != g_target_irq_timing_result.request_sequence);
+    if (measure) {
+        g431_irq_timing_irq_enter(DWT->CYCCNT, timing_request,
+            target_runtime_timing_permitted());
+    }
+#endif
+    model_control_time += model_current_time_step;
+    current.phase_b_a = model_current_b;
+    current.phase_c_a = model_current_c;
+    current.measured_phases = (PhaseMask)model_current_mask;
+    current.observation_time = model_control_time;
+    current.acquisition_valid = model_current_valid != 0U;
+    if (s_sample_handler != NULL) {
+        model_in_callback = 1U;
+        model_callback_count++;
+#if defined(BLDC_G431_DIAGNOSTICS)
+        if (g_target_irq_timing_active != 0U) {
+            /* 用假DWT锚点补上未链接的Core/Platform包装，真实Observe边界来自正式Target。 */
+            g431_irq_timing_platform_enter(DWT->CYCCNT);
+            g431_irq_timing_consumer_enter(DWT->CYCCNT);
+        }
+#endif
+        s_sample_handler(s_sample_context, &current);
+#if defined(BLDC_G431_DIAGNOSTICS)
+        if (g_target_irq_timing_active != 0U) {
+            g431_irq_timing_consumer_exit(DWT->CYCCNT);
+        }
+#endif
+        model_in_callback = 0U;
+    }
+#if defined(BLDC_G431_DIAGNOSTICS)
+    if (measure) {
+        g431_irq_timing_irq_exit(DWT->CYCCNT, target_runtime_timing_permitted());
+    }
+#endif
+}
+
+void model_notify(void)
+{
+    if (s_trip_handler != NULL) {
+        model_notify_count++;
+        s_trip_handler(s_trip_context);
+    }
+}
+
+void model_service(void)
+{
+    target_runtime_service();
+#if defined(BLDC_G431_FINITE_RUN)
+    target_vofa_service(HAL_GetTick());
+#endif
+}
+
+void model_guard(void)
+{
+#if defined(BLDC_G431_DIAGNOSTICS)
+    g_target_runtime_irq_entries[1]++;
+#endif
+    target_runtime_guard_irq();
+}

@@ -12,7 +12,7 @@
 
 恢复工作时，从 `README.md` 找到目标模块入口，读取本文件，再用 `git status --short`、`git branch --show-current` 和 `git log -5 --format=full` 核对本地工作面；从最近的阶段检查点提交正文恢复目标、完成条件、已证明与未证明项及下一步，随后按需读取架构、接口与 Target 验证页。恢复不得依赖联网、PR 页面或历史讨论记录。
 
-可在仓库根目录用 PowerShell 7 运行 `pwsh -NoProfile -File .\tools\project_context.ps1`，集中显示上述 Git 信息和正式文档路径；脚本默认按自身位置定位仓库，也接受 `-RepositoryPath <目录>`。它只读本地信息，以 UTF-8 输出，不修改索引、不连接设备或网络，也不打印整份架构文档。
+可在仓库根目录用 PowerShell 7 运行 `pwsh -NoProfile -File .\project_context.ps1`，集中显示上述 Git 信息和正式文档路径；脚本默认按自身位置定位仓库，也接受 `-RepositoryPath <目录>`。它只读本地信息，以 UTF-8 输出，不修改索引、不连接设备或网络，也不打印整份架构文档。
 
 ## 1. 文档职责
 
@@ -29,7 +29,7 @@ DEVELOPMENT.md
 hardware/*/HARDWARE_BASELINE.md
     物理硬件事实
 
-interface/
+communication/spec/
     Firmware / Host 共享的 Device / Protocol Contract
 
 各主要目录 README.md
@@ -85,7 +85,7 @@ PR
 
 ### 2.2 公共合同的责任边界
 
-长期系统不变量以 `ARCHITECTURE.md` 为准；硬件能力 API 以 `firmware/platform_contract/` 为准；控制算法 API 随 `control/` 中的实现维护；Firmware 与 Host 的设备和协议语义以 `interface/` 为准。私有调试接口不自动升级为公共合同。
+长期系统不变量以 `ARCHITECTURE.md` 为准；硬件能力 API 以 `firmware/platform/` 为准；控制算法 API 随 `firmware/control/` 中的实现维护；Firmware 与 Host 的设备和协议语义以 `communication/spec/` 为准。私有调试接口不自动升级为公共合同。
 
 合同明确单位、状态、时序、所有权、失败与安全语义。合同已定义不等于实现完成，编译通过也不等于实机验收通过；未冻结的草案不得作为稳定接口承诺。
 
@@ -160,7 +160,7 @@ Git 提交、推送、合并按当前任务的明确授权执行；没有提交�
 
 优先复用已有自动测试，例如：
 
-- `control/` 的 host-side algorithm test；
+- `firmware/control/` 的 host-side algorithm test；
 - Protocol codec / test vector；
 - Host mock/fake tests；
 - UART HIL；
@@ -300,7 +300,7 @@ Keil Download / Debug
 
 ## 6. Host 工具链与开发规则
 
-控制基线使用现成 VOFA 工具；自研协议阶段正式Run使用`host/protocol/`的Python客户端、连续记录和压力入口，VOFA保留在独立验证构建，二者不混发格式或同时占用串口。`host/`保存操作与工具说明，`interface/`保存双方共享的命令、单位和状态语义。暂不实现 Qt Host，也不为其预建空模块。
+控制基线使用现成 VOFA 工具；自研协议阶段正式Run使用`communication/host/protocol/`的Python客户端、连续记录和压力入口，VOFA保留在独立验证构建，二者不混发格式或同时占用串口。`communication/host/`保存操作与工具说明，`communication/spec/`保存双方共享的命令、单位和状态语义。暂不实现 Qt Host，也不为其预建空模块。
 
 后续第一方 Qt Host 的首选技术基线：
 
@@ -312,18 +312,18 @@ pyqtgraph
 pytest
 ```
 
-Host 依赖与虚拟环境由 `host/pyproject.toml` 等 Host 自身工程文件管理，不把 Python/Qt 依赖扩散到 Firmware。
+当前 Python 验证依赖由根目录 `requirements-dev.txt` 和本地 `.venv/` 管理；未来独立 Host 工程的依赖随其工程文件维护，不把 Python/Qt 依赖扩散到 Firmware。
 
 Host 实现遵守以下规则：
 
 - GUI 只通过 Host Device API 使用设备，不直接拥有串口、CAN 或协议状态机；
 - Protocol Client 不依赖具体 Qt Widget；
 - Transport 不理解 Start、Target、Fault、Telemetry 等 Motor 业务语义；
-- `interface/` 是 Firmware 与 Host 的共同事实来源，Host 不私自复制一套不同的枚举、单位或状态语义；
+- `communication/spec/` 是 Firmware 与 Host 的共同事实来源，Host 不私自复制一套不同的枚举、单位或状态语义；
 - Device API、Protocol、Transport 和主要业务行为优先做到可 headless / mock / pytest 验证；
 - GUI 外观和交互中必须人工判断的部分再交给用户确认；
 - 不为了“工程化”预建 Manager、Repository、插件系统、通用 Dashboard 编辑器、通用协议编辑器或无真实职责的框架层；
-- Host 内部设计可按实际需求调整，但应保持 `ARCHITECTURE.md` 与 `interface/` 的长期边界。
+- Host 内部设计可按实际需求调整，但应保持 `ARCHITECTURE.md` 与 `communication/spec/` 的长期边界。
 
 第一方 Python 基础风格：
 
@@ -364,7 +364,7 @@ Host 实现遵守以下规则：
 
 ## 9. Firmware 第一方 C 代码风格
 
-Firmware 与 `control/` 第一方 C 代码采用紧凑、主流、便于审查的风格。注释规则继续沿用旧仓库已经形成的写作方式。
+Firmware 与 `firmware/control/` 第一方 C 代码采用紧凑、主流、便于审查的风格。注释规则继续沿用旧仓库已经形成的写作方式。
 
 ### 9.1 基础格式
 

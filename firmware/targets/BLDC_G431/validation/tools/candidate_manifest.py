@@ -33,11 +33,11 @@ def source_paths(target):
     paths = {project, *target.glob("*.ioc")}
     for member in ET.parse(project).findall(".//FilePath"):
         paths.add((project.parent / member.text.replace("\\", "/")).resolve())
-    for directory in [target / name for name in ["Core", "Drivers", "platform"]] + [target.parents[1] / "platform_contract"]:
+    for directory in ([target / name for name in ["Core", "Drivers", "platform", "runtime", "communication", "validation"]]
+                      + [target.parents[1] / name for name in ["platform", "motor", "control"]]):
         paths.update(directory.rglob("*.h"))
-    paths.update((target / "validation").glob("*.h"))
-    paths.update((target / "validation/tools").glob("*.py"))
-    # Relative paths may include ../../platform_contract, whose source is shared.
+    paths.update((target / "validation/tools").rglob("*.py"))
+    # 公共头文件保留相对Target的位置，迁入子目录的诊断头和工具同样参与冻结。
     import os
     return {Path(os.path.relpath(path, target)).as_posix(): path for path in paths}
 

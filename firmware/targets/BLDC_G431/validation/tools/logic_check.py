@@ -15,7 +15,7 @@ import subprocess
 import time
 
 TARGET = Path(__file__).resolve().parents[2]
-BUILD = TARGET / "MDK-ARM/BLDC_control V1"
+BUILD = TARGET / 'MDK-ARM/BLDC_control V1'
 CLI = Path(r"D:\cube\cubeclt\STM32CubeCLT_1.22.0\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe")
 GDB = CLI.parents[2] / "GNU-tools-for-STM32/bin/arm-none-eabi-gdb.exe"
 EXPECTED = "29ab28611691dd220624708ecf826be9ea31f4c82753418dcc6be64d8f5facff"
@@ -69,7 +69,7 @@ def verify_source_freeze(output):
         candidate, _ = candidate_manifest.load(CANDIDATE, TARGET)
         files = candidate["source_files"]
     else:
-        freeze = json.loads((TARGET / "validation/local-evidence/20261017-duty-check/source-freeze.json").read_text())
+        freeze = json.loads((TARGET / 'validation/local-evidence/20261017-duty-check/source-freeze.json').read_text())
         files = freeze["files"]
         for name, expected in files.items():
             require(hashlib.sha256((TARGET / name).read_bytes()).hexdigest() == expected,
@@ -124,10 +124,10 @@ class Session:
             candidate, selected_build = candidate_manifest.load(CANDIDATE, TARGET)
             require(selected_build == BUILD and candidate["files"]["BLDC_control V1.hex"] == EXPECTED,
                     "Candidate selection changed")
-        require(hashlib.sha256((BUILD / "BLDC_control V1.hex").read_bytes()).hexdigest() == EXPECTED,
+        require(hashlib.sha256((BUILD / 'BLDC_control V1.hex').read_bytes()).hexdigest() == EXPECTED,
                 "Selected HEX is not the reviewed probe candidate")
         self.layout = offline_layout(BUILD, GDB, self.out / "layout-gdb.log")
-        manifest = candidate or json.loads((TARGET / "validation/local-evidence/20261015-protection-probe/BUILD_MANIFEST.json").read_text())
+        manifest = candidate or json.loads((TARGET / 'validation/local-evidence/20261015-protection-probe/BUILD_MANIFEST.json').read_text())
         for name in ["BLDC_control V1.axf", "BLDC_control V1.map"]:
             require(hashlib.sha256((BUILD / name).read_bytes()).hexdigest() == manifest["files"][name].lower(),
                     "AXF/MAP differs from reviewed build")
@@ -143,7 +143,7 @@ class Session:
                 require(self.layout[name] == manifest["layout"][name], "Candidate layout differs: " + name)
         save(self.out / "layout.json", self.layout)
         import candidate_manifest
-        image = candidate_manifest.read_hex(BUILD / "BLDC_control V1.hex")
+        image = candidate_manifest.read_hex(BUILD / 'BLDC_control V1.hex')
         start, end = min(image), max(image) + 1
         require(0x08000000 <= start < end <= 0x08020000, "Unexpected Flash range")
         flash = self.upload("identity", [("flash", start, end - start)])["flash"]

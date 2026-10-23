@@ -3,7 +3,7 @@
 本流程验证 `realtime_motor_io_stage_phase_duty()` 对下一确定更新边界的承诺，
 覆盖真实 Platform 的提交、使能与关断。当前采用下述 20 / 10 / 1 kHz 配置；
 `main()` 的 SysInit 用户区在时钟初始化后开启 Flash 预取。
-当前候选与验收结果统一维护于 [VALIDATION.md](../VALIDATION.md)，
+当前候选与验收结果统一维护于 [VALIDATION.md](README.md)，
 本页保存机制、复用命令及限制，不维护另一套阶段状态。
 
 ## 20 / 10 / 1 kHz 时序
@@ -162,7 +162,7 @@ OC4REF 上升沿触发 ADC1/2 injected conversion。正常回调在峰值后下�
   才确认 preload 已跨过对应谷底，不能仅凭“已经调用过 stage”认定可使能。
 
 UDIS 阻止 preload → active 更新，不停止计数器；PRIMASK 防软件交错，不能替代硬件 UDIS。
-依据 [ST RM0440：Advanced-control timers、Center-aligned mode 与 TIMx_CR1 UDIS](https://www.st.com/resource/en/reference_manual/rm0440-stm32g4-series-advanced-armbased-32bit-mcus-stmicroelectronics.pdf)。
+依据 [ST RM0440：Advanced-firmware/control timers、Center-aligned mode 与 TIMx_CR1 UDIS](https://www.st.com/resource/en/reference_manual/rm0440-stm32g4-series-advanced-armbased-32bit-mcus-stmicroelectronics.pdf)。
 
 1700 counts 是当前 Platform 的保守软件策略，不是定时器强制的最小预留。实现要求整个
 三相事务在该线以前完成，包含 UDIS 恢复后的复核；并非只要求事务开始时还剩 10 µs。
@@ -284,7 +284,7 @@ Platform 公共合同、保护条件及截止未因此放宽。
 ## 最终候选与结果入口
 
 `8b7fc787…` 的五种功率关闭时序、普通 STAGE_ONLY 及 30% / 70% 单次 PWM 均已完成
-针对性验证；完整身份、计数、读数与限制只在 [当前验收表](../VALIDATION.md#当前验收2026-10-18)维护。
+针对性验证；完整身份、计数、读数与限制只在 [当前验收表](README.md#历史基础台架验收2026-10-18)维护。
 当前取消用例第二次返回 CNT=1727，接近截止；顺序读数不是严格余量，不能外推未来算法预算。
 当前候选没有重做三来源带功率 Break；旧保护注入与恢复仍归属原 `29AB2861…`。
 
@@ -303,12 +303,12 @@ Platform 公共合同、保护条件及截止未因此放宽。
 
 | 本地目录 | 保存内容 |
 | --- | --- |
-| [20261018-pwm-deadline](local-evidence/20261018-pwm-deadline/) | 最初离线修复与候选准备 |
-| [20261018-timing-probe](local-evidence/20261018-timing-probe/) | 最初用例与正常提交失败候选；含 revision-07 收尾 |
-| [20261018-timing-path](local-evidence/20261018-timing-path/) | 分段定位与优化；06-fixed-rank 为 e8 候选 |
-| [20261018-stage-path](local-evidence/20261018-stage-path/) | 普通 STAGE_ONLY 的独立路径记录 |
-| [20261018-powered-pwm](local-evidence/20261018-powered-pwm/) | 普通请求修订与最终 03-early-dispatch 候选、实测 |
-| [docs-before-cleanup](local-evidence/20261018-powered-pwm/docs-before-cleanup/) | 两份收口前原文，保留逐轮历史数值与限制 |
+| [20261018-pwm-deadline](local-evidence/20261018-pwm-deadline) | 最初离线修复与候选准备 |
+| [20261018-timing-probe](local-evidence/20261018-timing-probe) | 最初用例与正常提交失败候选；含 revision-07 收尾 |
+| [20261018-timing-path](local-evidence/20261018-timing-path) | 分段定位与优化；06-fixed-rank 为 e8 候选 |
+| [20261018-stage-path](local-evidence/20261018-stage-path) | 普通 STAGE_ONLY 的独立路径记录 |
+| [20261018-powered-pwm](local-evidence/20261018-powered-pwm) | 普通请求修订与最终 03-early-dispatch 候选、实测 |
+| [docs-before-cleanup](local-evidence/20261018-powered-pwm/docs-before-cleanup) | 两份收口前原文，保留逐轮历史数值与限制 |
 
 每候选保存独立 HEX/AXF/MAP、构建、源码/工具身份和实测，不转移证据归属。
-早期硬件与保护历史继续见 [COMMISSIONING.md](../COMMISSIONING.md)，原证据不删除、不覆盖。
+早期硬件与保护历史继续见 [COMMISSIONING.md](history/first-board-commissioning.md)，原证据不删除、不覆盖。

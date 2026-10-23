@@ -53,7 +53,7 @@ M1 的六路输入和 AUX 两路只配置为 GPIO LOW，不提供相应功能。
 完整链接的 MAP 必须保留 stage_phase_duty、power_enable、safe_off 和截止关断路径。
 配置与工程成员可以重复静态核对（Python 标准库，无额外依赖）：
 
-    python firmware/targets/ODRIVE_V36_405_M0/verify_target.py
+    python firmware/targets/ODRIVE_V36_405_M0/validation/tools/verify_target.py
 
 后续 L1 分别核对持续 20 kHz 采样、三项时间戳、六路 EG2134 输入及六个 MOS Gate 的关断；
 之后才安排限压限流条件下的 L2。当前没有 powered L1/L2 或 Hardware Trip PASS。

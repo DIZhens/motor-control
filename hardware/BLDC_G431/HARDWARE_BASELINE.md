@@ -204,8 +204,8 @@ RDP      未修改
 | 结束后的软件/寄存器证据 | 共 14 次独立短脉冲；各次成功完成后核对 MOE=0、六路输入 LOW、测试计时停止、key 消费、保护无故障及无重放。计数不是 Gate 精确关断延迟测量 |
 | 采样与逻辑保护诊断 | 无功率连续采样、软件截止/ADC IRQ 丢失及 Trip 通知/恢复诊断有独立通过记录，不替代真实带功率保护验收 |
 
-原始阶段记录及每轮证据说明见 [首板实物调试记录](../../firmware/targets/BLDC_G431/COMMISSIONING.md)；
-当前操作步骤与状态表见 [台架验证](../../firmware/targets/BLDC_G431/VALIDATION.md)。
+原始阶段记录及每轮证据说明见 [首板实物调试记录](../../firmware/targets/BLDC_G431/validation/history/first-board-commissioning.md)；
+当前操作步骤与状态表见 [台架验证](../../firmware/targets/BLDC_G431/validation/README.md)。
 HARDWARE_BASELINE 保留长期事实与当前边界，不继续逐条堆积操作流水。
 
 以下能力仍未完成实机资格化：
