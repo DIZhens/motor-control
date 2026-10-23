@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G431xx,BLDC_G431_RUNTIME_ENTRY,BLDC_G431_FINITE_RUN,BLDC_G431_FREERTOS</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../runtime;../../../app/motor;../../../../protocol/uart_v1;../../../../protocol/common;../../../app/communication;../../../../protocol/ports;../../../app/system_runtime;../../../../control;..\..\..\third_party\FreeRTOS\Source\include;..\..\..\third_party\FreeRTOS\Source\portable\RVDS\ARM_CM4F</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../runtime;../../../app/motor;../../../../protocol/uart_v1;../../../../protocol/can_v1;../../../../protocol/common;../../../app/communication;../../../../protocol/ports;../../../app/system_runtime;../../../../control;..\..\..\third_party\FreeRTOS\Source\include;..\..\..\third_party\FreeRTOS\Source\portable\RVDS\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -759,6 +759,21 @@
               <FilePath>../runtime/cordic_math.c</FilePath>
             </File>
             <File>
+              <FileName>target_communication.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/target_communication.c</FilePath>
+            </File>
+            <File>
+              <FileName>target_can_server.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/target_can_server.c</FilePath>
+            </File>
+            <File>
+              <FileName>fdcan_frame_transport.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/fdcan_frame_transport.c</FilePath>
+            </File>
+            <File>
               <FileName>target_system_runtime.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\runtime\target_system_runtime.c</FilePath>
@@ -807,6 +822,21 @@
               <FileName>core_server.c</FileName>
               <FileType>1</FileType>
               <FilePath>../../../../protocol/uart_v1/core_server.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Protocol/CAN V1</GroupName>
+          <Files>
+            <File>
+              <FileName>can_codec.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../../../../protocol/can_v1/can_codec.c</FilePath>
+            </File>
+            <File>
+              <FileName>can_server.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../../../../protocol/can_v1/can_server.c</FilePath>
             </File>
           </Files>
         </Group>

@@ -1,3 +1,5 @@
+#include "target_communication_config.h"
+#if BLDC_G431_COMMUNICATION == BLDC_G431_COMMUNICATION_UART_V1
 #include "target_core_server.h"
 #include "target_runtime.h"
 #include "system_runtime.h"
@@ -64,3 +66,4 @@ CoreResult core_server_port_read_object(uint16_t id, CoreObject *value)
     c->telemetry_overwrites = g_system_runtime_status.telemetry_overwrites;
     return CORE_RESULT_OK;
 }
+#endif

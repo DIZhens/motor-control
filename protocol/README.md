@@ -24,8 +24,10 @@ Firmware的`motor_node_binding.c`负责与原Runtime交接转换；协议只拥�
 G431的`target_motor_node_binding.c`提供本机publication/提交/关断连接，
 `target_core_server.c`保留UART专属统计和静态服务装配。
 
-当前实际Frontend仍为UART。CAN纯C实现使用同一Profile与Device Port，不共享COBS/Header；
-已完成下述离线模型，FDCAN控制器、调度与实际总线能力须各自验证。
+正式Run默认UART；同一Target可通过构建宏静态选择CAN，具体配置见
+[Target集成合同](../firmware/targets/BLDC_G431/runtime/RTOS_INTEGRATION.md#静态链路选择)。
+CAN使用同一Profile与Device Port，不共享COBS/Header。已完成双构建和下述离线模型，
+FDCAN控制器、实际调度与外部总线能力须各自验证。
 
 ## CAN编解码与事务模型
 

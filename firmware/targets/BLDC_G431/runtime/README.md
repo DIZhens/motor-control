@@ -2,6 +2,8 @@
 
 `BLDC_G431_Run` 是日常开发的正式入口，装配公共 Motor / ControlRuntime、Platform 和
 原生静态FreeRTOS后台。正式Run关闭旧UART/VOFA入口，使用Core Protocol V1。
+默认UART；同一Target可构建为CAN，见[静态链路选择](RTOS_INTEGRATION.md#静态链路选择)。
+两种构建只初始化选中的硬件/Server/通知，仍只有一个Communication任务。
 USART1以460800/8N1接入RX Circular DMA及单帧TX DMA；Communication唯一持有Codec、
 Session/事务Server，提供对象读写、完整命令应答及Telemetry/Event。无功率50/250Hz遥测与
 每秒状态请求通过，按250Hz完成本阶段通信验收；500Hz损失1.92%仍未通过原<1%门槛，

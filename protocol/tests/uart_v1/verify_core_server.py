@@ -444,6 +444,7 @@ def main():
                 includes += [ROOT/'firmware/app/communication',ROOT/'firmware/app/motor',ROOT/'firmware/app/system_runtime']
             for include in includes:command+=['-I',include]
             if source.name in ('target_core_server.c','target_core_mapping_model.c'):
+                command+=['-DBLDC_G431_COMMUNICATION=1']
                 command+=['-DBLDC_G431_FINITE_RUN','-DSTM32G431xx','-DUSE_HAL_DRIVER']
                 for include in [target/'runtime',target/'Core/Inc',ROOT/'firmware/platform_contract',
                     target/'Drivers/CMSIS/Include',target/'Drivers/CMSIS/Device/ST/STM32G4xx/Include',

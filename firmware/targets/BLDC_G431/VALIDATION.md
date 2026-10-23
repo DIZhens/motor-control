@@ -39,6 +39,12 @@ UART统计。Codec 12组、Server/Client及真实绑定36组、实时交接19组
 Run全量构建零错误零警告，Flash/RAM与P2相同；可装载内容仅build ID的8字节改变。
 此时CAN尚未链接正式Run，控制器、内部回环和实物均未验证；旧实物证据不据此改写。
 
+[P4双静态构建](validation/evidence/protocol-can/p4.json)在同一Run选择UART或CAN；两个Profile
+均全量构建零错误零警告，最终恢复UART。链接检查证明未选硬件句柄/Server/缓冲区及拒绝占位
+均移除。真实HAL帧端口9组、UART DMA 11组、UART Server 36组及RTOS模型通过。
+UART Flash/RAM为66664/21088 B，CAN为60504/17792 B；任务栈分配未改。
+500 kbit/s、过滤器及恢复流程已有离线证据，尚无FDCAN控制器内部回环、实物调度或外部总线证据。
+
 ## 当前能力与证据矩阵
 
 | 能力 | 已有证据 | 当前限制 |
