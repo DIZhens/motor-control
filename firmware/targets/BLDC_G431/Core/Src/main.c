@@ -22,19 +22,19 @@
 #include "comp.h"
 #include "dac.h"
 #include "dma.h"
-#include "fdcan.h"
 #include "opamp.h"
 #include "spi.h"
 #include "tim.h"
-#include "usart.h"
 #include "usb.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "usart.h"
 #if defined(BLDC_G431_FREERTOS)
 #include "system_runtime.h"
 #include "realtime_motor_io.h"
+#include "target_communication.h"
 #endif
 #if defined(BLDC_G431_TIMING_ENTRY)
 #include "cordic.h"
@@ -114,13 +114,11 @@ int main(void)
   MX_DMA_Init();
   MX_ADC1_Init();
   MX_ADC2_Init();
-  MX_FDCAN1_Init();
   MX_OPAMP1_Init();
   MX_OPAMP2_Init();
   MX_OPAMP3_Init();
   MX_SPI1_Init();
   MX_TIM1_Init();
-  MX_USART1_UART_Init();
   MX_COMP1_Init();
   MX_COMP2_Init();
   MX_COMP4_Init();
@@ -130,6 +128,11 @@ int main(void)
   MX_USB_PCD_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
+#if defined(BLDC_G431_FREERTOS)
+  target_communication_hardware_init();
+#else
+  MX_USART1_UART_Init();
+#endif
 #if defined(BLDC_G431_TIMING_ENTRY)
   MX_CORDIC_Init();
   timing_entry_start();

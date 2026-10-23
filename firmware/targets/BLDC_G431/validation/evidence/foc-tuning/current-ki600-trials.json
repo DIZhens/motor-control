@@ -1,0 +1,838 @@
+{
+  "status": "STOPPED_AT_TASK_SECTION9_MEASUREMENT_DISCRIMINATION_LIMIT",
+  "date": "2026-10-23",
+  "parent_commit": "ad65964",
+  "task_stop_condition": "现有测量无法区分控制问题与机械/采样问题",
+  "firmware_build_id": "0x6b86fa315e39d8fe",
+  "full_source_sha256": "6b86fa315e39d8fe18cef569108e4c5c8dc1efe581c1a2ff8735e3fa7bbc4dfc",
+  "trials": [
+    {
+      "name": "current600",
+      "current_pi": {
+        "kp_d": 0.5,
+        "kp_q": 0.5,
+        "ki_d": 600,
+        "ki_q": 600
+      },
+      "speed_pi": {
+        "kp": 0.001,
+        "ki": 0.004
+      },
+      "target": 40.0,
+      "update": null,
+      "image": {
+        "hex_sha256": "7704e6d2e900db9dede0c5dff73874f5b1e8a31e4edf6d63fade5a7eac24f5eb",
+        "bytes": 66728
+      },
+      "automatic_status": "FUNCTIONAL_PASS_OPERATOR_AND_PERFORMANCE_REVIEW_PENDING",
+      "operator_after": "无异常",
+      "metrics": [
+        {
+          "target_rpm": 40.0,
+          "first_control_tick": 548770,
+          "last_control_tick": 572690,
+          "observed_duration_s": 1.196,
+          "samples": 300,
+          "valid_speed_samples": 300,
+          "rise_10_90_s": 0.172,
+          "settling_5_percent_s": null,
+          "terminal_window_error_mean_rpm": -0.2838682492574056,
+          "terminal_window_speed_std_rpm": 10.483103116980628,
+          "wire_gaps_inside_window": 0,
+          "overshoot_rpm": 18.624271392822266,
+          "terminal_window_speed_peak_to_peak_rpm": 35.67998695373535,
+          "terminal_window_is_not_proof_of_steady_state": true,
+          "current_samples": 300,
+          "iq_reference_abs_peak_a": 0.04436984658241272,
+          "iq_tracking_rmse_a": 0.004516659862167636,
+          "iq_tracking_abs_peak_a": 0.023434994742274284,
+          "id_mean_a": -0.00012240763414107884,
+          "id_abs_peak_a": 0.02320326492190361,
+          "limit_sample_fractions": {
+            "speed_iq": 0.0,
+            "d_integral": 0.0,
+            "q_integral": 0.0,
+            "voltage": 0.0
+          }
+        }
+      ],
+      "domain": {
+        "received": 480,
+        "gaps": 0,
+        "order_errors": 0,
+        "first": 1,
+        "last": 480
+      },
+      "communication_delta": {
+        "rx_discontinuities": 0,
+        "rx_dma_overruns": 0,
+        "uart_pe": 0,
+        "uart_fe": 0,
+        "uart_ne": 0,
+        "uart_ore": 0,
+        "cobs_errors": 0,
+        "crc_errors": 0,
+        "length_errors": 0,
+        "version_errors": 0,
+        "message_errors": 0,
+        "parser_timeouts": 0,
+        "telemetry_overwrites": 0,
+        "internal_fault_count": 0,
+        "tx_errors": 0
+      },
+      "pre_accepted_starts": 0,
+      "post_accepted_starts": 1,
+      "post": {
+        "motor": [
+          1,
+          0,
+          1,
+          2,
+          0
+        ],
+        "phase": 0,
+        "moe": false,
+        "six_pin_levels": 0,
+        "guard": 0,
+        "internal": [
+          0,
+          0
+        ],
+        "timing_first": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "system": [
+          3,
+          4,
+          6,
+          2,
+          30556,
+          488,
+          488,
+          29247,
+          690,
+          442,
+          254,
+          109,
+          0
+        ]
+      },
+      "raw_evidence": "validation/local-evidence/20261023-tuning-current600",
+      "raw_log_sha256": "8441542c9d0b1e8a20e8c5d117e80caa401ad0fab96ef80f3b9523c20cad617e",
+      "host_source_sha256": {
+        "D:\\a_project\\motor-control\\.git\\tuning_once.py": "0cce0f4312d93dd0ee0c74377ec1fe8ce55d8b2d8f422c4ce64dbe4366761921",
+        "D:\\a_project\\motor-control\\.git\\tuning_hardware.py": "d7f291850d4582ea5d5a16b24678de6b1375c2398379ab11a7220c308a98f495",
+        "D:\\a_project\\motor-control\\host\\protocol\\client.py": "70f99e5ac6c79a929b46adc5f020fe5d1203227ca5c68e774fd3e89c03e5b1e4",
+        "D:\\a_project\\motor-control\\host\\vofa\\bridge.py": "358e702e1c46b3f1324a4709b1b22c048f6492fee97eb7a752b8b8623efac03d",
+        "D:\\a_project\\motor-control\\host\\vofa\\analyze.py": "335bc5b26d4056d0aef834407739924bfbaae4b248c8053b49215641f1eb4d99"
+      },
+      "samples_csv": "current600-samples.csv",
+      "samples_csv_sha256": "4199b902814c4dc78a467078c60aecbf24b2b2784996b1cebf1974ba361c62f4"
+    },
+    {
+      "name": "current600-speed002008",
+      "current_pi": {
+        "kp_d": 0.5,
+        "kp_q": 0.5,
+        "ki_d": 600,
+        "ki_q": 600
+      },
+      "speed_pi": {
+        "kp": 0.002,
+        "ki": 0.008
+      },
+      "target": 40.0,
+      "update": null,
+      "image": {
+        "hex_sha256": "7704e6d2e900db9dede0c5dff73874f5b1e8a31e4edf6d63fade5a7eac24f5eb",
+        "bytes": 66728
+      },
+      "automatic_status": "FUNCTIONAL_PASS_OPERATOR_AND_PERFORMANCE_REVIEW_PENDING",
+      "operator_after": "无异常",
+      "metrics": [
+        {
+          "target_rpm": 40.0,
+          "first_control_tick": 2533014,
+          "last_control_tick": 2556934,
+          "observed_duration_s": 1.196,
+          "samples": 300,
+          "valid_speed_samples": 300,
+          "rise_10_90_s": 0.044,
+          "settling_5_percent_s": null,
+          "terminal_window_error_mean_rpm": 0.467582639058431,
+          "terminal_window_speed_std_rpm": 4.84412100580758,
+          "wire_gaps_inside_window": 0,
+          "overshoot_rpm": 15.844966888427734,
+          "terminal_window_speed_peak_to_peak_rpm": 21.7500057220459,
+          "terminal_window_is_not_proof_of_steady_state": true,
+          "current_samples": 300,
+          "iq_reference_abs_peak_a": 0.08009130507707596,
+          "iq_tracking_rmse_a": 0.008579190402685786,
+          "iq_tracking_abs_peak_a": 0.061550870537757874,
+          "id_mean_a": 0.0004543079826786804,
+          "id_abs_peak_a": 0.022936612367630005,
+          "limit_sample_fractions": {
+            "speed_iq": 0.0,
+            "d_integral": 0.0,
+            "q_integral": 0.0,
+            "voltage": 0.0
+          }
+        }
+      ],
+      "domain": {
+        "received": 480,
+        "gaps": 0,
+        "order_errors": 0,
+        "first": 1,
+        "last": 480
+      },
+      "communication_delta": {
+        "rx_discontinuities": 0,
+        "rx_dma_overruns": 0,
+        "uart_pe": 0,
+        "uart_fe": 0,
+        "uart_ne": 0,
+        "uart_ore": 0,
+        "cobs_errors": 0,
+        "crc_errors": 0,
+        "length_errors": 0,
+        "version_errors": 0,
+        "message_errors": 0,
+        "parser_timeouts": 0,
+        "telemetry_overwrites": 0,
+        "internal_fault_count": 0,
+        "tx_errors": 0
+      },
+      "pre_accepted_starts": 1,
+      "post_accepted_starts": 2,
+      "post": {
+        "motor": [
+          1,
+          0,
+          1,
+          4,
+          0
+        ],
+        "phase": 0,
+        "moe": false,
+        "six_pin_levels": 0,
+        "guard": 0,
+        "internal": [
+          0,
+          0
+        ],
+        "timing_first": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "system": [
+          3,
+          4,
+          6,
+          2,
+          130805,
+          969,
+          969,
+          128460,
+          690,
+          442,
+          254,
+          109,
+          0
+        ]
+      },
+      "raw_evidence": "validation/local-evidence/20261023-tuning-current600-speed002008",
+      "raw_log_sha256": "c1cf0e6afd2a54bc66b6bc67a9b9bf3296bc5a3eeae21aa389b15e3d39d6d01a",
+      "host_source_sha256": {
+        "D:\\a_project\\motor-control\\.git\\tuning_once.py": "0cce0f4312d93dd0ee0c74377ec1fe8ce55d8b2d8f422c4ce64dbe4366761921",
+        "D:\\a_project\\motor-control\\.git\\tuning_hardware.py": "d7f291850d4582ea5d5a16b24678de6b1375c2398379ab11a7220c308a98f495",
+        "D:\\a_project\\motor-control\\host\\protocol\\client.py": "70f99e5ac6c79a929b46adc5f020fe5d1203227ca5c68e774fd3e89c03e5b1e4",
+        "D:\\a_project\\motor-control\\host\\vofa\\bridge.py": "358e702e1c46b3f1324a4709b1b22c048f6492fee97eb7a752b8b8623efac03d",
+        "D:\\a_project\\motor-control\\host\\vofa\\analyze.py": "335bc5b26d4056d0aef834407739924bfbaae4b248c8053b49215641f1eb4d99"
+      }
+    },
+    {
+      "name": "current600-t1",
+      "current_pi": {
+        "kp_d": 0.5,
+        "kp_q": 0.5,
+        "ki_d": 600,
+        "ki_q": 600
+      },
+      "speed_pi": {
+        "kp": 0.002,
+        "ki": 0.008
+      },
+      "target": 60.0,
+      "update": 40.0,
+      "image": {
+        "hex_sha256": "7704e6d2e900db9dede0c5dff73874f5b1e8a31e4edf6d63fade5a7eac24f5eb",
+        "bytes": 66728
+      },
+      "automatic_status": "FUNCTIONAL_PASS_OPERATOR_AND_PERFORMANCE_REVIEW_PENDING",
+      "operator_after": "无异常",
+      "metrics": [
+        {
+          "target_rpm": 60.0,
+          "first_control_tick": 4326546,
+          "last_control_tick": 4334546,
+          "observed_duration_s": 0.4,
+          "samples": 101,
+          "valid_speed_samples": 101,
+          "rise_10_90_s": 0.060000000000000005,
+          "settling_5_percent_s": null,
+          "terminal_window_error_mean_rpm": -1.5829944610595703,
+          "terminal_window_speed_std_rpm": 5.5359347366247444,
+          "wire_gaps_inside_window": 0,
+          "overshoot_rpm": 7.485221862792969,
+          "terminal_window_speed_peak_to_peak_rpm": 19.347476959228516,
+          "terminal_window_is_not_proof_of_steady_state": true,
+          "current_samples": 101,
+          "iq_reference_abs_peak_a": 0.10000000149011612,
+          "iq_tracking_rmse_a": 0.013280652126672187,
+          "iq_tracking_abs_peak_a": 0.09768511052243412,
+          "id_mean_a": 0.0006577691494367352,
+          "id_abs_peak_a": 0.021633034572005272,
+          "limit_sample_fractions": {
+            "speed_iq": 0.0297029702970297,
+            "d_integral": 0.0,
+            "q_integral": 0.0,
+            "voltage": 0.0
+          }
+        },
+        {
+          "target_rpm": 40.0,
+          "first_control_tick": 4334606,
+          "last_control_tick": 4344526,
+          "observed_duration_s": 0.496,
+          "samples": 125,
+          "valid_speed_samples": 125,
+          "rise_10_90_s": 0.008,
+          "settling_5_percent_s": null,
+          "terminal_window_error_mean_rpm": -0.8793148040771485,
+          "terminal_window_speed_std_rpm": 7.318785702460232,
+          "wire_gaps_inside_window": 0,
+          "overshoot_rpm": 19.518064498901367,
+          "terminal_window_speed_peak_to_peak_rpm": 27.118717193603516,
+          "terminal_window_is_not_proof_of_steady_state": true,
+          "current_samples": 125,
+          "iq_reference_abs_peak_a": 0.05731327086687088,
+          "iq_tracking_rmse_a": 0.007411309811591925,
+          "iq_tracking_abs_peak_a": 0.033528925850987434,
+          "id_mean_a": -9.325754013843835e-05,
+          "id_abs_peak_a": 0.02058451808989048,
+          "limit_sample_fractions": {
+            "speed_iq": 0.0,
+            "d_integral": 0.0,
+            "q_integral": 0.0,
+            "voltage": 0.0
+          }
+        }
+      ],
+      "domain": {
+        "received": 480,
+        "gaps": 0,
+        "order_errors": 0,
+        "first": 1,
+        "last": 480
+      },
+      "communication_delta": {
+        "rx_discontinuities": 0,
+        "rx_dma_overruns": 0,
+        "uart_pe": 0,
+        "uart_fe": 0,
+        "uart_ne": 0,
+        "uart_ore": 0,
+        "cobs_errors": 0,
+        "crc_errors": 0,
+        "length_errors": 0,
+        "version_errors": 0,
+        "message_errors": 0,
+        "parser_timeouts": 0,
+        "telemetry_overwrites": 0,
+        "internal_fault_count": 0,
+        "tx_errors": 0
+      },
+      "pre_accepted_starts": 2,
+      "post_accepted_starts": 3,
+      "post": {
+        "motor": [
+          1,
+          0,
+          1,
+          7,
+          0
+        ],
+        "phase": 0,
+        "moe": false,
+        "six_pin_levels": 0,
+        "guard": 0,
+        "internal": [
+          0,
+          0
+        ],
+        "timing_first": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "system": [
+          3,
+          4,
+          6,
+          2,
+          221524,
+          1450,
+          1450,
+          218136,
+          690,
+          438,
+          254,
+          109,
+          0
+        ]
+      },
+      "raw_evidence": "validation/local-evidence/20261023-tuning-current600-t1",
+      "raw_log_sha256": "84d4a209efdabd242352dbefa8a7e80cce6d0765cd23db932e083cbb1ca80557",
+      "host_source_sha256": {
+        "D:\\a_project\\motor-control\\.git\\tuning_once.py": "0cce0f4312d93dd0ee0c74377ec1fe8ce55d8b2d8f422c4ce64dbe4366761921",
+        "D:\\a_project\\motor-control\\.git\\tuning_hardware.py": "d7f291850d4582ea5d5a16b24678de6b1375c2398379ab11a7220c308a98f495",
+        "D:\\a_project\\motor-control\\host\\protocol\\client.py": "70f99e5ac6c79a929b46adc5f020fe5d1203227ca5c68e774fd3e89c03e5b1e4",
+        "D:\\a_project\\motor-control\\host\\vofa\\bridge.py": "358e702e1c46b3f1324a4709b1b22c048f6492fee97eb7a752b8b8623efac03d",
+        "D:\\a_project\\motor-control\\host\\vofa\\analyze.py": "335bc5b26d4056d0aef834407739924bfbaae4b248c8053b49215641f1eb4d99"
+      },
+      "samples_csv": "current600-t1-samples.csv",
+      "samples_csv_sha256": "5e7ad69d9cdc20750590dd47844fe103807567b20745967200e590643bfe84fd"
+    },
+    {
+      "name": "current600-t2",
+      "current_pi": {
+        "kp_d": 0.5,
+        "kp_q": 0.5,
+        "ki_d": 600,
+        "ki_q": 600
+      },
+      "speed_pi": {
+        "kp": 0.002,
+        "ki": 0.008
+      },
+      "target": -40.0,
+      "update": null,
+      "image": {
+        "hex_sha256": "7704e6d2e900db9dede0c5dff73874f5b1e8a31e4edf6d63fade5a7eac24f5eb",
+        "bytes": 66728
+      },
+      "automatic_status": "FUNCTIONAL_PASS_OPERATOR_AND_PERFORMANCE_REVIEW_PENDING",
+      "operator_after": "无异常",
+      "metrics": [
+        {
+          "target_rpm": -40.0,
+          "first_control_tick": 7325408,
+          "last_control_tick": 7349348,
+          "observed_duration_s": 1.197,
+          "samples": 300,
+          "valid_speed_samples": 300,
+          "rise_10_90_s": 0.012,
+          "settling_5_percent_s": null,
+          "terminal_window_error_mean_rpm": -0.6538248380025228,
+          "terminal_window_speed_std_rpm": 6.439708559494244,
+          "wire_gaps_inside_window": 0,
+          "overshoot_rpm": 14.016654968261719,
+          "terminal_window_speed_peak_to_peak_rpm": 25.903478622436523,
+          "terminal_window_is_not_proof_of_steady_state": true,
+          "current_samples": 300,
+          "iq_reference_abs_peak_a": 0.0806720033288002,
+          "iq_tracking_rmse_a": 0.007902209277800134,
+          "iq_tracking_abs_peak_a": 0.03393382206559181,
+          "id_mean_a": 0.0001641978250700049,
+          "id_abs_peak_a": 0.01818462833762169,
+          "limit_sample_fractions": {
+            "speed_iq": 0.0,
+            "d_integral": 0.0,
+            "q_integral": 0.0,
+            "voltage": 0.0
+          }
+        }
+      ],
+      "domain": {
+        "received": 479,
+        "gaps": 0,
+        "order_errors": 0,
+        "first": 1,
+        "last": 479
+      },
+      "communication_delta": {
+        "rx_discontinuities": 0,
+        "rx_dma_overruns": 0,
+        "uart_pe": 0,
+        "uart_fe": 0,
+        "uart_ne": 0,
+        "uart_ore": 0,
+        "cobs_errors": 0,
+        "crc_errors": 0,
+        "length_errors": 0,
+        "version_errors": 0,
+        "message_errors": 0,
+        "parser_timeouts": 0,
+        "telemetry_overwrites": 0,
+        "internal_fault_count": 0,
+        "tx_errors": 0
+      },
+      "pre_accepted_starts": 3,
+      "post_accepted_starts": 4,
+      "post": {
+        "motor": [
+          1,
+          0,
+          1,
+          9,
+          0
+        ],
+        "phase": 0,
+        "moe": false,
+        "six_pin_levels": 0,
+        "guard": 0,
+        "internal": [
+          0,
+          0
+        ],
+        "timing_first": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "system": [
+          3,
+          4,
+          6,
+          2,
+          372502,
+          1930,
+          1930,
+          368076,
+          690,
+          438,
+          254,
+          109,
+          0
+        ]
+      },
+      "raw_evidence": "validation/local-evidence/20261023-tuning-current600-t2",
+      "raw_log_sha256": "5aa0f6e0007afe6c970cd5042055985e0fa0b4fa57c1a88928eaf4977d7caba4",
+      "host_source_sha256": {
+        "D:\\a_project\\motor-control\\.git\\tuning_once.py": "0cce0f4312d93dd0ee0c74377ec1fe8ce55d8b2d8f422c4ce64dbe4366761921",
+        "D:\\a_project\\motor-control\\.git\\tuning_hardware.py": "d7f291850d4582ea5d5a16b24678de6b1375c2398379ab11a7220c308a98f495",
+        "D:\\a_project\\motor-control\\host\\protocol\\client.py": "70f99e5ac6c79a929b46adc5f020fe5d1203227ca5c68e774fd3e89c03e5b1e4",
+        "D:\\a_project\\motor-control\\host\\vofa\\bridge.py": "358e702e1c46b3f1324a4709b1b22c048f6492fee97eb7a752b8b8623efac03d",
+        "D:\\a_project\\motor-control\\host\\vofa\\analyze.py": "335bc5b26d4056d0aef834407739924bfbaae4b248c8053b49215641f1eb4d99"
+      },
+      "samples_csv": "current600-t2-samples.csv",
+      "samples_csv_sha256": "6805930771738d63729f2c8dc2744f0116b3f0c56a03ebc3a015685585834a79"
+    }
+  ],
+  "angle_synchronous_analysis": {
+    "producer": "local MATLAB; observations only, not independent mechanical reference",
+    "formula": "Regress velocity on constant/time/sin(2pi*n*mechanical_position)/cos(...), n=1..40; R2 relative to constant+time only; each n fitted separately",
+    "scope": "RUN samples after0.2s; T1 target segments after0.08s; short windows and different starting positions; no causal or calibration claim",
+    "records": [
+      {
+        "name": "t0_40",
+        "samples": 249,
+        "mean_rpm": 37.835280115824624,
+        "best_harmonics": [
+          14,
+          12,
+          13,
+          28
+        ],
+        "best_explained_fractions": [
+          0.4461128008506966,
+          0.21832314284452903,
+          0.1569416631066617,
+          0.13360434966157075
+        ],
+        "harmonic14_fraction": 0.4461128008506966,
+        "harmonic14_amplitude_rpm": 8.891980454905381
+      },
+      {
+        "name": "kp002_40",
+        "samples": 250,
+        "mean_rpm": 37.03539881134033,
+        "best_harmonics": [
+          14,
+          28,
+          24,
+          27
+        ],
+        "best_explained_fractions": [
+          0.34324676058960957,
+          0.23038696428706595,
+          0.16222348674563347,
+          0.10024832664715255
+        ],
+        "harmonic14_fraction": 0.34324676058960957,
+        "harmonic14_amplitude_rpm": 5.3672014177163545
+      },
+      {
+        "name": "kp003_40",
+        "samples": 250,
+        "mean_rpm": 36.878295989990235,
+        "best_harmonics": [
+          36,
+          28,
+          14,
+          35
+        ],
+        "best_explained_fractions": [
+          0.3041752382420616,
+          0.21602642593724664,
+          0.20209136735405453,
+          0.14672272143646348
+        ],
+        "harmonic14_fraction": 0.20209136735405453,
+        "harmonic14_amplitude_rpm": 3.573113108180896
+      },
+      {
+        "name": "ki008_40",
+        "samples": 249,
+        "mean_rpm": 39.05043224350037,
+        "best_harmonics": [
+          14,
+          28,
+          27,
+          13
+        ],
+        "best_explained_fractions": [
+          0.3137497851348928,
+          0.26045867817125623,
+          0.17837293685677824,
+          0.1356981394487501
+        ],
+        "harmonic14_fraction": 0.3137497851348928,
+        "harmonic14_amplitude_rpm": 5.039251340438639
+      },
+      {
+        "name": "current600_40",
+        "samples": 249,
+        "mean_rpm": 38.0599519890475,
+        "best_harmonics": [
+          14,
+          12,
+          28,
+          15
+        ],
+        "best_explained_fractions": [
+          0.5118683383726497,
+          0.27543988306611134,
+          0.14856094995760905,
+          0.11495732226573974
+        ],
+        "harmonic14_fraction": 0.5118683383726497,
+        "harmonic14_amplitude_rpm": 9.70216180449497
+      },
+      {
+        "name": "current600-speed002008_40",
+        "samples": 249,
+        "mean_rpm": 38.69365918109695,
+        "best_harmonics": [
+          28,
+          14,
+          36,
+          13
+        ],
+        "best_explained_fractions": [
+          0.2515191159739968,
+          0.24242530665852224,
+          0.17235928972725123,
+          0.14127498724952237
+        ],
+        "harmonic14_fraction": 0.24242530665852224,
+        "harmonic14_amplitude_rpm": 4.159820565798052
+      },
+      {
+        "name": "current600-t1_40",
+        "samples": 104,
+        "mean_rpm": 39.04862405703618,
+        "best_harmonics": [
+          14,
+          13,
+          15,
+          27
+        ],
+        "best_explained_fractions": [
+          0.4365875819849063,
+          0.39755817866379684,
+          0.30178625802364567,
+          0.28667644158079497
+        ],
+        "harmonic14_fraction": 0.4365875819849063,
+        "harmonic14_amplitude_rpm": 5.809638635290931
+      },
+      {
+        "name": "current600-t1_60",
+        "samples": 80,
+        "mean_rpm": 55.03326120376587,
+        "best_harmonics": [
+          13,
+          14,
+          12,
+          28
+        ],
+        "best_explained_fractions": [
+          0.49450944518369766,
+          0.40665151596680804,
+          0.3783646959540462,
+          0.3330775749926088
+        ],
+        "harmonic14_fraction": 0.40665151596680804,
+        "harmonic14_amplitude_rpm": 6.120735861855445
+      },
+      {
+        "name": "current600-t2_-40",
+        "samples": 249,
+        "mean_rpm": -38.68662512446024,
+        "best_harmonics": [
+          14,
+          28,
+          13,
+          24
+        ],
+        "best_explained_fractions": [
+          0.3023631450641078,
+          0.21029518531794056,
+          0.1456418685545081,
+          0.11496465620724539
+        ],
+        "harmonic14_fraction": 0.3023631450641078,
+        "harmonic14_amplitude_rpm": 4.550753001549281
+      }
+    ],
+    "source_script_sha256": "057d5a265e0c3150f5764a5b942524e124c5ff48b31b02c52b3326e6afa363da"
+  },
+  "findings": [
+    "Functional positive/negative/target update/Stop completed without motion retries; all eight trials operator reported no abnormality",
+    "No recorded Motor/Guard/Internal/first-timing fault; no voltage/integral limiting; brief startup Iq clipping in some higher Kp/60rpm trials",
+    "Raising current Ki to600 improves Iq tracking in one same-speed-PI trial but does not eliminate periodic speed ripple",
+    "Most windows have a prominent mechanical14th-order component; contribution about20-51%, remaining variation unexplained; n13/n14 close in short60rpm segment",
+    "No final speed/current PI selected, and no sustained5% settling observed. Actual Vofa motion screenshot evidence remains incomplete"
+  ],
+  "not_excluded": [
+    "actual mechanical/torque ripple",
+    "current channel gain/polarity/calibration or electrical-angle error",
+    "encoder measurement periodicity",
+    "coupled closed-loop response; finite UART observations do not prove full IRQ/WCET"
+  ],
+  "not_done": [
+    "T3 +/-80rpm",
+    "T4 final-parameter repeatability",
+    "P6 final all-target/both-profile regressions",
+    "final parameter/default freeze",
+    "representative baseline/final VOFA screenshots",
+    "push/PR/merge"
+  ],
+  "next_minimal_step": "Report to owner before expanding: read-only review of SSI->mechanical position->velocity/electrical angle and B/C->DQ chains, then design one independent discriminator. No further PI scan or protected parameter change under current stopped scope.",
+  "last_readback": {
+    "motor_state": 1,
+    "target": 0,
+    "control_phase": 0,
+    "moe": 0,
+    "six_pin_levels": 0,
+    "guard": 0,
+    "internal": [
+      0,
+      0
+    ],
+    "accepted_starts": 4,
+    "firmware_defaults": {
+      "current_kp": 0.5,
+      "current_ki": 600,
+      "speed_kp": 0.001,
+      "speed_ki": 0.004
+    },
+    "staged_and_last_active": {
+      "kp": 0.002,
+      "ki": 0.008,
+      "in_use": false
+    },
+    "power": "operator told can turn OUTPUT off; no subsequent live supply claim"
+  }
+}

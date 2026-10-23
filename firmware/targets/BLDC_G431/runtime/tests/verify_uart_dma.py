@@ -45,8 +45,8 @@ with tempfile.TemporaryDirectory(prefix='g431-uart-dma-') as directory:
     scatter = temp/'model.sct'
     scatter.write_text('LR 0x08000000 0x40000 { ER 0x08000000 0x40000 { .ANY (+RO) } '
                        'RW 0x20000000 0x8000 { .ANY (+RW +ZI) } }')
-    command = [COMPILER/'armcc.exe', '--cpu=Cortex-M4.fp', '--c99', '-O2', '--split_sections', '-g', '-DSTM32G431xx', '-DUSE_HAL_DRIVER']
-    for include in [TARGET/'runtime', TARGET/'Core/Inc', ROOT/'firmware/app/communication',
+    command = [COMPILER/'armcc.exe', '--cpu=Cortex-M4.fp', '--c99', '-O2', '--split_sections', '-g', '-DSTM32G431xx', '-DUSE_HAL_DRIVER', '-DBLDC_G431_COMMUNICATION=1']
+    for include in [TARGET/'runtime', TARGET/'Core/Inc', ROOT/'protocol/ports',
                     TARGET/'Drivers/STM32G4xx_HAL_Driver/Inc', TARGET/'Drivers/CMSIS/Include',
                     TARGET/'Drivers/CMSIS/Device/ST/STM32G4xx/Include']:
         command += ['-I', include]
@@ -250,4 +250,4 @@ if args.report:
     args.report.write_text(json.dumps(dict(status='PASS',groups=groups,hardware_access=False,
         execution='ARMCC Cortex-M4F + Unicorn; simulated DMA/NVIC/W1C and bytewise C-library copy substitute; not real UART timing',
         source_sha256={str(p.relative_to(ROOT)).replace('\\','/'):hashlib.sha256(p.read_bytes()).hexdigest()
-                       for p in [Path(__file__),*sources]}),ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+                       for p in [Path(__file__),*sources,TARGET/'runtime/target_communication_config.h']}),ensure_ascii=False,indent=2)+'\n',encoding='utf-8')

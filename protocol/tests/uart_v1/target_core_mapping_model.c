@@ -2,6 +2,7 @@
 #include "byte_stream_transport.h"
 #include "target_runtime.h"
 #include "system_runtime.h"
+#include "telemetry_mailbox.h"
 #include <string.h>
 
 /* 仅替代Target读端口的输入；实际target_core_server.c负责COMMUNICATION_STATUS映射。 */

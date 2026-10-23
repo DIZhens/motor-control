@@ -193,6 +193,7 @@ static void reset_control(ControlRuntime *runtime)
 {
     current_controller_reset(&runtime->current_controller);
     speed_controller_reset(&runtime->speed_controller);
+    current_feedback_filter_reset(&runtime->current_feedback_filter);
     memset(&runtime->current_output, 0, sizeof(runtime->current_output));
     memset(&runtime->speed_output, 0, sizeof(runtime->speed_output));
     electrical_angle_reset(&runtime->actuation_angle);
@@ -273,6 +274,8 @@ static bool control_config_init(ControlRuntime *runtime)
     speed_interval_s = fast_interval_s * (float)control->speed_divider;
     if (!current_controller_init(&runtime->current_controller, &control->current)
         || !speed_controller_init(&runtime->speed_controller, &control->speed)
+        || !current_feedback_filter_init(&runtime->current_feedback_filter,
+            control->current_feedback_filter_coefficient)
         || control->speed_divider == 0U || !finite_float(fast_interval_s)
         || fast_interval_s <= 0.0f || !finite_float(speed_interval_s)
         || speed_interval_s <= 0.0f
@@ -311,6 +314,13 @@ static void run_control(ControlRuntime *runtime, ControlTime now)
 {
     CurrentControllerInput current = {0};
     PhaseDutyRequest duty;
+    /* step 已先检查未滤波相电流的有效性、新鲜度与过流；滤波失败也不能保留旧输出。 */
+    if (!current_feedback_filter_update(&runtime->current_feedback_filter,
+            runtime->current_measurement.output.alpha_a,
+            runtime->current_measurement.output.beta_a)) {
+        latch_control_fault(runtime, CONTROL_RUNTIME_FAULT_CONTROL);
+        return;
+    }
     runtime->speed_counter++;
     if (!runtime->speed_output.valid
         || runtime->speed_counter >= runtime->config.control.speed_divider) {
@@ -329,8 +339,8 @@ static void run_control(ControlRuntime *runtime, ControlTime now)
         runtime->last_speed_time = now;
         runtime->speed_counter = 0U;
     }
-    current.current_alpha_a = runtime->current_measurement.output.alpha_a;
-    current.current_beta_a = runtime->current_measurement.output.beta_a;
+    current.current_alpha_a = runtime->current_feedback_filter.alpha_a;
+    current.current_beta_a = runtime->current_feedback_filter.beta_a;
     current.sin_electrical_angle = runtime->electrical_angle.output.sin_theta;
     current.cos_electrical_angle = runtime->electrical_angle.output.cos_theta;
     current.bus_voltage_v = runtime->bus.voltage_v;

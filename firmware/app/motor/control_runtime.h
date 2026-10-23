@@ -8,6 +8,7 @@
 #include "motor_snapshot.h"
 #include "position_estimator.h"
 #include "current_measurement.h"
+#include "current_feedback_filter.h"
 #include "electrical_angle.h"
 #include "current_controller.h"
 #include "speed_controller.h"
@@ -44,6 +45,7 @@ typedef struct {
     float max_bus_voltage_v; /* 控制允许的母线上限 [V]，有限且大于下限。 */
     float phase_current_trip_a; /* 校正 A/B/C 任一相绝对电流的软件阈值 [A]。 */
     float actuation_prediction_time_s; /* 本拍采样到电压作用参考时刻 [s]；有限且处于 [0,2*fast_dt]。 */
+    float current_feedback_filter_coefficient; /* alpha/beta 控制反馈低通系数；0旁路，[0,1]，原始相电流保护不经过它。 */
 } ControlRuntimeControlConfig;
 
 /* Target 装配时固定的观测与控制配置；数值参数不替代实物标定。 */
@@ -80,7 +82,7 @@ typedef struct {
     SpeedController speed_controller; /* 速度 PI 积分历史。 */
     CurrentControllerOutput current_output; /* 本拍电压与 duty 数值结果；无效时不得提交。 */
     SpeedControllerOutput speed_output; /* 速度慢环最近一次完整输出，两次更新之间保持。 */
-    FocDq current_dq; /* RUN复用控制器归一化测量DQ；IDLE独立Park；无物理确认时无效。 */
+    FocDq current_dq; /* RUN复用控制器实际采用的DQ（可经低通）；IDLE对未滤波电流独立Park。 */
     ControlRuntimePhase phase; /* 内部跨拍启动/运行流程，不新增公共 Motor 生命周期。 */
     float pending_velocity_rpm; /* 已接受但尚未使能的完整启动目标。 */
     uint32_t speed_counter; /* 速度环自上次计算以来的同步采样拍数。 */
@@ -95,6 +97,7 @@ typedef struct {
     bool bus_valid; /* 上拍的母线有效性，用于及时发布过期或恢复变化。 */
     bool position_time_available;
     bool current_time_available;
+    CurrentFeedbackFilter current_feedback_filter; /* 仅控制输入支路，停止/故障清历史；不改measurement或保护真值。 */
 } ControlRuntime;
 
 /* 在启动硬件事件前初始化；不启动采集、不改变功率，也不修改 Motor 生命周期。 */

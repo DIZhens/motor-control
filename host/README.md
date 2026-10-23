@@ -27,9 +27,10 @@ VOFA 程序的本机位置与默认关断入口的首次串口设置见 [vofa/RE
 500Hz仍未达原<1%门槛，结果从G431验证页进入。
 设备语义和线格式在 `interface/` 定义，主机不因重连自动重放运动命令。
 
-VOFA JustFloat与自研协议分别有自己的线上格式，不能直接混发。VOFA保留于独立验证构建，
-正式Run使用自研协议客户端；如需VOFA画图，后续由PC适配遥测。两种工具不同时占用串口，
-当前没有该转发适配器。
+VOFA JustFloat与自研协议分别有自己的线上格式，不能直接混发。正式Run由协议客户端独占
+串口，[vofa/bridge.py](vofa/bridge.py)记录原始帧并向本机VOFA单向转发JustFloat UDP；
+VOFA不接收MCU串口，也不能经此桥发送电机命令。旧115200/ASCII直连仅保留在独立验证入口。
+通道顺序、界面设置及离线数据指标见[VOFA说明](vofa/README.md)。
 
 ## 后续 Qt Host
 

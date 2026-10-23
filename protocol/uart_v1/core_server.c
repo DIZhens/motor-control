@@ -64,9 +64,9 @@ static void abandon(CoreServer *s)
         p->active = false;
     }
 }
-static void fail(CoreServer *s, RuntimeInternalFaultReason reason)
+static void fail(CoreServer *s, ProtocolDeviceFault reason)
 {
-    if (!s->failed) { core_server_port_fail_closed(reason); abandon(s); }
+    if (!s->failed) { protocol_device_fail_closed(reason); abandon(s); }
 }
 static bool state_valid(CoreServer *s)
 {
@@ -76,26 +76,26 @@ static bool state_valid(CoreServer *s)
         || (s->ordinary.active && s->ordinary.ticket == 0U) || (s->stop.active && s->stop.ticket == 0U)
         || (s->ordinary.active && s->stop.active && s->ordinary.ticket == s->stop.ticket)
         || s->highest_sequence == 0xFFFFFFFFU || (s->session == 0U && s->highest_sequence != 0U)) {
-        fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return false;
+        fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return false;
     }
     return true;
 }
 static bool observe_failure(CoreServer *s)
 {
-    if (!core_server_port_permitted()) { abandon(s); }
+    if (!protocol_device_permitted()) { abandon(s); }
     return s->failed;
 }
 static bool queue(CoreServer *s, const CoreFrame *response, bool critical)
 {
     if (s->response_count >= CORE_RESPONSE_CAPACITY) {
-        fail(s, RUNTIME_INTERNAL_RESPONSE_OVERFLOW); return false;
+        fail(s, PROTOCOL_FAULT_RESPONSE_OVERFLOW); return false;
     }
     queue_unchecked(s, response, critical); return true;
 }
 static void retire(CoreServer *s, const CoreFrame *request, bool critical, bool cache)
 {
     CoreCompletedRequest *entry;
-    if (!encode_answer(s)) { fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return; }
+    if (!encode_answer(s)) { fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return; }
     if (!queue(s, &s->output, critical)) { return; }
     if (cache) {
         entry = &s->cache[s->cache_next];
@@ -124,7 +124,7 @@ static bool replay(CoreServer *s, const CoreFrame *f)
                 && core_frame_encode(&s->output, s->wire, sizeof(s->wire), &count) == CORE_OK) {
                 ByteStreamResult result = byte_stream_try_send(s->wire, count);
                 if (result != BYTE_STREAM_ACCEPTED && result != BYTE_STREAM_BUSY && !observe_failure(s)) {
-                    fail(s, RUNTIME_INTERNAL_TRANSPORT);
+                    fail(s, PROTOCOL_FAULT_TRANSPORT);
                 }
             }
         }
@@ -154,14 +154,14 @@ static void read_communication(CoreServer *s)
 static void cancelled(CoreServer *s, uint32_t ticket)
 {
     if (!s->ordinary.active || s->ordinary.ticket != ticket) {
-        fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return;
+        fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return;
     }
     error_answer(s, &s->ordinary.request, CORE_CANCELLED_BY_STOP, true, true);
     s->ordinary.active = false;
 }
 static void dispatch(CoreServer *s, const CoreFrame *f, bool is_stop, bool cache)
 {
-    RuntimeExchangeResult result;
+    ProtocolSubmitResult result;
     uint32_t ticket = 0U, cancelled_ticket = 0U;
     CorePendingRequest *p = is_stop ? &s->stop : &s->ordinary;
     if (p->active || (!is_stop && s->stop.active)) { error_answer(s, f, CORE_BUSY, is_stop, cache); return; }
@@ -173,43 +173,38 @@ static void dispatch(CoreServer *s, const CoreFrame *f, bool is_stop, bool cache
         }
         retire(s, f, false, cache); return;
     }
-    memset(&s->runtime_request, 0, sizeof(s->runtime_request));
+    memset(&s->device_request, 0, sizeof(s->device_request));
     if (s->decoded.message_id == CORE_WRITE_OBJECT) {
         if (s->decoded.subject_id == CORE_SPEED_PI_STAGED) {
-            s->runtime_request.kind = RUNTIME_REQUEST_SPEED_PI;
-            s->runtime_request.value.speed_pi.kp = s->decoded.value.speed_pi.kp;
-            s->runtime_request.value.speed_pi.ki = s->decoded.value.speed_pi.ki;
+            s->device_request.kind = PROTOCOL_REQUEST_SPEED_PI;
+            s->device_request.value.speed_pi.kp = s->decoded.value.speed_pi.kp;
+            s->device_request.value.speed_pi.ki = s->decoded.value.speed_pi.ki;
         } else {
-            s->runtime_request.kind = RUNTIME_REQUEST_TELEMETRY;
-            s->runtime_request.value.telemetry.enabled = s->decoded.value.telemetry_config.enabled != 0U;
-            s->runtime_request.value.telemetry.rate_hz = s->decoded.value.telemetry_config.rate_hz;
+            s->device_request.kind = PROTOCOL_REQUEST_TELEMETRY;
+            s->device_request.value.telemetry.enabled = s->decoded.value.telemetry_config.enabled != 0U;
+            s->device_request.value.telemetry.rate_hz = s->decoded.value.telemetry_config.rate_hz;
         }
     } else {
-        s->runtime_request.kind = RUNTIME_REQUEST_MOTOR;
-        switch (s->decoded.subject_id) {
-        case CORE_START_VELOCITY: s->runtime_request.value.motor.type = MOTOR_COMMAND_START_VELOCITY; break;
-        case CORE_UPDATE_VELOCITY: s->runtime_request.value.motor.type = MOTOR_COMMAND_UPDATE_VELOCITY; break;
-        case CORE_STOP: s->runtime_request.value.motor.type = MOTOR_COMMAND_STOP; break;
-        default: s->runtime_request.value.motor.type = MOTOR_COMMAND_CLEAR_FAULT; break;
-        }
-        s->runtime_request.value.motor.target_velocity_rpm = s->decoded.target_velocity_rpm;
+        s->device_request.kind = PROTOCOL_REQUEST_MOTOR;
+        s->device_request.value.motor.command_id = s->decoded.subject_id;
+        s->device_request.value.motor.target_velocity_rpm = s->decoded.target_velocity_rpm;
     }
-    result = core_server_port_submit(&s->runtime_request, &ticket, &cancelled_ticket);
+    result = protocol_device_submit(&s->device_request, &ticket, &cancelled_ticket);
     if (observe_failure(s)) { error_answer(s, f, CORE_SYSTEM_FAIL_CLOSED, true, false); return; }
-    if (result != RUNTIME_EXCHANGE_QUEUED) {
-        if (result != RUNTIME_EXCHANGE_BUSY && result != RUNTIME_EXCHANGE_PRECONDITION_FAILED
-            && result != RUNTIME_EXCHANGE_BAD_REQUEST) {
-            fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return;
+    if (result != PROTOCOL_SUBMIT_QUEUED) {
+        if (result != PROTOCOL_SUBMIT_BUSY && result != PROTOCOL_SUBMIT_PRECONDITION_FAILED
+            && result != PROTOCOL_SUBMIT_BAD_REQUEST) {
+            fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return;
         }
-        error_answer(s, f, result == RUNTIME_EXCHANGE_BUSY ? CORE_BUSY :
-            result == RUNTIME_EXCHANGE_PRECONDITION_FAILED ? CORE_PRECONDITION_FAILED : CORE_BAD_REQUEST,
+        error_answer(s, f, result == PROTOCOL_SUBMIT_BUSY ? CORE_BUSY :
+            result == PROTOCOL_SUBMIT_PRECONDITION_FAILED ? CORE_PRECONDITION_FAILED : CORE_BAD_REQUEST,
             is_stop, cache); return;
     }
     if (ticket == 0U || (s->ordinary.active && s->ordinary.ticket == ticket)
         || (s->stop.active && s->stop.ticket == ticket) || (!is_stop && cancelled_ticket != 0U)) {
-        fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return;
+        fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return;
     }
-    p->request = *f; p->kind = s->runtime_request.kind;
+    p->request = *f; p->kind = s->device_request.kind;
     p->ticket = ticket; p->started_ms = s->now_ms; p->active = true;
     if (cancelled_ticket != 0U) { cancelled(s, cancelled_ticket); }
 }
@@ -233,7 +228,7 @@ static void received(void *context, CoreStatus status, const CoreFrame *f)
         if (s->ordinary.active) { error_answer(s, f, CORE_SESSION_BUSY, false, false); return; }
         proposed = s->decoded.proposed_session_id;
         if (proposed != s->session) {
-            if (s->epoch_counter == 0xFFFFFFFFU) { fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return; }
+            if (s->epoch_counter == 0xFFFFFFFFU) { fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return; }
             s->session = proposed; s->highest_sequence = 0U; s->cache_next = 0U;
             s->response_count = 0U; memset(s->cache, 0, sizeof(s->cache));
             s->event_count = 0U; s->event_sequence = 0U; s->snapshot_valid = false;
@@ -265,7 +260,7 @@ void core_server_feed(CoreServer *s, const uint8_t *bytes, size_t count, uint32_
     s->now_ms = now_ms;
     core_parser_feed(&s->parser, bytes, count, now_ms, received, s);
 }
-static void completed(CoreServer *s, const RuntimeCommandCompletion *c)
+static void completed(CoreServer *s, const ProtocolDeviceCompletion *c)
 {
     CorePendingRequest *p;
     bool stop;
@@ -273,28 +268,23 @@ static void completed(CoreServer *s, const RuntimeCommandCompletion *c)
     stop = s->stop.active && s->stop.ticket == c->ticket;
     p = stop ? &s->stop : &s->ordinary;
     if (!p->active || c->ticket == 0U || p->ticket != c->ticket) {
-        fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return;
+        fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return;
     }
     build_answer(s, &p->request, CORE_RESULT_OK, subject_of(&p->request));
-    if (c->outcome == RUNTIME_CANCELLED_BY_STOP) { s->answer.result_code = CORE_CANCELLED_BY_STOP; }
-    else if (c->outcome == RUNTIME_PRECONDITION_FAILED) { s->answer.result_code = CORE_PRECONDITION_FAILED; }
-    else if (c->outcome != RUNTIME_COMPLETED || c->kind != p->kind) {
-        fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return;
-    } else if (p->kind == RUNTIME_REQUEST_MOTOR) {
-        if (c->motor_result > MOTOR_COMMAND_RESULT_BAD_COMMAND) { fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return; }
-        s->answer.motor_result = (uint16_t)c->motor_result;
+    if (c->outcome == PROTOCOL_CANCELLED_BY_STOP) { s->answer.result_code = CORE_CANCELLED_BY_STOP; }
+    else if (c->outcome == PROTOCOL_PRECONDITION_FAILED) { s->answer.result_code = CORE_PRECONDITION_FAILED; }
+    else if (c->outcome != PROTOCOL_COMPLETED || c->kind != p->kind) {
+        fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return;
+    } else if (p->kind == PROTOCOL_REQUEST_MOTOR) {
+        s->answer.motor_result = c->motor_result;
     } else {
-        if (c->parameter_result == RUNTIME_PARAMETER_BAD_VALUE) { s->answer.result_code = CORE_BAD_VALUE; }
-        else if (c->parameter_result == RUNTIME_PARAMETER_WRONG_STATE) { s->answer.result_code = CORE_OBJECT_WRONG_STATE; }
-        else if (c->parameter_result != RUNTIME_PARAMETER_APPLIED) { fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return; }
-        else if (p->kind == RUNTIME_REQUEST_SPEED_PI) {
-            s->answer.value.speed_pi.kp = c->value.speed_pi.value.kp;
-            s->answer.value.speed_pi.ki = c->value.speed_pi.value.ki;
+        s->answer.result_code = (uint16_t)c->result_code;
+        if (c->result_code == CORE_RESULT_OK && p->kind == PROTOCOL_REQUEST_SPEED_PI) {
+            s->answer.value.speed_pi.kp = c->value.speed_pi.kp;
+            s->answer.value.speed_pi.ki = c->value.speed_pi.ki;
             s->answer.value.speed_pi.generation = c->value.speed_pi.generation;
-        } else {
-            s->answer.value.telemetry_config.enabled = c->value.telemetry.enabled ? 1U : 0U;
-            s->answer.value.telemetry_config.rate_hz = c->value.telemetry.rate_hz;
-            s->answer.value.telemetry_config.generation = c->value.telemetry.generation;
+        } else if (c->result_code == CORE_RESULT_OK) {
+            s->answer.value.telemetry_config = c->value.telemetry;
         }
     }
     retire(s, &p->request, stop, p->request.session_id != 0U && p->request.session_id == s->session);
@@ -333,17 +323,17 @@ static void observe_snapshot(CoreServer *s)
 
 void core_server_poll(CoreServer *s, uint32_t now_ms)
 {
-    RuntimeCommandCompletion completion;
+    ProtocolDeviceCompletion completion;
     uint32_t index;
     s->now_ms = now_ms; core_parser_poll(&s->parser, now_ms);
     if (!state_valid(s)) { return; }
     observe_failure(s);
     if (!s->failed && ((s->ordinary.active && (uint32_t)(now_ms - s->ordinary.started_ms) >= CORE_RUNTIME_TIMEOUT_MS)
         || (s->stop.active && (uint32_t)(now_ms - s->stop.started_ms) >= CORE_RUNTIME_TIMEOUT_MS))) {
-        fail(s, RUNTIME_INTERNAL_TIMEOUT);
+        fail(s, PROTOCOL_FAULT_TIMEOUT);
     }
-    for (index = 0U; index < RUNTIME_COMPLETION_CAPACITY; ++index) {
-        if (!core_server_port_completion(&completion)) { break; }
+    for (index = 0U; index < CORE_RESPONSE_CAPACITY; ++index) {
+        if (!protocol_device_completion(&completion)) { break; }
         completed(s, &completion);
     }
 }
@@ -356,16 +346,16 @@ void core_server_observe(CoreServer *s)
 
 static bool telemetry_frame(CoreServer *s)
 {
-    RuntimeTelemetryValue value;
+    ProtocolTelemetryValue value;
     CoreSpeedSample sample;
     uint32_t offset, sequence;
     size_t length;
-    if (!core_server_port_telemetry_peek(&value)) { s->telemetry_wire_valid = false; return false; }
+    if (!protocol_device_telemetry_peek(&value)) { s->telemetry_wire_valid = false; return false; }
     if (s->session == 0U || s->failed || s->telemetry_exhausted || value.epoch != s->active_epoch
         || core_server_port_read_object(CORE_TELEMETRY_CONFIG, &s->answer.value) != CORE_RESULT_OK
         || !s->answer.value.telemetry_config.enabled
         || value.sample.telemetry_config_generation != s->answer.value.telemetry_config.generation) {
-        s->telemetry_wire_valid = false; core_server_port_telemetry_retire(); return false;
+        s->telemetry_wire_valid = false; protocol_device_telemetry_retire(); return false;
     }
     if (!s->telemetry_domain_valid) {
         s->telemetry_domain_valid = true; s->telemetry_first = value.epoch_first;
@@ -373,7 +363,7 @@ static bool telemetry_frame(CoreServer *s)
     offset = value.produced - s->telemetry_first;
     if (offset >= 0xFFFFFFFEU) {
         s->telemetry_exhausted = true; s->telemetry_wire_valid = false;
-        core_server_port_telemetry_retire(); return false;
+        protocol_device_telemetry_retire(); return false;
     }
     sequence = offset + 1U;
     s->telemetry_sequence = sequence; /* 生成值决定序号，BUSY不重新分配或成功后才编号。 */
@@ -396,7 +386,7 @@ static bool telemetry_frame(CoreServer *s)
     s->output.header_size = CORE_HEADER_SIZE; s->output.session_id = s->session;
     s->output.message_id = CORE_SPEED_SAMPLE; s->output.sequence = sequence;
     if (core_sample_encode(&sample, s->output.payload, sizeof(s->output.payload), &length) != CORE_RESULT_OK) {
-        fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return false;
+        fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return false;
     }
     s->output.payload_length = (uint16_t)length;
     return true;
@@ -425,7 +415,7 @@ void core_server_flush(CoreServer *s)
         s->output.message_id = s->events[0].message; s->output.sequence = s->events[0].sequence;
         s->output.session_id = s->session;
         if (core_event_encode(s->output.message_id, &s->events[0].value, s->output.payload,
-            sizeof(s->output.payload), &count) != CORE_RESULT_OK) { fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return; }
+            sizeof(s->output.payload), &count) != CORE_RESULT_OK) { fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return; }
         s->output.payload_length = (uint16_t)count;
     } else {
         source = 2U;
@@ -435,14 +425,14 @@ void core_server_flush(CoreServer *s)
         count = s->telemetry_wire_length;
     } else {
         if (core_frame_encode(&s->output, s->wire, sizeof(s->wire), &count) != CORE_OK) {
-            fail(s, RUNTIME_INTERNAL_TRANSACTION_CORRUPT); return;
+            fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return;
         }
         if (source == 2U) { s->telemetry_wire_length = count; s->telemetry_wire_valid = true; }
     }
     result = byte_stream_try_send(s->wire, count);
     if (result == BYTE_STREAM_BUSY) { return; }
     if (result != BYTE_STREAM_ACCEPTED) {
-        if (!observe_failure(s)) { fail(s, RUNTIME_INTERNAL_TRANSPORT); } return;
+        if (!observe_failure(s)) { fail(s, PROTOCOL_FAULT_TRANSPORT); } return;
     }
     if (source == 0U) {
         for (index = selected + 1U; index < s->response_count; ++index) { s->responses[index - 1U] = s->responses[index]; }
@@ -450,5 +440,5 @@ void core_server_flush(CoreServer *s)
     } else if (source == 1U) {
         for (index = 1U; index < s->event_count; ++index) { s->events[index - 1U] = s->events[index]; }
         s->event_count--;
-    } else { s->telemetry_wire_valid = false; core_server_port_telemetry_retire(); }
+    } else { s->telemetry_wire_valid = false; protocol_device_telemetry_retire(); }
 }

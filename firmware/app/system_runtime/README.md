@@ -89,7 +89,7 @@ Validation工程保持裸机旧入口，不链接本目录或FreeRTOS。
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run --exchange
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_system_runtime.py
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_uart_dma.py
-.\.venv\Scripts\python.exe -X utf8 firmware/app/communication/tests/verify_core_server.py
+.\.venv\Scripts\python.exe -X utf8 protocol/tests/uart_v1/verify_core_server.py
 ```
 
 模型通过正式Run装配执行请求、参数、完成FIFO、发布和Fail-closed，HCC/MMIO是替身；

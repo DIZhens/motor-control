@@ -1,7 +1,9 @@
 # G431 后台运行时集成合同
 
 本文件固定Target资源、启动和依赖选择；已实现及实机范围见[验证页](../VALIDATION.md)。
-线上唯一合同见[Core Protocol V1](../../../../interface/CORE_PROTOCOL_V1.md)。
+共享业务编号见[Motor Node Profile](../../../../interface/MOTOR_NODE_PROFILE_V1.md)，
+UART线上合同见[UART Mapping V1](../../../../interface/UART_MAPPING_V1.md)。
+CAN线上合同见[CAN Mapping V1](../../../../interface/CAN_MAPPING_V1.md)。
 现有有限FOC参数及硬件能力合同保持不变。
 
 ## 供应包与集成方式
@@ -33,6 +35,7 @@ G431有4个NVIC优先级位，保持PRIORITYGROUP_4；数值越小逻辑优先�
 | ADC1_2 / ADC1 DMA1_Channel1 | 1，保持 | Platform/ControlRuntime，10 kHz唯一实时写者；无RTOS API |
 | SPI1 | 2，保持 | MT6701有限SSI事务；无RTOS API |
 | USART1 / RX DMA1_Channel2 / TX DMA1_Channel3 | 5 | UART Adapter，只记必要进度/错误并通知后台 |
+| FDCAN1_IT0 | 5 | CAN Adapter，只记录RX/TX/错误事实并通知；不解析或调用Motor |
 | TIM6 | 15，保持 | 原约50 µs独立守卫及1.5秒上限，不改成HAL/内核时基 |
 | TIM7 | 15，新增 | HAL 1 kHz，调度器前后均推进；不通知RTOS |
 | SysTick / PendSV | 15 | Kernel 1 kHz tick及上下文切换，正式Run由Port唯一拥有 |
@@ -58,15 +61,17 @@ Task notification1、栈检查2、max priorities4。只链接实际使用的Kern
 | 任务 | 优先级 | 初始栈word | 寿命/职责 |
 | --- | --- | --- | --- |
 | Bootstrap | 3 | 768 | 临时装配，完成前记录栈高水位后删除 |
-| Communication | 2 | 768 | 唯一UART/Protocol/Transaction所有者，最多阻塞1 ms |
+| Communication | 2 | 768 | 唯一所选链路/Protocol/Transaction所有者，最多阻塞1 ms |
 | Telemetry | 1 | 384 | 周期读最新publication，覆盖单槽Mailbox并通知Communication |
 | Idle | 0 | 128 | Kernel维护，静态提供内存 |
 
 栈按实际MAP调用链及FPU上下文预留，word为4字节。静态调用链已知部分为Bootstrap304 B、
 Communication1224 B、Telemetry408 B、Idle40 B，仍有间接调用/汇编未知量及硬件异常压栈。
-当前Run静态RAM为21184/32768 B，包含4 KiB主栈、原512 B C库堆保留区、512 B RX/130 B TX
-及2832 B Server静态状态/工作区；无动态分配调用或FreeRTOS heap实现。Event8、Mailbox1及
-发送元数据已计入；Server只peek原Mailbox，不添加第二个待发样本槽。
+UART构建静态RAM为21088/32768 B，CAN构建17792/32768 B；二者均包含4 KiB主栈和原512 B
+C库堆保留区，无动态分配调用或FreeRTOS heap实现。UART保留512 B RX/130 B TX及2832 B
+Server；CAN使用464 B Server与控制器专用Message RAM，不占用UART状态。Server只peek原
+Mailbox，不添加第二个待发样本槽。已知Communication静态调用深度UART为1224 B、CAN为504 B，
+仍不能替代真实调度、高水位及异常压栈验证。
 不能把静态占用当作栈安全证明；长期任务实测最小剩余栈必须≥初始25%，Bootstrap删除前记录自身数值。
 
 调度器前：HAL/TIM7 tick、时钟和生成硬件初始化、最早safe-off、创建静态Bootstrap、启动
@@ -84,13 +89,56 @@ Telemetry在有效会话中按配置周期生成Mailbox值和单写产生计数�
 服务先处理RX、截止及Completion，再尝试续帧，最后读取最佳努力Event快照；不在TX完成
 IRQ中编码、复制整帧或做统计，事件FIFO选择优先级及单帧传输所有权不变。
 Motor装配和任务句柄就绪后，Bootstrap初始化
-唯一Server，再执行Transport初始化、事件绑定及RX DMA启动，最后自删除。Parser、Session、
+唯一Server，再执行Transport初始化、事件绑定及RX DMA启动，最后自删除。共享Device Port
+通过Firmware `motor_node_binding.c`转换Runtime请求与完成；Target连接一致publication及关断，
+协议头不包含Runtime、Motor或内核类型。Parser、Session、
 事务、参数映射和响应缓存都在Communication上下文，无ISR协议工作。物理控制时间仍来自
 PWM/ADC，HAL/RTOS tick不参与FOC dt，后台1ms睡眠上限不是调度延迟/WCET证明。
 
+## 静态链路选择
+
+正式工程仍只有`BLDC_G431_Run`。`target_communication_config.h`默认
+`BLDC_G431_COMMUNICATION_UART_V1`；Keil的C/C++ Define中可覆盖
+`BLDC_G431_COMMUNICATION=2`选择`BLDC_G431_COMMUNICATION_CAN_V1`。
+Node由`BLDC_G431_CAN_NODE_ID`构建期设置，默认1，只允许1～127；Node 0永久保留。
+无运行期探测、双链路控制权或动态注册。改构建宏后须重新生成固件身份并Rebuild。
+
+CubeMX保留两份硬件初始化函数，关闭其在main中的自动调用；main USER区调用
+`target_communication_hardware_init()`，只初始化选中的USART或FDCAN。全局DMA只开放ADC通道1；
+选中UART时才在Target开放通道2/3，优先级继承CubeMX的USART1配置并由Transport核对为5。
+这两个UART向量由UART Adapter提供，重新生成时不应另开CubeMX全局DMA2/3 Handler。
+Validation只显式初始化其原UART，仍不链接RTOS或新Server。
+
+Bootstrap通过`target_communication_start()`初始化唯一Server、端口、通知并启动；Communication
+通过`target_communication_service()`服务，Telemetry epoch同样静态分派。未选Server、状态、
+硬件句柄、通知和端口不进入最终可装载代码。ARM链接器要求先解析全部对象的外部符号，
+Target为未选纯协议库提供无状态拒绝定义；链接检查须证明这些定义随未选库一起移除。
+
+CAN采用PB8/PB9、170 MHz PCLK1、Classic/Normal、自动重传，名义17/(1+15+4)，500 kbit/s、
+80%采样点。3项标准掩码过滤器精确接受0、node、0x100+node；全局拒绝其他ID、扩展及RTR。
+当前G4 HAL固定每RX FIFO 3项，元素72 B；不借用其他系列的可变Message RAM布局。
+选中的CAN任务每轮最多取6帧，IRQ只记录事实和通知。FIFO lost交由Server Fail-closed。
+发送只允许一个硬件在途；Server按关键Response、普通Response、Fault、Heartbeat、Motion排序。
+
+Warning/Passive只记录。Bus-off锁存后撤Session、优先Runtime Stop、禁止新请求；准确退休Stop且
+当前快照非RUN、目标0、MOE关闭后才进入任务恢复。恢复先撤旧TX和排旧RX，只请求退出INIT一次，
+等待硬件完成128×11隐性位检测并解除BO；不重置错误计数或重放旧命令。发送100 ms、恢复200 ms
+截止失败进入Target Fail-closed。它们是后台服务检查，不改变任何实时保护/运动包络。
+模型不证明外部Bus-off；内部回环、外部物理总线和有限运动分别留存证据。
+
+内部回环专项：`BLDC_G431_CAN_LOOPBACK_VALIDATION=1`只允许配合CAN Profile构建。它在生成的
+Normal初始化之后、控制器Start之前改为Internal Loopback，并核对TEST/MON/LBCK；正式IOC不变。
+`validation/can_loopback.c`仅在该宏启用时建立SWD测试Mailbox和有界TX Message RAM记录；普通
+构建不含其状态/函数。测试帧只在低母线、IDLE、目标0、六路LOW/MOE0及无故障时交给控制器，
+完整RX仍进入同一CanServer/Runtime，不绕过Motor许可。它可以检查扩展/RTR过滤器，但生产端口
+继续拒绝发送扩展/RTR。验证后恢复UART并重新生成身份、Rebuild。
+
+FDCAN禁止整块寄存器dump：读取保留地址本身可触发ARA。诊断仅读取明确有效的配置/状态字，
+Message RAM也只读已配置的具体区域。实物通过范围与原失败记录见[验证页](../VALIDATION.md)。
+
 ## 字节流与后台边界
 
-[Byte-stream合同](../../../app/communication/byte_stream_transport.h)不含HAL/RTOS/Motor类型，
+[Byte-stream合同](../../../../protocol/ports/byte_stream_transport.h)不含HAL/RTOS/Motor类型，
 由Target链接期静态实现。事件Sink仅作对应上下文的有界通知；事件可重复/合并/延迟。
 权威事实为DMA生产位置、后台消费位置、连续性epoch和实际TX所有权。
 

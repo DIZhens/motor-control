@@ -1,0 +1,127 @@
+{
+  "status": "NO_POWER_UART_UDP_VOFA_INTEGRATION_PASS",
+  "date": "2026-10-23",
+  "parent_commit": "b6f4a20",
+  "firmware_build_id": "0xf34f527b8ed3795b",
+  "firmware_changes": false,
+  "port": "COM5 460800/8N1",
+  "vofa_version": "1.3.10",
+  "architecture": "one Core Client owns UART; full JSONL first; selected JustFloat to loopback UDP; no network receive or motor commands",
+  "views": {
+    "default": "speed: I0 target rpm, I1 actual rpm",
+    "current": "IqRef/Iq/Id nominal A",
+    "all": "10 fields per host/vofa/README.md"
+  },
+  "offline_tests": {
+    "count": 7,
+    "command": ".venv/Scripts/python.exe -m unittest host.vofa.test_bridge host.vofa.test_analyze -v",
+    "result": "PASS",
+    "scope": [
+      "current Session/CRC filtering",
+      "NaN/channel encoding",
+      "actual local UDP bytes",
+      "display failure preserves log",
+      "signed/down steps",
+      "censored/invalid/gap handling",
+      "Session/generation/target windows"
+    ]
+  },
+  "hardware": {
+    "full_fields_local_udp": {
+      "received": 2500,
+      "bytes_identical_to_samples": true,
+      "display_errors": 0,
+      "gaps": 0
+    },
+    "speed_fields_local_udp": {
+      "received": 2501,
+      "bytes_identical_to_samples": true,
+      "display_errors": 0,
+      "gaps": 0
+    },
+    "actual_vofa_observation": {
+      "first_seconds": 30,
+      "first_fresh_domain_frames": 7501,
+      "first_total_forwarded": 7505,
+      "first_host_initial_resync_cobs_errors": 1,
+      "first_crc_errors": 0,
+      "second_seconds": 120,
+      "second_forwarded": 30000,
+      "second_observation_parser_errors": 0,
+      "ui_confirmed_by_operator_screenshots": true,
+      "udp_owner_process": "vofa+",
+      "display_values": {
+        "target_rpm": 0,
+        "actual_rpm": 0,
+        "iq_reference": "NaN in IDLE",
+        "bus_v_approx": 2.63,
+        "state": 1,
+        "fault": 0,
+        "valid_flags": 1007,
+        "limits": 0
+      }
+    },
+    "final_flash_and_off": {
+      "status": "PASS",
+      "flash_bytes_verified": 66728,
+      "motor": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "system": [
+        3,
+        4,
+        6,
+        2,
+        805289,
+        108124,
+        108124,
+        510091,
+        690,
+        438,
+        254,
+        109,
+        0
+      ],
+      "internal": [
+        0,
+        0
+      ],
+      "guard": [
+        0
+      ],
+      "accepted_starts": 0,
+      "active": 0,
+      "moe": 0,
+      "six_pin_levels": 0,
+      "can_irq_enabled": false,
+      "uart_irqs_enabled": true
+    }
+  },
+  "initial_connection_failure": "COM5 PermissionError13 before requests; operator switched VOFA from serial to UDP, no reset/reflash or motion retry",
+  "raw_evidence": "validation/local-evidence/20261023-control-profile (not distributed)",
+  "raw_sha256": {
+    "bridge-uart-verified.jsonl": "ca365eca114635c09fb2c4b524d8c17bc415374dffbadf3bf5b70491db0a10e9",
+    "bridge-uart-speed.jsonl": "eb6310a5939edbee9c31d87f2f0c26634fed4073f705a536c070b369cd259bab",
+    "vofa-live-observe.jsonl": "0ca8911221395896d067938814f811881231f8a81821beaaaa8929a4203db3b5",
+    "vofa-configure-observe.jsonl": "4f7a50704554af414c1a34449994a9ca9c7bc91332d04f44755f3257d76e3451",
+    "vofa-idle-ui.png": "c359f0b52e2c250aa94b71900db748b343b120a3f670a8e485e4412a5a3009d5"
+  },
+  "source_sha256": {
+    "host/README.md": "0d43aabe80f889c240928445c64ee6efeb01787d59a7642714c3da70a4410626",
+    "host/protocol/README.md": "c0b891727998666c8224a770ac03b4694ac70606339a4fef0614e8e9f081a177",
+    "host/vofa/analyze.py": "335bc5b26d4056d0aef834407739924bfbaae4b248c8053b49215641f1eb4d99",
+    "host/vofa/bridge.py": "358e702e1c46b3f1324a4709b1b22c048f6492fee97eb7a752b8b8623efac03d",
+    "host/vofa/test_analyze.py": "9ebcd929c0d6d0505bfabb30e075abfd2fdc3f46ffb7ce585b65a94657f8b94d",
+    "host/vofa/test_bridge.py": "b3b92bd2f035e1b05c3f193be00c3f33f08df51289b8f485b5f1fbedb69ca6fa",
+    "host/vofa/README.md": "e18aad815ee888f8ab136c511cf34aa8210b550ba50328b3eba15b7f4b253fce"
+  },
+  "not_proven": [
+    "powered FOC baseline/final PI evidence",
+    "control bandwidth or worst-case timing",
+    "all-phase P6 final regressions"
+  ]
+}

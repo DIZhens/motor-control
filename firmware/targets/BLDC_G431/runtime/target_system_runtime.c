@@ -4,9 +4,7 @@
 #include "tim.h"
 #include "realtime_motor_io.h"
 #include "system_runtime.h"
-#include "byte_stream_transport.h"
-#include "uart_dma_transport.h"
-#include "target_core_server.h"
+#include "target_communication.h"
 
 uint32_t system_runtime_target_hal_tick(void) { return HAL_GetTick(); }
 
@@ -55,26 +53,16 @@ bool system_runtime_target_read_sample(SpeedCommissioningSample *sample)
 {
     return target_runtime_read_commissioning(sample);
 }
-uint32_t system_runtime_target_telemetry_epoch(void) { return target_core_server_telemetry_epoch(); }
-
-static void transport_event(void *context, uint32_t events, bool from_interrupt)
-{
-    (void)context; (void)events;
-    /* 通知只唤醒唯一所有者，不以通知次数推断生产字节或完成状态。 */
-    system_runtime_communication_notify(from_interrupt);
-}
+uint32_t system_runtime_target_telemetry_epoch(void) { return target_communication_telemetry_epoch(); }
 
 bool system_runtime_target_start_transport(void)
 {
-    target_core_server_start();
-    return byte_stream_init() == BYTE_STREAM_OK
-        && byte_stream_bind_event_sink(transport_event, NULL) == BYTE_STREAM_OK
-        && byte_stream_start_rx() == BYTE_STREAM_OK;
+    return target_communication_start();
 }
 
 void system_runtime_target_communication_service(void)
 {
-    target_core_server_service();
+    target_communication_service();
 }
 
 void g431_uart_transport_fail(bool timeout)

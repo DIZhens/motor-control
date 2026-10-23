@@ -1,6 +1,7 @@
 # Core Protocol 客户端
 
-正式G431 Run使用460800/8N1、自研COBS/CRC二进制协议；VOFA只用于独立验证构建。
+正式G431 Run使用460800/8N1、自研COBS/CRC二进制协议；VOFA可通过
+[PC单向数据桥](../vofa/README.md#正式-run-的-pc-数据桥)观察解码遥测，串口仍由协议客户端独占。
 Wire合同见[Core Protocol V1](../../interface/CORE_PROTOCOL_V1.md)，实物范围见
 [G431验证页](../../firmware/targets/BLDC_G431/VALIDATION.md)。
 
@@ -66,7 +67,7 @@ Host先排出串口驱动已有字节，不能以Python调度/日志延迟推断
 ## 离线验证
 
 ```powershell
-.\.venv\Scripts\python.exe -X utf8 firmware/app/communication/tests/verify_core_server.py
+.\.venv\Scripts\python.exe -X utf8 protocol/tests/uart_v1/verify_core_server.py
 ```
 
 同一测试在真实ARM Server/Codec、Runtime交接和参数模型上运行Python Client，覆盖应答丢失

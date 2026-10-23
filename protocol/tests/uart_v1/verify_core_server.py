@@ -13,8 +13,10 @@ from elftools.elf.elffile import ELFFile
 from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE
 from unicorn.arm_const import UC_CPU_ARM_CORTEX_M4, UC_ARM_REG_R0, UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_PC
 
-COMM=Path(__file__).resolve().parents[1]
-ROOT=COMM.parents[2]
+ROOT=Path(__file__).resolve().parents[3]
+COMM=ROOT/'protocol/uart_v1'
+PORTS=ROOT/'protocol/ports'
+COMMON=ROOT/'protocol/common'
 sys.path.insert(0,str(ROOT))
 from host.protocol import codec as py
 ARM=Path(os.environ.get('KEIL_ARMCC_BIN',r'D:\keil5\ARM\ARMCC\bin'))
@@ -66,6 +68,16 @@ class Model:
         return self
 
 def tests():
+    for mode in range(2):
+        m=Model()
+        assert m.call('model_binding_invalid_request',mode)==2 and m.get('model_submit_count')==0
+    passed('真实Firmware绑定拒绝非法内部kind/command，不形成Runtime请求或Motor调用')
+    m=Model();assert m.call('model_binding_complete',0)==1 and m.get('model_binding_output_ticket')==5
+    for mode in range(1,5):
+        m=Model();assert m.call('model_binding_complete',mode)==0
+        assert m.get('model_failure')==6 and m.get('model_permitted')==0
+        assert m.get('model_binding_output_ticket')==0x5A5A5A5A
+    passed('真实Firmware绑定规范化合法Completion；非法kind/outcome/Motor/参数结果Fail-closed且不发布半值')
     m=Model();m.open();m.open(seq=2)
     assert m.get('model_submit_count')==0
     assert m.response(req(session=0))[1]['result_code']==py.Result.SESSION_REQUIRED
@@ -416,7 +428,7 @@ def host_tests():
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--report',type=Path);args=parser.parse_args()
     target=ROOT/'firmware/targets/BLDC_G431'
-    sources=[COMM/'core_server.c',COMM/'core_protocol.c',COMM/'core_protocol_values.c',Path(__file__).with_name('core_server_model.c'),
+    sources=[ROOT/'firmware/app/communication/motor_node_binding.c',COMM/'core_server.c',COMM/'core_protocol.c',COMM/'core_protocol_values.c',Path(__file__).with_name('core_server_model.c'),
         Path(__file__).with_name('target_core_mapping_model.c'),target/'runtime/target_core_server.c',
         ROOT/'firmware/app/system_runtime/runtime_exchange.c',ROOT/'firmware/app/system_runtime/runtime_parameters.c',ROOT/'firmware/app/motor/motor.c']
     with tempfile.TemporaryDirectory(prefix='g431-core-server-') as directory:
@@ -426,8 +438,13 @@ def main():
         for source in sources:
             obj=temp/(source.stem+'.o');objects.append(obj)
             command=[ARM/'armcc.exe','--cpu=Cortex-M4.fp','--c99','-O3','-Otime','--split_sections','-g']
-            for include in [COMM,ROOT/'firmware/app/motor',ROOT/'firmware/app/system_runtime']:command+=['-I',include]
+            # 纯协议源仅取得protocol头目录，不能借模型的Firmware include掩盖反向依赖。
+            includes=[COMM,PORTS,COMMON]
+            if not source.is_relative_to(ROOT/'protocol/uart_v1'):
+                includes += [ROOT/'firmware/app/communication',ROOT/'firmware/app/motor',ROOT/'firmware/app/system_runtime']
+            for include in includes:command+=['-I',include]
             if source.name in ('target_core_server.c','target_core_mapping_model.c'):
+                command+=['-DBLDC_G431_COMMUNICATION=1']
                 command+=['-DBLDC_G431_FINITE_RUN','-DSTM32G431xx','-DUSE_HAL_DRIVER']
                 for include in [target/'runtime',target/'Core/Inc',ROOT/'firmware/platform_contract',
                     target/'Drivers/CMSIS/Include',target/'Drivers/CMSIS/Device/ST/STM32G4xx/Include',
@@ -450,5 +467,6 @@ def main():
         args.report.parent.mkdir(parents=True,exist_ok=True)
         args.report.write_text(json.dumps(dict(status='PASS',groups=groups,hardware_access=False,
             execution='ARMCC Cortex-M4F + Unicorn; real Target object mapping with substituted read inputs; simulated Transport/real-time stepping and bytewise library copy substitute',
-            source_sha256={p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in [Path(__file__),*sources,ROOT/'host/protocol/client.py',ROOT/'host/protocol/codec.py']}),ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+            source_sha256={p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in [Path(__file__),*sources,ROOT/'host/protocol/client.py',ROOT/'host/protocol/codec.py',
+                *COMMON.glob('*.h'),*COMM.glob('*.h'),*PORTS.glob('*.h'),ROOT/'firmware/app/communication/motor_node_binding_target.h']}),ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 if __name__=='__main__':main()

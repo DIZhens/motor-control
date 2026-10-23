@@ -1,0 +1,349 @@
+{
+  "status": "FINITE_RUN_FUNCTIONAL_PASS_OPERATOR_NORMAL_P6_PERFORMANCE_FAIL",
+  "date": "2026-10-24",
+  "source_checkpoint": "86c30c8",
+  "build_id": "0x137624c44b3f866e",
+  "firmware_full_sha256": "137624c44b3f866edece7feabc0210aa7ab55a69bec9d64eadea2174546938d9",
+  "purpose": "在相同有限空载目标/PI/安全包络下观察1kHz反馈低通的收益，不扩大电流、不改第三相或控制时序。",
+  "baseline": {
+    "build_id": "0x6b86fa315e39d8fe",
+    "historical": true,
+    "image": {
+      "hex_sha256": "7704e6d2e900db9dede0c5dff73874f5b1e8a31e4edf6d63fade5a7eac24f5eb",
+      "bytes": 66728
+    },
+    "metrics": {
+      "target_rpm": 40.0,
+      "first_control_tick": 2533014,
+      "last_control_tick": 2556934,
+      "observed_duration_s": 1.196,
+      "samples": 300,
+      "valid_speed_samples": 300,
+      "rise_10_90_s": 0.044,
+      "settling_5_percent_s": null,
+      "terminal_window_error_mean_rpm": 0.467582639058431,
+      "terminal_window_speed_std_rpm": 4.84412100580758,
+      "wire_gaps_inside_window": 0,
+      "overshoot_rpm": 15.844966888427734,
+      "terminal_window_speed_peak_to_peak_rpm": 21.7500057220459,
+      "terminal_window_is_not_proof_of_steady_state": true,
+      "current_samples": 300,
+      "iq_reference_abs_peak_a": 0.08009130507707596,
+      "iq_tracking_rmse_a": 0.008579190402685786,
+      "iq_tracking_abs_peak_a": 0.061550870537757874,
+      "id_mean_a": 0.0004543079826786804,
+      "id_abs_peak_a": 0.022936612367630005,
+      "limit_sample_fractions": {
+        "speed_iq": 0.0,
+        "d_integral": 0.0,
+        "q_integral": 0.0,
+        "voltage": 0.0
+      }
+    },
+    "raw_log_sha256": "c1cf0e6afd2a54bc66b6bc67a9b9bf3296bc5a3eeae21aa389b15e3d39d6d01a"
+  },
+  "filtered": {
+    "image": {
+      "bytes": 67080,
+      "hex_sha256": "c5f10cf28e66a82088dd6bff9be2d5830b30faf8c665c632baabdef0f06d0f5e",
+      "readback_sha256": "14df473367ccc963e1fdc0d5cc34a50cf8199190d53d6b76675f883e6b146e9e"
+    },
+    "metrics": {
+      "target_rpm": 40.0,
+      "first_control_tick": 589026,
+      "last_control_tick": 613026,
+      "observed_duration_s": 1.2,
+      "samples": 301,
+      "valid_speed_samples": 301,
+      "rise_10_90_s": 0.012,
+      "settling_5_percent_s": null,
+      "terminal_window_error_mean_rpm": 0.22032636006673176,
+      "terminal_window_speed_std_rpm": 4.711057153980932,
+      "wire_gaps_inside_window": 0,
+      "overshoot_rpm": 12.695484161376953,
+      "terminal_window_speed_peak_to_peak_rpm": 17.643278121948242,
+      "terminal_window_is_not_proof_of_steady_state": true,
+      "current_samples": 301,
+      "iq_reference_abs_peak_a": 0.0806720033288002,
+      "iq_tracking_rmse_a": 0.0073915312130620105,
+      "iq_tracking_abs_peak_a": 0.08445130754262209,
+      "id_mean_a": 0.00016826963318245753,
+      "id_abs_peak_a": 0.016239196062088013,
+      "limit_sample_fractions": {
+        "speed_iq": 0.0,
+        "d_integral": 0.0,
+        "q_integral": 0.0,
+        "voltage": 0.0
+      }
+    },
+    "current_pi": {
+      "kp": 0.5,
+      "ki": 600
+    },
+    "speed_pi": {
+      "kp": 0.002,
+      "ki": 0.008
+    },
+    "target_rpm": 40,
+    "stop_host_s": 1.200679500005208,
+    "start_attempts": 1,
+    "run_count_before": 0,
+    "run_count_after": 1,
+    "operator_after": "无异常",
+    "domain": {
+      "received": 480,
+      "gaps": 0,
+      "order_errors": 0,
+      "first": 1,
+      "last": 480
+    },
+    "communication_delta": {
+      "rx_discontinuities": 0,
+      "rx_dma_overruns": 0,
+      "uart_pe": 0,
+      "uart_fe": 0,
+      "uart_ne": 0,
+      "uart_ore": 0,
+      "cobs_errors": 0,
+      "crc_errors": 0,
+      "length_errors": 0,
+      "version_errors": 0,
+      "message_errors": 0,
+      "parser_timeouts": 0,
+      "telemetry_overwrites": 0,
+      "internal_fault_count": 0,
+      "tx_errors": 0
+    },
+    "post": {
+      "motor": [
+        1,
+        0,
+        1,
+        2,
+        0
+      ],
+      "system": [
+        3,
+        4,
+        6,
+        2,
+        32523,
+        487,
+        487,
+        31259,
+        690,
+        438,
+        271,
+        109,
+        0
+      ],
+      "guard": 0,
+      "internal": [
+        0,
+        0
+      ],
+      "run": [
+        1,
+        0,
+        0,
+        3859050599,
+        613020,
+        0,
+        1061226496,
+        1036705792
+      ],
+      "phase": 0,
+      "zero_state": 3,
+      "zero_failure": 0,
+      "zero_samples": 4096,
+      "zero_offsets": [
+        0.0,
+        -0.012295739725232124,
+        -0.00033730160794220865
+      ],
+      "angle_hex": "0700000001000000903dc83c6f12033b00009643",
+      "timing_fault": 0,
+      "timing_first": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "moe": false,
+      "six_pin_levels": 0
+    },
+    "stack_min_words": {
+      "communication": 438,
+      "telemetry": 271
+    }
+  },
+  "comparison": {
+    "terminal_window_speed_peak_to_peak_rpm": {
+      "before": 21.7500057220459,
+      "after": 17.643278121948242,
+      "relative_change_percent": -18.88150123995167
+    },
+    "terminal_window_speed_std_rpm": {
+      "before": 4.84412100580758,
+      "after": 4.711057153980932,
+      "relative_change_percent": -2.7469142836671123
+    },
+    "overshoot_rpm": {
+      "before": 15.844966888427734,
+      "after": 12.695484161376953,
+      "relative_change_percent": -19.876865311413084
+    },
+    "iq_tracking_rmse_a": {
+      "before": 0.008579190402685786,
+      "after": 0.0073915312130620105,
+      "relative_change_percent": -13.843487950237932
+    },
+    "iq_tracking_abs_peak_a": {
+      "before": 0.061550870537757874,
+      "after": 0.08445130754262209,
+      "relative_change_percent": 37.20570774188503
+    },
+    "iq_reference_abs_peak_a": {
+      "before": 0.08009130507707596,
+      "after": 0.0806720033288002,
+      "relative_change_percent": 0.7250453106806054
+    }
+  },
+  "shared_window": {
+    "before": {
+      "window_s": [
+        0.2,
+        1.196
+      ],
+      "samples": 250,
+      "speed_mean_rpm": 38.720274269104,
+      "speed_std_rpm": 6.12077102433243,
+      "speed_peak_to_peak_rpm": 31.925777435302734,
+      "max_iq_reference_a": 0.052101731300354004
+    },
+    "filter_1khz": {
+      "window_s": [
+        0.2,
+        1.196
+      ],
+      "samples": 249,
+      "speed_mean_rpm": 38.94849266297367,
+      "speed_std_rpm": 5.779639628162269,
+      "speed_peak_to_peak_rpm": 27.87394142150879,
+      "max_iq_reference_a": 0.05321661755442619
+    }
+  },
+  "order14_descriptive_fit": {
+    "before": {
+      "order": 14,
+      "model": "constant + linear time trend + sin/cos(14*mechanical_angle)",
+      "amplitude_rpm": 4.167002016731901,
+      "rank": 4,
+      "condition_number": 3.494808156551192,
+      "explained_after_linear_trend": 0.2405066873683196,
+      "residual_std_rpm": 5.19754923257546
+    },
+    "filter_1khz": {
+      "order": 14,
+      "model": "constant + linear time trend + sin/cos(14*mechanical_angle)",
+      "amplitude_rpm": 4.178524807029971,
+      "rank": 4,
+      "condition_number": 3.504462123239995,
+      "explained_after_linear_trend": 0.2664680406500527,
+      "residual_std_rpm": 4.855143329073291
+    }
+  },
+  "observations": [
+    "两次记录均无IQ/积分/电压限幅遥测标志；新峰值Iq请求80.672mA，旧80.091mA，仍未触及100mA名义上限。",
+    "尾部20%速度峰峰值约下降18.9%，标准差仅下降2.75%；未观察到持续落入±5%误差带，性能目标仍FAIL。",
+    "±5%带和尾部20%沿用既有描述约定，不新增或替换任务书验收门槛。共同窗口按4000到23920个控制tick筛选，MATLAB统计与独立Python复算一致。",
+    "相同0.2到1.196秒窗口按整数控制时间筛选；14阶角度分量幅度约4.167到4.179rpm，未被本轮低通消除。该描述性拟合仍不能区分真实机械纹波和编码器周期误差。",
+    "新RUN反馈为滤后DQ，旧RUN为未滤波DQ。电流RMSE下降不能当作物理电流噪声或真实扭矩精度改善；新单点跟踪误差峰值反而较大，起转遥测相位亦不同。",
+    "两次为不同启动、不同初始角度的历史单次对照，不是随机交叉重复试验；不能据此声称低通有统计显著的因果收益。",
+    "1.2秒有限运行没有时序故障且正确Stop；不代替最坏执行时间、完整IRQ预算、长期稳定性或外部独立转速验证。"
+  ],
+  "execution_notes": [
+    "初次带电前检通过后，PC打开COM5阻塞；在任何线上请求/Start前停止指定主机进程。只读证明Start=0、电机命令=0、MOE0/六路LOW，未自动运动重试。",
+    "操作者重插USB串口，并确认期间也按过RST／重开过OUTPUT。因此不同零偏与较小启动时间归属人工新启动，不记为未知自复位。",
+    "重连后重新检查同一冻结Flash、校零和关断，再执行唯一一次已授权+40rpm；Start=1、约1.20068秒Stop，读完关断记录后操作者确认无异常。"
+  ],
+  "artifacts": [
+    {
+      "path": "validation/local-evidence/20261024-current-filter-40-reconnected/result.json",
+      "bytes": 8695,
+      "sha256": "b09adb3bcffe1eb781c87312a386ddd8447ccfef2315d60f65ac135a0e7a25f6"
+    },
+    {
+      "path": "validation/local-evidence/20261024-current-filter-40-reconnected/trial.jsonl",
+      "bytes": 448304,
+      "sha256": "a8a1039f10255af096682782cb9a757eeae34998e3873cc0cb37b5340f4ad6b4"
+    },
+    {
+      "path": "validation/local-evidence/20261024-current-filter-40-reconnected/pre-image-flash.bin",
+      "bytes": 67080,
+      "sha256": "14df473367ccc963e1fdc0d5cc34a50cf8199190d53d6b76675f883e6b146e9e"
+    },
+    {
+      "path": "validation/local-evidence/20261024-current-filter-40-reconnected/post-image-flash.bin",
+      "bytes": 67080,
+      "sha256": "14df473367ccc963e1fdc0d5cc34a50cf8199190d53d6b76675f883e6b146e9e"
+    },
+    {
+      "path": "validation/local-evidence/20261024-current-filter-40-reconnected/pre.json",
+      "bytes": 835,
+      "sha256": "88efa340c13ad1cf6763a9961470a5fab491ebd8af66c18c64b056990de2f9c8"
+    },
+    {
+      "path": "validation/local-evidence/20261024-current-filter-40-reconnected/post.json",
+      "bytes": 875,
+      "sha256": "d50d42c7d588ab55ec075236f8201312422f0b4efb6564fe83530db379ca3bd8"
+    },
+    {
+      "path": "validation/local-evidence/20261024-current-filter-40/result.json",
+      "bytes": 370,
+      "sha256": "314093fcb34df87d741981d3dae489792e38eeff4e18a5ce822dc35bf4a35da9"
+    },
+    {
+      "path": "validation/local-evidence/20261024-current-filter-40-reconnected/compare_filter.m",
+      "bytes": 2825,
+      "sha256": "ad73037cc038470453dbabbecf6c35555378d905be0acf32326106eda5ab5227"
+    },
+    {
+      "path": "validation/local-evidence/20261024-current-filter-40-reconnected/matlab-comparison.json",
+      "bytes": 969,
+      "sha256": "1674c0167a963460fc87f316be3a6a27bf9b0570c7665634b955ef8955e47629"
+    },
+    {
+      "path": "validation/local-evidence/20261024-current-filter-40-reconnected/matlab-comparison.log",
+      "bytes": 66,
+      "sha256": "3a8871b2b18f1e46a69d5cd9cb87e836a2f721069406031a33bf428c7855c5a6"
+    }
+  ],
+  "exported_samples": {
+    "path": "current-filter-comparison.csv",
+    "sha256": "58944be76a3ec4cc4522ca006aa1623478a3a6db984fc5fc3cf0e4ca8dd79301",
+    "run_samples_before": 300,
+    "run_samples_filtered": 301
+  },
+  "plot": "current-filter-comparison.png",
+  "next": "不继续盲目下调截止频率或扩大Iq。先用本轮与既有记录复核残余角度阶次和Iq请求关系，再选择能区分编码器周期误差、电角映射或真实转矩纹波的最小试验；独立实际转速未验证。",
+  "unchanged": "20/10/1kHz、原采样/提交/保护/PI包络、250Hz正式点不变；500Hz 1.92%原FAIL不改写。"
+}

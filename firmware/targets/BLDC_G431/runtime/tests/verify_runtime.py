@@ -119,10 +119,16 @@ runtime_group = next(group for group in observe.findall("./Groups/Group")
                      if group.findtext("GroupName") == "Application/User/Runtime")
 runtime_sources = {member.findtext("FileName") for member in runtime_group.findall("./Files/File")}
 if OPTIONS.finite_run:
-    assert runtime_sources == {"target_runtime.c", "target_system_runtime.c", "cordic_math.c", "uart_dma_transport.c", "target_core_server.c"}
+    assert runtime_sources == {"target_runtime.c", "target_system_runtime.c", "cordic_math.c", "uart_dma_transport.c", "target_core_server.c", "target_motor_node_binding.c", "target_communication.c",
+        "target_can_server.c", "fdcan_frame_transport.c", "g431_control_profile.c"}
     assert 'BLDC_G431_FREERTOS' in defines
-    assert not {"Application/User/Validation", "Application/User/Timing"} & {
-        group.findtext("GroupName") for group in observe.findall("./Groups/Group")}
+    assert "Application/User/Timing" not in {group.findtext("GroupName") for group in observe.findall("./Groups/Group")}
+    validation_group = next(group for group in observe.findall("./Groups/Group")
+                            if group.findtext("GroupName") == "Application/User/Validation")
+    assert [member.findtext("FileName") for member in validation_group.findall("./Files/File")] == ["can_loopback.c"]
+    # 同一 Target 的专项入口仅在构建宏下有效；正式镜像移除由原生 ELF 检查证明。
+    communication_config = (TARGET / "runtime/target_communication_config.h").read_text(encoding="utf-8")
+    assert "#define BLDC_G431_CAN_LOOPBACK_VALIDATION 0" in communication_config
 else:
     assert {"target_runtime.c", "target_vofa.c", "target_uart.c", "cordic_math.c"} <= runtime_sources
 passed(target_name + "入口/产物独立，仅对Runtime、Motor和Control三个组采用速度优化")
@@ -168,7 +174,8 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
                    REPOSITORY / "firmware/app/communication/motor_vofa.c",
                    REPOSITORY / "firmware/app/communication/vofa.c"]
     if OPTIONS.finite_run:
-        sources += [REPOSITORY / 'firmware/app/system_runtime/runtime_exchange.c',
+        sources += [TARGET / 'runtime/g431_control_profile.c',
+                    REPOSITORY / 'firmware/app/system_runtime/runtime_exchange.c',
                     REPOSITORY / 'firmware/app/system_runtime/runtime_parameters.c', TESTS / 'exchange_model.c']
     else:
         sources += [TARGET / "runtime" / name for name in ["current_capture.c", "compute_probe.c",

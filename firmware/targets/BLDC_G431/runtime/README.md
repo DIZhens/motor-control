@@ -2,6 +2,8 @@
 
 `BLDC_G431_Run` 是日常开发的正式入口，装配公共 Motor / ControlRuntime、Platform 和
 原生静态FreeRTOS后台。正式Run关闭旧UART/VOFA入口，使用Core Protocol V1。
+默认UART；同一Target可构建为CAN，见[静态链路选择](RTOS_INTEGRATION.md#静态链路选择)。
+两种构建只初始化选中的硬件/Server/通知，仍只有一个Communication任务。
 USART1以460800/8N1接入RX Circular DMA及单帧TX DMA；Communication唯一持有Codec、
 Session/事务Server，提供对象读写、完整命令应答及Telemetry/Event。无功率50/250Hz遥测与
 每秒状态请求通过，按250Hz完成本阶段通信验收；500Hz损失1.92%仍未通过原<1%门槛，
@@ -51,7 +53,29 @@ Observe / Run 用 `BLDC_G431_RUNTIME_ENTRY` 选择同一 Core 装配入口；Run
 Timing 使用 `BLDC_G431_TIMING_ENTRY`。`main()` 和 IRQ 的 USER CODE 选择互斥入口。
 两份工程共用 CubeMX 配置、Platform、Motor 和控制算法源，不复制实现或同时绑定两个 consumer。
 
+另有编译期开关 `BLDC_G431_RAW_ADC_CAPTURE`，仅用于 Target 私有的无功率原码诊断候选，
+不是正式运行功能。开启时按 `platform/raw_adc_capture.h` 保存一次 512 对 B/C 原码，
+占 2104 B 记录和 4 B 请求字；只接受 MOE 关闭、软件功率关闭且连续有效的同步采样。
+终态冻结后经 SWD 读回，不能重复请求重采；失去采样时由主机超时退出。
+请求字保持写入值至复位，以冻结状态防重入，避免写后核验与固件清零竞争。
+ISR 只作整数复制和状态检查，分析留在主机。正常构建不定义此宏，排除其代码与 RAM；
+诊断候选明确记录宏和源码身份，分析完成后撤去宏。它不改变 HCC、电流换算、Motor 或控制参数。
+对应 ARM 模型命令为 `python firmware/targets/BLDC_G431/validation/tests/verify_raw_adc_capture.py`。
+
 ## 有限运行入口
+
+正式 Run 的 `ControlRuntimeConfig` 位于 `g431_control_profile.c/.h`，集中持有采样节拍、
+零偏窗口、电角映射、默认电流/速度 PI 和数值限制。该 Target 装配还持有配置绑定的私有
+CORDIC 上下文；启动时初始化后端，运行期继续由原实时所有者串行使用。`target_runtime.c`
+仍负责硬件装配、交接、发布和独立守卫，从同一配置初始化 `RuntimeParameters` 的默认速度 PI。
+Observe 在入口内保留独立的关断配置，不链接 Run Profile，也不获得运行许可。
+
+当前开发候选在 Profile 中单独启用 1 kHz alpha/beta 电流控制反馈低通，系数
+`0.4558867801` 按固定 10 kHz 采样计算；设为 0 可恢复旁路。滤波不进入校零、原始相电流
+过流检查、Hardware Trip 或独立 Guard，也不改变采样/提交边界、PI、目标限幅和电角度预测。
+RUN 发布控制器实际采用的滤后 DQ，IDLE/Stop 的观测 DQ 仍来自未滤波电流。
+该候选的静态降噪和合成对象验证不代替实机时序、稳定性或 P6 性能验收，证据见
+[Target 验证页](../VALIDATION.md)。
 
 Run 使用既有实物记录中的 7 极对、编码器正方向和 0.0244434178 圈电角度偏置，
 B/C 电流在本启动零偏校正后取反、重构 A 相。静态记录的约 1.236 V / 0.394 名义 A
@@ -105,8 +129,9 @@ Run已装配[SystemRuntime交接](../../../app/system_runtime/README.md)：非�
 内部可信性丢失立即safe-off并撤销Session逻辑资格，下一ADC把bit7合入Motor；
 首因与计数单独保存，不改变Clear或现有有限保护。API边界见`target_runtime.h`。
 
-当前请求由唯一Communication任务的Server使用，`target_core_server.c`完成对象快照映射、
-准确ticket交接及协议无关Fail-closed连接；不从后台修改PI实例。原VOFA装配只保留在验证
+当前请求由唯一Communication任务的Server使用，公共`motor_node_binding.c`完成设备值、
+RuntimeRequest/Completion和Fail-closed映射；`target_motor_node_binding.c`连接本机只读与提交端口，
+`target_core_server.c`保留UART专属统计与服务装配。不从后台修改PI实例。原VOFA装配只保留在验证
 入口与兼容模型中，不是Run的第二个后台所有者。新协议已完成对象/事务、名义通信及一次
 固定空载正向启停调速，仍按各自HEX保存证据；持续运行、带载和完整保护尚未验收。
 
@@ -114,7 +139,7 @@ Run已装配[SystemRuntime交接](../../../app/system_runtime/README.md)：非�
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run --exchange
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_system_runtime.py
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_uart_dma.py
-.\.venv\Scripts\python.exe -X utf8 firmware/app/communication/tests/verify_core_server.py
+.\.venv\Scripts\python.exe -X utf8 protocol/tests/uart_v1/verify_core_server.py
 ```
 
 任务职责、栈预算、四个独立时间域及异常归属见[RTOS集成合同](RTOS_INTEGRATION.md)。

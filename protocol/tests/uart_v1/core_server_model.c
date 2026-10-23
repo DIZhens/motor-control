@@ -1,6 +1,7 @@
 #include "core_server.h"
 #include "byte_stream_transport.h"
 #include "runtime_parameters.h"
+#include "motor_node_binding_target.h"
 #include <string.h>
 
 /* 真实Server/Codec/交接/参数与Motor；无HAL/Kernel/电机。
@@ -19,11 +20,12 @@ uint8_t model_input[1024], model_tx[130];
 uint32_t model_now, model_tx_length, model_tx_busy, model_permitted, model_healthy;
 uint32_t model_failure, model_failure_count, model_submit_count, model_start_ready;
 uint32_t model_tx_bytes, model_tx_error, model_submit_override;
+uint32_t model_binding_output_ticket;
 RuntimeTelemetryValue model_telemetry;
 uint32_t model_telemetry_pending;
-bool core_server_port_telemetry_peek(RuntimeTelemetryValue *value)
+bool motor_node_binding_target_telemetry_peek(RuntimeTelemetryValue *value)
 { if (!model_telemetry_pending) { return false; } *value = model_telemetry; return true; }
-void core_server_port_telemetry_retire(void) { model_telemetry_pending = 0U; }
+void motor_node_binding_target_telemetry_retire(void) { model_telemetry_pending = 0U; }
 void model_produce(uint32_t produced)
 {
     model_telemetry = (RuntimeTelemetryValue){0};
@@ -46,19 +48,19 @@ void model_init(void)
     motor_init(&model_motor); motor_finish_boot(&model_motor);
     model_permitted = model_healthy = 1U;
 }
-bool core_server_port_permitted(void) { return model_permitted != 0U; }
-void core_server_port_fail_closed(RuntimeInternalFaultReason reason)
+bool motor_node_binding_target_permitted(void) { return model_permitted != 0U; }
+void motor_node_binding_target_fail_closed(RuntimeInternalFaultReason reason)
 {
     if (model_failure == 0U) { model_failure = (uint32_t)reason; }
     model_failure_count++; model_permitted = 0U;
 }
-RuntimeExchangeResult core_server_port_submit(const RuntimeRequest *request, uint32_t *ticket, uint32_t *cancelled)
+RuntimeExchangeResult motor_node_binding_target_submit(const RuntimeRequest *request, uint32_t *ticket, uint32_t *cancelled)
 {
     model_submit_count++;
     if (model_submit_override != 0U) { return (RuntimeExchangeResult)model_submit_override; }
     return runtime_exchange_submit(&model_exchange, request, ticket, cancelled);
 }
-bool core_server_port_completion(RuntimeCommandCompletion *completion)
+bool motor_node_binding_target_completion(RuntimeCommandCompletion *completion)
 { return runtime_exchange_pop(&model_exchange, completion); }
 ByteStreamResult byte_stream_try_send(const uint8_t *bytes, size_t count)
 {
@@ -68,36 +70,44 @@ ByteStreamResult byte_stream_try_send(const uint8_t *bytes, size_t count)
     model_tx_bytes += count;
     return BYTE_STREAM_ACCEPTED;
 }
+bool motor_node_binding_target_info(CoreDeviceInfo *value)
+{ *value = (CoreDeviceInfo){1,1,1,1,0x27,20000,0x123456789ABCDEF0ULL}; return true; }
+bool motor_node_binding_target_snapshot(MotorSnapshot *value)
+{
+    memset(value, 0, sizeof(*value));
+    value->state = model_motor.state; value->faults = model_motor.faults;
+    value->command_result = model_motor.command_result; value->target_velocity_rpm = model_motor.target_velocity_rpm;
+    value->status_valid = value->control_time_valid = true;
+    value->control_time_ticks_per_second = 20000U;
+    return true;
+}
+bool motor_node_binding_target_parameters(RuntimeParameters *value) { *value = model_parameters; return true; }
 CoreResult core_server_port_read_object(uint16_t id, CoreObject *value)
 {
-    const RuntimeSpeedProfile *profile;
+    MotorNodeValue node;
+    CoreResult result;
     memset(value, 0, sizeof(*value));
-    switch (id) {
-    case CORE_DEVICE_INFO: value->device_info = (CoreDeviceInfo){1,1,1,1,0x27,20000,0x123456789ABCDEF0ULL}; break;
-    case CORE_MOTOR_SNAPSHOT:
-        value->motor_snapshot.motor_state = model_motor.state; value->motor_snapshot.fault_flags = model_motor.faults;
-        value->motor_snapshot.motor_command_result = model_motor.command_result;
-        value->motor_snapshot.valid_flags = 0x1C3U;
-        value->motor_snapshot.control_time_ticks_per_second = 20000U;
-        value->motor_snapshot.target_velocity_rpm = model_motor.target_velocity_rpm;
-        break;
-    case CORE_COMMUNICATION_STATUS:
+    if (id == CORE_COMMUNICATION_STATUS) {
         value->communication_status.tx_bytes = model_tx_bytes;
         value->communication_status.internal_fault_reason = model_failure;
         value->communication_status.internal_fault_count = model_failure_count;
         value->communication_status.completion_fifo_high_water = model_exchange.completion_high_water;
-        break;
-    case CORE_SPEED_PI_DEFAULT: case CORE_SPEED_PI_STAGED: case CORE_SPEED_PI_ACTIVE:
-        profile = id == CORE_SPEED_PI_ACTIVE ? &model_parameters.speed_active : &model_parameters.speed_staged;
-        value->speed_pi = (CoreSpeedPi){profile->value.kp, profile->value.ki, profile->generation, profile->in_use};
-        if (id == CORE_SPEED_PI_DEFAULT) { value->speed_pi = (CoreSpeedPi){0.001F,0.004F,0U,false}; }
-        break;
-    case CORE_TELEMETRY_CONFIG:
-        value->telemetry_config = (CoreTelemetryConfig){model_parameters.telemetry.enabled ? 1U : 0U,
-            model_parameters.telemetry.rate_hz, model_parameters.telemetry.generation}; break;
-    default: return CORE_UNKNOWN_OBJECT;
+        return CORE_RESULT_OK;
     }
-    return CORE_RESULT_OK;
+    if (id != CORE_COMMUNICATION_STATUS) {
+        result = protocol_device_read_object(id, &node);
+        if (result != CORE_RESULT_OK) { return result; }
+        switch (id) {
+        case CORE_DEVICE_INFO: value->device_info = node.device_info; break;
+        case CORE_MOTOR_SNAPSHOT: value->motor_snapshot = node.motor_snapshot; break;
+        case CORE_SPEED_PI_DEFAULT: case CORE_SPEED_PI_STAGED: case CORE_SPEED_PI_ACTIVE:
+            value->speed_pi = node.speed_pi; break;
+        case CORE_TELEMETRY_CONFIG: value->telemetry_config = node.telemetry_config; break;
+        default: return CORE_UNKNOWN_OBJECT;
+        }
+        return CORE_RESULT_OK;
+    }
+    return CORE_UNKNOWN_OBJECT;
 }
 void model_feed(uint32_t count) { core_server_feed(&model_server, model_input, count, model_now); }
 void model_poll(void) { core_server_poll(&model_server, model_now); core_server_observe(&model_server); }
@@ -114,7 +124,7 @@ void model_rt_step(void)
     if (!runtime_exchange_take(&model_exchange, &envelope, &cancelled)) { return; }
     if (cancelled != 0U) {
         completion.ticket = cancelled; completion.outcome = RUNTIME_CANCELLED_BY_STOP;
-        if (!runtime_exchange_complete(&model_exchange, &completion)) { core_server_port_fail_closed(RUNTIME_INTERNAL_COMPLETION_OVERFLOW); }
+        if (!runtime_exchange_complete(&model_exchange, &completion)) { motor_node_binding_target_fail_closed(RUNTIME_INTERNAL_COMPLETION_OVERFLOW); }
     }
     if (envelope.ticket == 0U) { return; }
     completion = (RuntimeCommandCompletion){0}; completion.ticket = envelope.ticket;
@@ -131,7 +141,7 @@ void model_rt_step(void)
         completion.motor_result = motor_handle_control_command(&model_motor, &envelope.request.value.motor,
             model_start_ready != 0U, 80.0F);
     }
-    if (!runtime_exchange_complete(&model_exchange, &completion)) { core_server_port_fail_closed(RUNTIME_INTERNAL_COMPLETION_OVERFLOW); }
+    if (!runtime_exchange_complete(&model_exchange, &completion)) { motor_node_binding_target_fail_closed(RUNTIME_INTERNAL_COMPLETION_OVERFLOW); }
 }
 void model_unknown_completion(void)
 {
@@ -147,4 +157,32 @@ void model_corrupt_state(uint32_t mode)
         model_server.telemetry_wire_valid = true;
         model_server.telemetry_wire_length = mode == 3U ? 0U : CORE_WIRE_MAX + 1U;
     }
+}
+
+/* 直接验证真实Firmware绑定，不通过UART解码器预先屏蔽非法内部意图。 */
+uint32_t model_binding_invalid_request(uint32_t mode)
+{
+    ProtocolDeviceRequest request = {.kind = PROTOCOL_REQUEST_MOTOR};
+    uint32_t ticket = 0x12345678U, cancelled = 0x87654321U;
+    if (mode == 0U) { request.kind = (ProtocolRequestKind)99; }
+    else { request.value.motor.command_id = 99U; }
+    return (uint32_t)protocol_device_submit(&request, &ticket, &cancelled);
+}
+
+uint32_t model_binding_complete(uint32_t mode)
+{
+    RuntimeCommandCompletion raw = {0};
+    ProtocolDeviceCompletion output;
+    bool result;
+    memset(&output, 0x5A, sizeof(output));
+    raw.ticket = 5U; raw.kind = RUNTIME_REQUEST_MOTOR; raw.outcome = RUNTIME_COMPLETED;
+    raw.motor_result = MOTOR_COMMAND_RESULT_ACCEPTED;
+    if (mode == 1U) { raw.kind = (RuntimeRequestKind)99; }
+    else if (mode == 2U) { raw.outcome = (RuntimeCompletionOutcome)99; }
+    else if (mode == 3U) { raw.motor_result = (MotorCommandResult)99; }
+    else if (mode == 4U) { raw.kind = RUNTIME_REQUEST_SPEED_PI; raw.parameter_result = (RuntimeParameterResult)99; }
+    runtime_exchange_complete(&model_exchange, &raw);
+    result = protocol_device_completion(&output);
+    model_binding_output_ticket = output.ticket;
+    return result ? 1U : 0U;
 }

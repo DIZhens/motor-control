@@ -17,6 +17,7 @@ from elftools.elf.elffile import ELFFile
 from unicorn import Uc, UC_ARCH_ARM, UC_MODE_MCLASS, UC_MODE_THUMB, UC_HOOK_CODE
 from unicorn.arm_const import (UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_SP,
                                UC_ARM_REG_R1, UC_CPU_ARM_CORTEX_M4)
+from current_filter_cases import run_current_filter_cases
 
 ARGS = argparse.ArgumentParser(description=__doc__)
 ARGS.add_argument("--trace-output", type=Path, help="可选完整 ZOH 对象轨迹 CSV；同名 .metadata.json 写合成配置")
@@ -205,6 +206,9 @@ with tempfile.TemporaryDirectory(prefix="g431-foc-runtime-") as temporary_name:
         def controller_dq(self):
             return struct.unpack("<2f", self.cpu.mem_read(symbols["model_controller_dq"], 8))
 
+        def filter_values(self):
+            return struct.unpack("<4f", self.cpu.mem_read(symbols["model_filter_values"], 16))
+
         def trig_turns(self):
             return struct.unpack("<2f", self.cpu.mem_read(symbols["model_trig_turns"], 8))
 
@@ -299,6 +303,7 @@ with tempfile.TemporaryDirectory(prefix="g431-foc-runtime-") as temporary_name:
             assert diag[3] == OFF and self.word("model_power_enabled") == 0, diag
             assert self.word("model_pending_valid") == 0 and self.duty() == (0.5, 0.5, 0.5)
             assert values[0] == 0 and values[4:8] == (0.0, 0.0, 0.0, 0.0), values
+            assert self.word("model_filter_ready") == 0
             if fault:
                 assert diag[0] == FAULT and diag[1] & fault, diag
                 assert diag[5] == diag[11] == 0 and values[2:4] == (0.0, 0.0)
@@ -716,6 +721,8 @@ with tempfile.TemporaryDirectory(prefix="g431-foc-runtime-") as temporary_name:
         model.off(CONTROL)
         assert model.word("model_stage_count") == stages
         CASES.append("有限相电流及Clarke有效但Park溢出：IDLE保持无有效DQ/拒绝Start，RUN由controller报CONTROL并同拍清DQ/积分关断且不stage")
+
+        run_current_filter_cases(Model, Pmsm, DT, CASES)
 
         if OPTIONS.trace_output and OPTIONS.trace_timing == timing_name:
             output = OPTIONS.trace_output.resolve()

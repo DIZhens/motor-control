@@ -16,6 +16,9 @@
 #include "position_observation.h"
 #include "bus_observation.h"
 #include "cordic_math.h"
+#if defined(BLDC_G431_FINITE_RUN)
+#include "g431_control_profile.h"
+#endif
 #if defined(BLDC_G431_DIAGNOSTICS)
 #include "irq_timing.h"
 #include "controller_profile.h"
@@ -59,7 +62,9 @@ volatile TargetRuntimeRunStatus g_target_runtime_run_status;
 /* 启动阶段在时基开启前写入；运行后仅由 sample_ready 更新 Motor。 */
 static Motor s_motor;
 static ControlRuntime s_control_runtime;
+#if !defined(BLDC_G431_FINITE_RUN)
 static G431CordicMath s_cordic_math;
+#endif
 #if defined(BLDC_G431_FINITE_RUN)
 static RuntimeExchange s_exchange;
 static RuntimeParameters s_parameters;
@@ -116,24 +121,9 @@ bool target_runtime_pop_completion(RuntimeCommandCompletion *completion)
 #if !defined(BLDC_G431_RUNTIME_ENTRY)
 #error BLDC_G431_FINITE_RUN requires the runtime Core entry
 #endif
-/* 仅本板固定空载包络：名义电流换算、符号与定向候选承接已存实物记录。
- * 静态1.236V/0.394名义A约3.14Ω，与独立绕组Rs约3.1Ω相符；不声称精度标定。
- * 时序沿用已验证slot与同源控制链，当前候选仍须完成本构建有限验收。 */
-static const ControlRuntimeConfig s_control_config = {
-    /* 采集仍1kHz；每个fast tick读取已发布缓存，避免再分频引入近1ms消费延迟。 */
-    20000U, 2U, 1U, 30U, 100U, {300.0f, 0.005f},
-    {CURRENT_MEASUREMENT_PHASE_BC, 4096U, 0.10f, 0.05f,
-        true, {1.0f, -1.0f, -1.0f}}, 100U, 5.0f, true,
-    {7U, 1, 0.02444341778755188f, 0.002f, 300.0f}, true,
-    {true, true, true,
-        {0.5f, 0.5f, 300.0f, 300.0f, 50.0f, 1.5f, 0.2f, 1.8f/14.0f, 0.000125f},
-        {0.001f, 0.004f, 20.0f, 0.1f, 0.1f, 80.0f, 0.00125f},
-        10U, 10.0f, 14.0f, 0.65f, 0.000125f},
-    g431_cordic_sincos, &s_cordic_math
-};
 #else
 /* Observe的3000 rpm仅用于位置差分排歧，不构成电机运行许可。 */
-static const ControlRuntimeConfig s_control_config = {
+static const ControlRuntimeConfig g431_control_config = {
     20000U, 2U, 10U, 100U, 100U, { 3000.0f, 0.01f },
     /* 名义值正向为 Shunt+→GND；电机相电流以桥→电机为正，B/C 均取反。
      * 网表和正α/正β静态对照已确认符号；幅值仍用名义增益，精度尚未标定。 */
@@ -192,7 +182,7 @@ static bool compute_probe_adc_permitted(bool has_sample)
     (void)has_sample;
     return false;
 #else
-    return s_control_config.fast_tick_period_ticks == 1U
+    return g431_control_config.fast_tick_period_ticks == 1U
         && has_sample && g_target_stage_budget_active == 0U
         && g_target_runtime_stage_request == s_stage_request_seen
         && (s_motor.state == MOTOR_STATE_IDLE) && (s_motor.faults == 0U)
@@ -207,7 +197,7 @@ static bool compute_probe_adc_permitted(bool has_sample)
 static bool stage_budget_adc_permitted(bool has_sample)
 {
     /* 旧半周期诊断只适用于原20kHz采样；新slot统一使用Timing入口。 */
-    return s_control_config.fast_tick_period_ticks == 1U
+    return g431_control_config.fast_tick_period_ticks == 1U
         && has_sample && s_cordic_ready && s_motor.state == MOTOR_STATE_IDLE
         && s_motor.faults == 0U && s_control_runtime.phase == CONTROL_RUNTIME_OFF
         && !s_control_runtime.config.control.enabled && s_control_runtime.bus_valid
@@ -371,10 +361,10 @@ static void publish_commissioning(ControlTime now)
     next.control_time_ticks = now;
     if (snapshot.control_time_valid) { valid |= 1U; }
     if (s_control_runtime.position_time_available && now >= s_control_runtime.last_position_time
-        && now - s_control_runtime.last_position_time <= s_control_config.position_max_age_ticks) {
+        && now - s_control_runtime.last_position_time <= g431_control_config.position_max_age_ticks) {
         next.position_observation_time = s_control_runtime.last_position_time;
         next.mechanical_position_turns = s_control_runtime.mechanical_position_turns
-            * (float)s_control_config.electrical_angle.encoder_direction;
+            * (float)g431_control_config.electrical_angle.encoder_direction;
         valid |= 2U;
     }
     next.target_velocity_rpm = snapshot.target_velocity_rpm; next.velocity_rpm = snapshot.velocity_rpm;
@@ -439,7 +429,7 @@ static bool take_command(MotorCommand *command, bool *rejected)
 static void monitor_finite_run(const MotorCommand *command, bool has_command)
 {
     volatile TargetRuntimeRunStatus *run = &g_target_runtime_run_status;
-    if (!s_control_config.control.enabled) { return; }
+    if (!g431_control_config.control.enabled) { return; }
     if (has_command && command != NULL && command->type == MOTOR_COMMAND_START_VELOCITY
         && s_motor.command_result == MOTOR_COMMAND_RESULT_ACCEPTED
         && s_control_runtime.phase == CONTROL_RUNTIME_START_QUIET) {
@@ -501,9 +491,9 @@ static bool capture_current(const PhaseCurrentObservation *current,
         && s_control_runtime.position_time_available
         && s_control_runtime.position_estimator.velocity_valid
         && (s_control_runtime.position_estimator.velocity_rpm
-            <= s_control_config.current_zero_velocity_limit_rpm)
+            <= g431_control_config.current_zero_velocity_limit_rpm)
         && (s_control_runtime.position_estimator.velocity_rpm
-            >= -s_control_config.current_zero_velocity_limit_rpm);
+            >= -g431_control_config.current_zero_velocity_limit_rpm);
 
     /* Stop 撤销正在采集的窗口；同拍的新诊断请求也不得开始。 */
     if (stop_requested && observe_current_capture_abort(&s_current_capture,
@@ -514,7 +504,7 @@ static bool capture_current(const PhaseCurrentObservation *current,
     if ((request != 0U) && (request != s_current_request_seen)) {
         s_current_request_seen = request;
         (void)observe_current_capture_start(&s_current_capture, request,
-            s_control_config.fast_tick_period_ticks,
+            g431_control_config.fast_tick_period_ticks,
             measurement->offset_a[1], measurement->offset_a[2], permitted);
         publish_current_capture();
         changed = true;
@@ -642,7 +632,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     command_available = take_command(&command, &rejected);
 #endif
 #if defined(BLDC_G431_DIAGNOSTICS)
-    if (!s_control_config.control.enabled) {
+    if (!g431_control_config.control.enabled) {
         stage_request = g_target_runtime_stage_request;
         if (command_available && (g_target_stage_budget_active != 0U
             || (stage_request != 0U && stage_request != s_stage_request_seen))
@@ -710,7 +700,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
 #endif
 #if defined(BLDC_G431_DIAGNOSTICS)
     /* 同拍更新健康快照，主机复核完整窗口时不沿用此前的100Hz旧状态。 */
-    if (!s_control_config.control.enabled) {
+    if (!g431_control_config.control.enabled) {
         business_changed |= capture_current(current, power_disabled,
             command_available && !rejected && (command.type == MOTOR_COMMAND_STOP));
         business_changed |= compute_probe_adc_permitted(true) != s_publication.compute_probe_permitted;
@@ -752,7 +742,7 @@ void target_runtime_guard_irq(void)
     __disable_irq();
     last_sample_cycles = s_last_sample_cycles;
     now_cycles = DWT->CYCCNT;
-    if (s_control_config.control.enabled && g_target_runtime_run_status.active != 0U
+    if (g431_control_config.control.enabled && g_target_runtime_run_status.active != 0U
         && (uint32_t)(now_cycles - g_target_runtime_run_status.started_cycles) >= FINITE_RUN_MAX_CYCLES) {
         /* 时长包括跨拍启动，Update不续期。先撤销功率，再交接普通Stop语义。
          * 队列中的旧运动意图同时退休；ADC停滞时仍由心跳故障保持关断。 */
@@ -792,9 +782,13 @@ void target_runtime_start(void)
     /* 每个异常槽位只有该 handler 写入，嵌套 IRQ 不会覆盖另一路计数。 */
     memset((void *)g_target_runtime_irq_entries, 0, sizeof(g_target_runtime_irq_entries));
 #endif
+#if defined(BLDC_G431_FINITE_RUN)
+    s_cordic_ready = g431_control_profile_initialize_math();
+#else
     s_cordic_ready = g431_cordic_math_init(&s_cordic_math);
+#endif
 #if defined(BLDC_G431_DIAGNOSTICS)
-    if (!s_control_config.control.enabled) {
+    if (!g431_control_config.control.enabled) {
         observe_compute_comparison_init(&s_compute_probe);
         observe_controller_profile_init();
         g_target_runtime_stage_request = 0U;
@@ -814,16 +808,16 @@ void target_runtime_start(void)
     motor_init(&s_motor);
 #if defined(BLDC_G431_FINITE_RUN)
     runtime_exchange_init(&s_exchange);
-    runtime_parameters_init(&s_parameters, s_control_config.control.speed.kp_a_per_rpm,
-        s_control_config.control.speed.ki_a_per_rpm_s);
+    runtime_parameters_init(&s_parameters, g431_control_config.control.speed.kp_a_per_rpm,
+        g431_control_config.control.speed.ki_a_per_rpm_s);
 #endif
 #if !defined(BLDC_G431_FREERTOS)
     target_vofa_init();
 #endif
     realtime_motor_io_safe_off();
     /* 先建立快照所需的实例，即使后端装配失败也能发布明确FAULT。 */
-    if (!control_runtime_init(&s_control_runtime, &s_motor, &s_control_config)
-        || (s_control_config.control.enabled && !s_cordic_ready)) {
+    if (!control_runtime_init(&s_control_runtime, &s_motor, &g431_control_config)
+        || (g431_control_config.control.enabled && !s_cordic_ready)) {
         motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_STARTUP);
 #if defined(BLDC_G431_FINITE_RUN)
         if (!target_runtime_session_permitted()) { motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_INTERNAL); }
@@ -1098,6 +1092,6 @@ void target_runtime_service(void)
     target_vofa_service(HAL_GetTick());
 #endif
 #if defined(BLDC_G431_DIAGNOSTICS)
-    if (!s_control_config.control.enabled) { service_compute_probe(); }
+    if (!g431_control_config.control.enabled) { service_compute_probe(); }
 #endif
 }

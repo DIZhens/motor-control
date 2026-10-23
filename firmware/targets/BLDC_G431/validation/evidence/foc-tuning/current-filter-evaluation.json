@@ -1,0 +1,514 @@
+{
+  "status": "OFFLINE_FILTER_EVALUATION_AND_THIRD_PHASE_ROUTE_AUDIT_NO_FIRMWARE_CHANGE",
+  "parent_checkpoint": "99ce627",
+  "normal_source_build_id": "0x4b82ab7e16b61eed",
+  "installed_last_known_diagnostic_build_id": "0x5770b102921a0651",
+  "scope": "本次不连接设备、烧录、复位或发运动命令；P6 未通过，250 Hz 与原 500 Hz 1.92% 失败边界不变。",
+  "filter": {
+    "sample_rate_hz": 10000.0,
+    "kind": "一阶 IIR，指定离散 -3 dB 频率",
+    "update": "y[n]=y[n-1]+a*(x[n]-y[n-1])",
+    "coefficient": "d=1-cos(2*pi*fc/fs); a=sqrt(d*(d+2))-d",
+    "initialization": "首个有效样本初始化；统一剔除前128点",
+    "filter_domain": "保存的校零后 B/C 与等价 alpha/beta；不是板上闭环实现",
+    "dc_group_delay": "(1-a)/a/fs，仅低频极限；不是所有频率固定延迟，也不是CPU计算耗时"
+  },
+  "conditions": [
+    {
+      "condition": "logic",
+      "source_csv": "raw-adc-logic.csv",
+      "sha256_lf": "1b17b5cadc7bd4cfef2f1a90a6bcd82ac617cd8b3091355e345a024118aba8b3",
+      "total_samples": 512,
+      "discarded_samples": 128,
+      "evaluated_samples": 384,
+      "evaluated_duration_ms": 38.4,
+      "baseline": {
+        "alpha_std_nominal_mA": 1.8217239088557275,
+        "beta_std_nominal_mA": 1.039430442888524
+      },
+      "candidates": [
+        {
+          "cutoff_hz": 200,
+          "coefficient": 0.11794305784194806,
+          "alpha_std_nominal_mA": 0.5072076666796224,
+          "beta_std_nominal_mA": 0.3131271093834984,
+          "alpha_std_remaining_fraction": 0.27842180926209215,
+          "dc_group_delay_us": 747.8667742700635
+        },
+        {
+          "cutoff_hz": 500,
+          "coefficient": 0.2677305316593124,
+          "alpha_std_nominal_mA": 0.7483911491090874,
+          "beta_std_nominal_mA": 0.4486990368446049,
+          "alpha_std_remaining_fraction": 0.4108148032042745,
+          "dc_group_delay_us": 273.509884659887
+        },
+        {
+          "cutoff_hz": 1000,
+          "coefficient": 0.45588678010286654,
+          "alpha_std_nominal_mA": 1.0115552349816632,
+          "beta_std_nominal_mA": 0.5902456296848914,
+          "alpha_std_remaining_fraction": 0.5552736230030859,
+          "dc_group_delay_us": 119.3527085331054
+        },
+        {
+          "cutoff_hz": 2000,
+          "coefficient": 0.6726238018208242,
+          "alpha_std_nominal_mA": 1.3106807749258413,
+          "beta_std_nominal_mA": 0.7519820427784193,
+          "alpha_std_remaining_fraction": 0.7194727853954084,
+          "dc_group_delay_us": 48.67151553259833
+        }
+      ]
+    },
+    {
+      "condition": "powered",
+      "source_csv": "raw-adc-12v-static.csv",
+      "sha256_lf": "b5cab2836e92ec520cae3feed87c1c8b457ee5502dabf528ce0dee535d4ee90c",
+      "total_samples": 512,
+      "discarded_samples": 128,
+      "evaluated_samples": 384,
+      "evaluated_duration_ms": 38.4,
+      "baseline": {
+        "alpha_std_nominal_mA": 7.229108622963872,
+        "beta_std_nominal_mA": 1.0434772554511527
+      },
+      "candidates": [
+        {
+          "cutoff_hz": 200,
+          "coefficient": 0.11794305784194806,
+          "alpha_std_nominal_mA": 1.6809994136737243,
+          "beta_std_nominal_mA": 0.2734959393998232,
+          "alpha_std_remaining_fraction": 0.23253204528340995,
+          "dc_group_delay_us": 747.8667742700635
+        },
+        {
+          "cutoff_hz": 500,
+          "coefficient": 0.2677305316593124,
+          "alpha_std_nominal_mA": 2.8503388819416213,
+          "beta_std_nominal_mA": 0.43117436506032747,
+          "alpha_std_remaining_fraction": 0.39428635404471307,
+          "dc_group_delay_us": 273.509884659887
+        },
+        {
+          "cutoff_hz": 1000,
+          "coefficient": 0.45588678010286654,
+          "alpha_std_nominal_mA": 4.058750609396018,
+          "beta_std_nominal_mA": 0.5877346152099985,
+          "alpha_std_remaining_fraction": 0.5614455143892921,
+          "dc_group_delay_us": 119.3527085331054
+        },
+        {
+          "cutoff_hz": 2000,
+          "coefficient": 0.6726238018208242,
+          "alpha_std_nominal_mA": 5.320518448274831,
+          "beta_std_nominal_mA": 0.7595073244072582,
+          "alpha_std_remaining_fraction": 0.7359854064681995,
+          "dc_group_delay_us": 48.67151553259833
+        }
+      ]
+    }
+  ],
+  "frequency_response": [
+    {
+      "cutoff_hz": 200,
+      "frequency_hz": 7,
+      "magnitude": 0.9993872579738243,
+      "gain_db": -0.005323840853103892,
+      "phase_deg": -1.8838027902903483
+    },
+    {
+      "cutoff_hz": 200,
+      "frequency_hz": 14,
+      "magnitude": 0.9975557798132736,
+      "gain_db": -0.021256214823099636,
+      "phase_deg": -3.7626911716169955
+    },
+    {
+      "cutoff_hz": 200,
+      "frequency_hz": 50,
+      "magnitude": 0.970107273489961,
+      "gain_db": -0.26360478459661474,
+      "phase_deg": -13.17279139334493
+    },
+    {
+      "cutoff_hz": 200,
+      "frequency_hz": 100,
+      "magnitude": 0.8943388695423075,
+      "gain_db": -0.9699578726898472,
+      "phase_deg": -24.8328249613444
+    },
+    {
+      "cutoff_hz": 200,
+      "frequency_hz": 200,
+      "magnitude": 0.7071067811865468,
+      "gain_db": -3.010299956639821,
+      "phase_deg": -41.512948876343515
+    },
+    {
+      "cutoff_hz": 200,
+      "frequency_hz": 500,
+      "magnitude": 0.37249881780505706,
+      "gain_db": -8.577502024571753,
+      "phase_deg": -59.41305202909849
+    },
+    {
+      "cutoff_hz": 200,
+      "frequency_hz": 1000,
+      "magnitude": 0.19912522930823118,
+      "gain_db": -14.01747422133116,
+      "phase_deg": -61.08343418285837
+    },
+    {
+      "cutoff_hz": 200,
+      "frequency_hz": 2000,
+      "magnitude": 0.10622124858408023,
+      "gain_db": -19.475771958923353,
+      "phase_deg": -49.07021860794858
+    },
+    {
+      "cutoff_hz": 500,
+      "frequency_hz": 7,
+      "magnitude": 0.9999012047910911,
+      "gain_db": -0.0008581666734280037,
+      "phase_deg": -0.6891912128560409
+    },
+    {
+      "cutoff_hz": 500,
+      "frequency_hz": 14,
+      "magnitude": 0.9996049966698765,
+      "gain_db": -0.0034316331300062826,
+      "phase_deg": -1.3780604007517838
+    },
+    {
+      "cutoff_hz": 500,
+      "frequency_hz": 50,
+      "magnitude": 0.9949968862973454,
+      "gain_db": -0.043565566311562054,
+      "phase_deg": -4.9037253968791665
+    },
+    {
+      "cutoff_hz": 500,
+      "frequency_hz": 100,
+      "magnitude": 0.9804311005670585,
+      "gain_db": -0.17165841615871058,
+      "phase_deg": -9.693499679748106
+    },
+    {
+      "cutoff_hz": 500,
+      "frequency_hz": 200,
+      "magnitude": 0.9280326668462887,
+      "gain_db": -0.6487347260238587,
+      "phase_deg": -18.54978027950022
+    },
+    {
+      "cutoff_hz": 500,
+      "frequency_hz": 500,
+      "magnitude": 0.7071067811865476,
+      "gain_db": -3.0102999566398116,
+      "phase_deg": -36.70113375549538
+    },
+    {
+      "cutoff_hz": 500,
+      "frequency_hz": 1000,
+      "magnitude": 0.45165657775848045,
+      "gain_db": -6.9038332096426185,
+      "phase_deg": -46.5609355000962
+    },
+    {
+      "cutoff_hz": 500,
+      "frequency_hz": 2000,
+      "magnitude": 0.2571894510783981,
+      "gain_db": -11.794936969419368,
+      "phase_deg": -41.99068945695855
+    },
+    {
+      "cutoff_hz": 1000,
+      "frequency_hz": 7,
+      "magnitude": 0.9999746788220139,
+      "gain_db": -0.0002199397420719162,
+      "phase_deg": -0.3007616212511278
+    },
+    {
+      "cutoff_hz": 1000,
+      "frequency_hz": 14,
+      "magnitude": 0.9998987273171064,
+      "gain_db": -0.0008796878918930566,
+      "phase_deg": -0.6014800224087706
+    },
+    {
+      "cutoff_hz": 1000,
+      "frequency_hz": 50,
+      "magnitude": 0.9987106561711019,
+      "gain_db": -0.011206324159237006,
+      "phase_deg": -2.1457274069605567
+    },
+    {
+      "cutoff_hz": 1000,
+      "frequency_hz": 100,
+      "magnitude": 0.9948735991159832,
+      "gain_db": -0.04464187641347128,
+      "phase_deg": -4.275826583989514
+    },
+    {
+      "cutoff_hz": 1000,
+      "frequency_hz": 200,
+      "magnitude": 0.9799740522345194,
+      "gain_db": -0.1757084682022379,
+      "phase_deg": -8.429534599546235
+    },
+    {
+      "cutoff_hz": 1000,
+      "frequency_hz": 500,
+      "magnitude": 0.8921918716103042,
+      "gain_db": -0.9908347550615981,
+      "phase_deg": -19.211630672158698
+    },
+    {
+      "cutoff_hz": 1000,
+      "frequency_hz": 1000,
+      "magnitude": 0.7071067811865475,
+      "gain_db": -3.0102999566398125,
+      "phase_deg": -29.739804730092352
+    },
+    {
+      "cutoff_hz": 1000,
+      "frequency_hz": 2000,
+      "magnitude": 0.4653411271949864,
+      "gain_db": -6.644571250021634,
+      "phase_deg": -31.884872275422502
+    },
+    {
+      "cutoff_hz": 2000,
+      "frequency_hz": 7,
+      "magnitude": 0.9999930012061787,
+      "gain_db": -6.0790963463052604e-05,
+      "phase_deg": -0.1226510589618871
+    },
+    {
+      "cutoff_hz": 2000,
+      "frequency_hz": 14,
+      "magnitude": 0.9999720058417556,
+      "gain_db": -0.00024315757253298977,
+      "phase_deg": -0.24529515710298452
+    },
+    {
+      "cutoff_hz": 2000,
+      "frequency_hz": 50,
+      "magnitude": 0.9996431348464069,
+      "gain_db": -0.003100244557313974,
+      "phase_deg": -0.8756646713354191
+    },
+    {
+      "cutoff_hz": 2000,
+      "frequency_hz": 100,
+      "magnitude": 0.9985751782478594,
+      "gain_db": -0.012384669562989368,
+      "phase_deg": -1.7487985284584553
+    },
+    {
+      "cutoff_hz": 2000,
+      "frequency_hz": 200,
+      "magnitude": 0.9943425196325656,
+      "gain_db": -0.04927978161454814,
+      "phase_deg": -3.4774943033385974
+    },
+    {
+      "cutoff_hz": 2000,
+      "frequency_hz": 500,
+      "magnitude": 0.9663610020349498,
+      "gain_db": -0.29721209065846477,
+      "phase_deg": -8.35719068308208
+    },
+    {
+      "cutoff_hz": 2000,
+      "frequency_hz": 1000,
+      "magnitude": 0.8851314226378472,
+      "gain_db": -1.059844825841754,
+      "phase_deg": -14.668251626375381
+    },
+    {
+      "cutoff_hz": 2000,
+      "frequency_hz": 2000,
+      "magnitude": 0.7071067811865474,
+      "gain_db": -3.0102999566398143,
+      "phase_deg": -19.105900902944875
+    }
+  ],
+  "current_limit_audit": {
+    "source": "current-ki600-trials.json",
+    "sha256_lf": "d2f451ef75658bd50cce1d7b6cd376f985b64912c4d76bb65bcf44dca952e4bf",
+    "speed_output_max_nominal_a": 0.1,
+    "controller_reference_vector_max_nominal_a": 0.2,
+    "phase_trip_nominal_a": 0.65,
+    "bus_supply_limit_a": 0.2,
+    "sampled_trials": [
+      {
+        "trial": "current600",
+        "speed_pi": {
+          "kp": 0.001,
+          "ki": 0.004
+        },
+        "target_rpm": 40.0,
+        "iq_reference_abs_peak_nominal_a": 0.04436984658241272,
+        "telemetry_speed_current_limit_fraction": 0.0,
+        "telemetry_voltage_limit_fraction": 0.0
+      },
+      {
+        "trial": "current600-speed002008",
+        "speed_pi": {
+          "kp": 0.002,
+          "ki": 0.008
+        },
+        "target_rpm": 40.0,
+        "iq_reference_abs_peak_nominal_a": 0.08009130507707596,
+        "telemetry_speed_current_limit_fraction": 0.0,
+        "telemetry_voltage_limit_fraction": 0.0
+      },
+      {
+        "trial": "current600-t1",
+        "speed_pi": {
+          "kp": 0.002,
+          "ki": 0.008
+        },
+        "target_rpm": 60.0,
+        "iq_reference_abs_peak_nominal_a": 0.10000000149011612,
+        "telemetry_speed_current_limit_fraction": 0.0297029702970297,
+        "telemetry_voltage_limit_fraction": 0.0
+      },
+      {
+        "trial": "current600-t1",
+        "speed_pi": {
+          "kp": 0.002,
+          "ki": 0.008
+        },
+        "target_rpm": 40.0,
+        "iq_reference_abs_peak_nominal_a": 0.05731327086687088,
+        "telemetry_speed_current_limit_fraction": 0.0,
+        "telemetry_voltage_limit_fraction": 0.0
+      },
+      {
+        "trial": "current600-t2",
+        "speed_pi": {
+          "kp": 0.002,
+          "ki": 0.008
+        },
+        "target_rpm": -40.0,
+        "iq_reference_abs_peak_nominal_a": 0.0806720033288002,
+        "telemetry_speed_current_limit_fraction": 0.0,
+        "telemetry_voltage_limit_fraction": 0.0
+      }
+    ],
+    "interpretation": "40 rpm 已存遥测未见限流，60 rpm 起动段约 3% 遥测样本限流；250 Hz 遥测不是对全部1 kHz/10 kHz拍的限幅计数证明。单独增加未触及的上限不会改变那一段的PI输出。"
+  },
+  "third_phase": {
+    "existing": "C / OPAMP1 -> ADC1 CH13；B / OPAMP2 -> ADC2 CH16；固定双ADC单rank同触发。",
+    "available": "A / OPAMP3 -> ADC2 CH18；G431只有ADC1/ADC2，通用库注释中的ADC3不属于本型号。",
+    "consequence": "A与B共用ADC2，增加rank可顺序测量，但不能得到三路同一采样孔径。交替帧复用上拍也不等同三相同步。",
+    "nominal_extra_rank": {
+      "sample_cycles": 12.5,
+      "conversion_cycles": 12.5,
+      "adc_clock_hz": 42500000,
+      "aperture_separation_us": 0.5882352941176471,
+      "common_500khz_phase_difference_deg": 105.88235294117646,
+      "caveat": "名义连续rank估算，不是新固件时序实测；还需核对通道建立、低边有效窗、IRQ收尾和提交预算。"
+    },
+    "common_error_cancellation": "三路同时同增益共同误差在Clarke中抵消是条件结论；A路尚无共同扰动相关性实测，顺序rank在高频下不能直接套用完全抵消。",
+    "calibration": "A的现有+1增益项因BC配置而未使用，不能沿用为A相方向确认；接入后须检查独立零偏与符号。",
+    "recommendation": "不将第三相直接并入本轮正式环；如做诊断，先在关断状态验证序列和时刻，再决定是否值得进入正式采样策略。"
+  },
+  "proposed_next_increment": {
+    "action": "优先准备可旁路的一阶alpha/beta电流反馈低通，1 kHz仅为对照候选；首先评估同一数据与控制模型，再完成受影响的无功率时序及原参数单次实机对照。",
+    "scope": "先保持B/C同步采样、PI、0.10 A Iq、1.8 V、保护和运行时限，单独比较滤波；不同时增加第三相或扩大限流。",
+    "safeguards": "原始校正相电流继续用于快速保护，低通不进入Hardware Trip/Guard；IDLE/故障/无效输入清历史，采样失败仍撤销，不用旧滤波值维持运行。",
+    "success": "比较真实控制反馈/跟踪误差与转速纹波，不能只平滑VOFA图；不以静态RMS下降替代稳定性或性能验收。",
+    "limitations": [
+      "当前只验证保存的静态51.2ms短窗，统一评估后38.4ms；不包含运动中的实际电流波形。",
+      "当前没有实测电流环开环频响或电机电感，不能证明任何候选的闭环相位裕度。",
+      "数字低通不能撤销采样前已经混叠到低频的扰动，也不能证明速度14阶的因果关系。",
+      "需要运行对照后才能选择最终参数，不能仅凭静态降噪选择最低截止频率。"
+    ]
+  },
+  "sources": [
+    {
+      "path": "firmware/targets/BLDC_G431/runtime/g431_control_profile.c",
+      "sha256_lf": "1e574461e1fd4ebcd2698b675b91b2f8b729ab57283dda6dee19dafb816d2fe0"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/platform/realtime_motor_io.c",
+      "sha256_lf": "6d1194bbecf547700923b0a6dc738f43467a4e68ef89de62b81a13ae29c9573f"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/Core/Src/adc.c",
+      "sha256_lf": "a834d46195e0878e1b7da885d3e5c1a75a84e78a458c4120bac12b3b7ed44a94"
+    },
+    {
+      "path": "control/current_measurement.c",
+      "sha256_lf": "5ad4a7fe1f0d5a372add75e75e42d0f2c8fcf1a16a515171891e8f5992504659"
+    },
+    {
+      "path": "control/current_controller.c",
+      "sha256_lf": "b6f2cba6611050fdcce8a74c72e91fd85cd43dac3b644d70117d9a2c74288644"
+    },
+    {
+      "path": "control/position_estimator.c",
+      "sha256_lf": "3584712a7a1f251675c943ebba86b4b995fb30c16b68dfa4c0aadcd2eac57551"
+    },
+    {
+      "path": "control/speed_controller.c",
+      "sha256_lf": "6b60c9ad474d2999418c2ec46e97a33d75f5142a1813c8258b23e76fdc0b0d1f"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_ll_opamp.h",
+      "sha256_lf": "4dadca6a46ecc94f74c98f7629a430127aceba102cc1172a4b5989f8195f0dab"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_ll_adc.h",
+      "sha256_lf": "c76242a6b0786d4f4f9f8c1b534350702cbf98b154f654d4b53d0684e92493a9"
+    },
+    {
+      "path": "firmware/targets/BLDC_G431/Drivers/CMSIS/Device/ST/STM32G4xx/Include/stm32g431xx.h",
+      "sha256_lf": "24e2bc3be8a04bb5f2f46e43f52ea9ceeeb003cd8d7b7f38c0f62905d43f1411"
+    },
+    {
+      "path": "hardware/BLDC_G431/HARDWARE_DESIGN.md",
+      "sha256_lf": "81b5edb6aa0808f17d9cc30091ff6517b8a5737d70cd34ed3bfdc88490c19817"
+    }
+  ],
+  "primary_references": [
+    {
+      "title": "STM32G431 DS12589 Rev6",
+      "url": "https://www.st.com/resource/en/datasheet/stm32g431cb.pdf",
+      "used": "2 ADC / 3 OPAMP，转换与采样基本条件"
+    },
+    {
+      "title": "本仓库ST HAL/LL与G431 CMSIS头",
+      "used": "OPAMP1/2/3内部ADC路由及本型号仅ADC1/ADC2；未改供应库"
+    }
+  ],
+  "verification": {
+    "python": "PASS：连续输入、同窗口统计、离散-3dB、Clarke交换性、脉冲/频域核对、型号ADC数量约束",
+    "matlab": {
+      "conditions": 2,
+      "filters": 8,
+      "status": "PASS",
+      "frequency_points": 32
+    },
+    "hardware_tests": "本轮未执行",
+    "production_builds": "本轮无正式源码或配置变更，不重复既有构建；generate_build_identity.py --check仍匹配0x4b82ab7e16b61eed"
+  },
+  "local_tools": [
+    {
+      "file": "evaluate.py",
+      "sha256_lf": "3473b7d64c220d6e7ef36b29f79a15ec49764ce80d4e57c74942c8b1445d3fe0"
+    },
+    {
+      "file": "verify_and_plot.m",
+      "sha256_lf": "b043f0efb80529e1815dbb0d9c60be0d75e91046d85b5e2cdb51f9a539584833"
+    }
+  ],
+  "figure": {
+    "file": "current-filter-evaluation.png",
+    "sha256": "5f90f91d80ab5227c27ac44f93756d220896be8fc7281044df386ebd494c8315"
+  }
+}

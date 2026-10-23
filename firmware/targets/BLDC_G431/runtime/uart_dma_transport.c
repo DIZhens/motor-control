@@ -1,3 +1,5 @@
+#include "target_communication_config.h"
+#if BLDC_G431_COMMUNICATION == BLDC_G431_COMMUNICATION_UART_V1
 #include "byte_stream_transport.h"
 #include "uart_dma_transport.h"
 #include "main.h"
@@ -335,3 +337,8 @@ void g431_uart_irq(void)
     events |= tx_poll_locked();
     unlock(saved); emit(events, true);
 }
+
+/* CubeMX全局DMA配置只开放采样IRQ；UART专属向量随选中链路一起链接。 */
+void DMA1_Channel2_IRQHandler(void) { g431_uart_rx_dma_irq(); }
+void DMA1_Channel3_IRQHandler(void) { g431_uart_tx_dma_irq(); }
+#endif

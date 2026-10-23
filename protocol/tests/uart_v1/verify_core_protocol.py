@@ -18,8 +18,9 @@ from unicorn import Uc, UC_ARCH_ARM, UC_MODE_MCLASS, UC_MODE_THUMB, __version__ 
 from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_SP, UC_CPU_ARM_CORTEX_M4
 
 
-COMM = Path(__file__).resolve().parents[1]
-REPO = COMM.parents[2]
+TESTS = Path(__file__).resolve().parent
+REPO = TESTS.parents[2]
+COMM = REPO / 'protocol/uart_v1'
 sys.path.insert(0, str(REPO))
 from host.protocol import codec as py
 
@@ -87,12 +88,12 @@ def run_tests(temporary):
     scatter.write_text('LR_IROM1 0x08000000 0x00040000 {\n'
                        ' ER_IROM1 0x08000000 0x00040000 { .ANY (+RO) }\n'
                        ' RW_IRAM1 0x20000000 0x00008000 { .ANY (+RW +ZI) }\n}\n')
-    sources = [COMM / 'core_protocol.c', COMM / 'core_protocol_values.c', COMM / 'tests/core_protocol_model.c']
+    sources = [COMM / 'core_protocol.c', COMM / 'core_protocol_values.c', TESTS / 'core_protocol_model.c']
     objects = []
     for source in sources:
         obj = temporary / (source.stem + '.o')
         checked_run([str(COMPILER / 'armcc.exe'), '--cpu=Cortex-M4.fp', '--c99', '-O3',
-                     '--split_sections', '-g', '-I', str(COMM), '-c', str(source), '-o', str(obj)], temporary)
+                     '--split_sections', '-g', '-I', str(COMM), '-I', str(REPO/'protocol/common'), '-c', str(source), '-o', str(obj)], temporary)
         objects.append(str(obj))
     executable = temporary / 'model.axf'
     checked_run([str(COMPILER / 'armlink.exe'), '--cpu=Cortex-M4.fp', '--scatter', str(scatter),
@@ -464,7 +465,8 @@ def run_tests(temporary):
 
     # 源码依赖检查与链接结果补充证明模型未悄悄使用设备或内核替身。
     for source in [COMM / 'core_protocol.h', COMM / 'core_protocol.c',
-                   COMM / 'core_protocol_values.h', COMM / 'core_protocol_values.c']:
+                   COMM / 'core_protocol_values.h', COMM / 'core_protocol_values.c',
+                   REPO / 'protocol/common/motor_node_profile.h', REPO / 'protocol/common/protocol_result.h']:
         includes = [line for line in source.read_text(encoding='utf-8').splitlines() if line.startswith('#include')]
         check(not any(token in line.lower() for token in ('hal', 'stm32', 'freertos', 'motor.h') for line in includes))
     passed('actual ARMCC Cortex-M4F compile/link/execute without warnings, HAL, RTOS or device dependencies')
@@ -487,7 +489,9 @@ def main():
                   compiler=compiler_version, cpu='Cortex-M4.fp', execution='Unicorn ' + unicorn_version,
                   source_sha256={str(p.relative_to(REPO)).replace('\\', '/'): hashlib.sha256(p.read_bytes()).hexdigest()
                                  for p in sources + [COMM / 'core_protocol.h', COMM / 'core_protocol_values.h',
-                                                    REPO / 'host/protocol/codec.py', Path(__file__).resolve()]},
+                                                    REPO / 'host/protocol/codec.py', Path(__file__).resolve(),
+                                                    REPO / 'protocol/common/motor_node_profile.h',
+                                                    REPO / 'protocol/common/protocol_result.h']},
                   hardware_access=False, linked_to_run=False,
                   limitations='离线库模型，不证明串口/DMA/RTOS、会话事务或实物控制；现有Run未改动。')
     if args.report:

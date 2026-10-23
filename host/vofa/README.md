@@ -1,4 +1,82 @@
-# VOFA 串口观察与有限运行
+# VOFA 观察
+
+正式 Run 使用 460800 / 8N1 的自研 UART 协议。以下 PC 数据桥用于当前 Run；后文
+115200 / JustFloat 直连和 ASCII 命令只适用于独立验证入口及历史镜像，不能混用。
+
+## 正式 Run 的 PC 数据桥
+
+`bridge.py` 由唯一 Core Protocol Client 独占串口，将完整校验且属于当前 Session 的遥测
+记录为原始 JSONL，再向本机 `127.0.0.1:1347` 单向发送 JustFloat UDP。默认只发送两路速度
+用于显示；`--view current` 显示三路电流，`--view all` 显示下面列出的十项。原始记录始终完整。
+VOFA 使用网络连接，
+不占用 MCU 串口。依据 [VOFA 接口说明](https://www.vofa.plus/docs/learning/) 和
+[JustFloat 格式](https://www.vofa.plus/docs/learning/dataengines/justfloat/)，每帧为所选通道的小端 float
+加 `00 00 80 7f` 帧尾。转发器不接收网络数据，没有 VOFA 到电机的命令通道。
+
+1. 在 VOFA 选择 UDP，配置本地监听端口 `1347`，协议引擎选择 JustFloat，开启接收。
+   若界面提供本地地址，选 `127.0.0.1`；远端发送地址不参与本桥接收。关闭串口连接及定时发送。
+2. 放入波形控件，时间步长设 `4 ms`（250 Hz）。默认速度视图 I0/I1 为目标/实际速度；
+   `current` 视图 I0/I1/I2 为 Iq reference / Iq feedback / Id feedback。
+   `all` 视图才使用下表的十项顺序；状态/故障用数值查看，母线单独显示。
+3. 从仓库根目录运行下列有限观察入口，日志目录须已存在，文件名须为新文件：
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 -m host.vofa.bridge --port COM5 --seconds 30 --log "$env:TEMP\g431-observe-new.jsonl"
+```
+
+该入口只在有效、无故障 IDLE 建立会话、读取状态并配置 250 Hz 遥测；不写 PI，不发任何
+运动或故障恢复命令，不自动重连，结束后关闭遥测。有限运行工具可复用同一 `TelemetryForwarder`
+作为 Client 的记录入口，使 RPC 等待期间也持续记录/显示；不得另开第二个串口所有者。
+
+| all 视图 VOFA 通道 | 数据 | 单位 |
+| --- | --- | --- |
+| I0 | 目标速度 | rpm |
+| I1 | 实际速度 | rpm |
+| I2 | Iq reference | 名义 A |
+| I3 | Iq feedback | 名义 A |
+| I4 | Id feedback | 名义 A |
+| I5 | VBUS | V |
+| I6 | Motor State | 枚举 |
+| I7 | Fault | 位集合 |
+| I8 | valid flags | 位集合 |
+| I9 | limit flags | 位集合 |
+
+顺序与旧固件十通道不同。无效测量和无效状态保留 NaN，不用零替代。JustFloat 中整数经过
+float32 转换，仅用于显示；故障精确位、采样/控制时间、Session、序号、代际及缺帧分析以 JSONL
+原始协议数据为准。UDP 显示是最佳努力，不回放、补点或反压串口；接收画面不能替代原始记录。
+脚本只证明发出 UDP，实际 VOFA 接收、通道绑定和截图须在界面确认。不要把缺帧的图横轴当作
+严格控制时间；指标分析使用日志中的控制时间和样本序号。
+
+离线验证：`.venv/Scripts/python.exe -m unittest host.vofa.test_bridge -v`。
+
+有限运行后可用控制时间生成描述指标：
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 -m host.vofa.analyze capture.jsonl --output metrics-new.json
+.\.venv\Scripts\python.exe -m unittest host.vofa.test_bridge host.vofa.test_analyze -v
+```
+
+分析按 Session、配置代际、活动 PI 代际和 RUN 内目标窗口分开；保留未达到 90%、窗口末尾
+仍未进入误差带等未观测结果为 null。10%～90%、5%目标误差带及末尾20%统计窗口只是描述
+约定，不是新增验收门槛。末尾窗口不能自动称为稳态，250 Hz 遥测也不证明 10 kHz 电流带宽。
+曲线结果还须结合通信缺口、独立故障/守卫和停机后的关断证据解释。
+
+短测结束后可将真实记录回放到 VOFA，方便检查和留图，不必为截图再次启转：
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 -m host.vofa.replay capture.jsonl --view speed
+```
+
+回放入口不打开串口，从原始 payload 重解码并核对派生值，按记录的 MCU 控制时间发送所选视图。
+默认一次，`--repeat 3` 表示有限回放三遍；截图须标明“记录回放”并关联源日志摘要，不能标成
+新的实物试验。回放不连接设备，不产生 Start、Stop 或参数写入，也不增加实机重复性次数。
+
+清理旧图形缓存时，点击波形控件下方彩色滑条左下侧、灰色采样点计数左边的垃圾桶。
+这只清理 VOFA 的曲线历史，不删除本仓库原始日志。原串口曲线与新桥的通道含义不同，
+切换视图后先清缓存，再重新选择通道。清缓存不会改变发送帧的通道数量；需要减少自动建立的
+通道时应选择 `speed` 或 `current`。IDLE 的 Iq reference 无效，all 视图 I2 显示 NaN 是正常状态。
+
+## 旧串口直连与有限运行记录
 
 固件有 [G431 Observe / Run](../../firmware/targets/BLDC_G431/runtime/README.md) 两种装配：
 Observe只观察并拒绝启动，Run允许原板固定空载范围内的有限启停。实际验收范围见

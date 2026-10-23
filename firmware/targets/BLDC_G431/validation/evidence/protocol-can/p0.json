@@ -1,0 +1,227 @@
+{
+  "checkpoint": "P0",
+  "status": "PASS",
+  "date": "2026-10-23",
+  "branch": "stage/protocol-can-tuning-v1",
+  "base_commit": "29c56016065844f525e2f84de2d4021ed28996dc",
+  "goal": "顶层可移植协议、同一正式Target静态UART/CAN、固定空载包络内FOC工程调优",
+  "frozen": {
+    "firmware_build_id": "0xac7c5cfe4d3d6ed3",
+    "source_sha256": "ac7c5cfe4d3d6ed3a6d931819357f5221e042de274fc50e2c910c5267e146e6c",
+    "source_count": 205,
+    "artifacts_sha256": {
+      ".hex": "9491e86beef0770a1c93d91ca83b9d0954e12d03b8bb360c41234439fe15f4a7",
+      ".axf": "ba3996ea10e84e45182e7a1627a6935d07280c942f70fbbf762ac1999b5169bb",
+      ".map": "edd8bf891f449f9cb6d02d79e2e7d713df57f1102ed1988e1c3b303d56eb53da",
+      ".htm": "e86ae62f1cd5ef1393a5c50dcf1d9f86e5f4f05a800454b1962868da3a01c9df"
+    },
+    "flash_bytes": 66648,
+    "static_ram_bytes": 21184,
+    "ram_capacity": 32768,
+    "golden_sha256": "ebc270a46f86c1b0970cad01f8a73cc9d9a94245ff5198a3d716b3fd62008c17",
+    "host_codec_raw_sha256": "ac69d614dba7112c901fd0a1d330b09f47c7982409bf8c52f1864d65d929deda"
+  },
+  "reused_builds": {
+    "source": "validation/evidence/protocol/stop-stack.json",
+    "results": [
+      {
+        "exit_code": 0,
+        "summary": "\"build\\run\\BLDC_G431_Run.axf\" - 0 Error(s), 0 Warning(s).",
+        "size": "Program Size: Code=65574 RO-data=1054 RW-data=496 ZI-data=20688  ",
+        "target": "BLDC_G431_Run"
+      },
+      {
+        "exit_code": 0,
+        "summary": "\"build\\observe\\BLDC_G431_Observe.axf\" - 0 Error(s), 0 Warning(s).",
+        "size": "Program Size: Code=77876 RO-data=1372 RW-data=448 ZI-data=26032  ",
+        "target": "BLDC_G431_Observe"
+      },
+      {
+        "exit_code": 0,
+        "summary": "\"build\\timing\\BLDC_G431_Timing.axf\" - 0 Error(s), 0 Warning(s).",
+        "size": "Program Size: Code=47110 RO-data=958 RW-data=364 ZI-data=9252  ",
+        "target": "BLDC_G431_Timing"
+      },
+      {
+        "exit_code": 0,
+        "summary": "\"BLDC_control V1\\BLDC_control V1.axf\" - 0 Error(s), 0 Warning(s).",
+        "size": "Program Size: Code=56384 RO-data=860 RW-data=424 ZI-data=19064  ",
+        "target": "BLDC_control V1"
+      }
+    ],
+    "verification": "源闭包、模型逐来源与冻结产物哈希本轮核对；不宣称重建或重新实测"
+  },
+  "reused_models": {
+    "p1": {
+      "status": "PASS",
+      "groups": 12
+    },
+    "p2": {
+      "status": "PASS",
+      "groups": 19
+    },
+    "p3": {
+      "status": "PASS",
+      "groups": 15
+    },
+    "p5": {
+      "status": "PASS",
+      "groups": 34
+    }
+  },
+  "dependency_edges": [
+    "Host client -> Host codec -> interface golden vectors",
+    "target_system_runtime -> target_core_server -> core_server -> core_protocol_values -> core_protocol",
+    "core_server -> runtime_exchange / telemetry_mailbox / motor.h（P2拟以共享Device Port隔离）",
+    "core_server -> byte_stream_transport -> Target uart_dma_transport",
+    "Target object binding -> target_runtime snapshots / parameters / Completion",
+    "RuntimeRequest / ticket / Completion -> ADC实时单写者；无Session/Sequence/CAN字段"
+  ],
+  "migration": {
+    "firmware/app/communication/core_protocol.c": "protocol/uart_v1/core_protocol.c",
+    "firmware/app/communication/core_protocol.h": "protocol/uart_v1/core_protocol.h",
+    "firmware/app/communication/core_protocol_values.c": "protocol/uart_v1/core_protocol_values.c",
+    "firmware/app/communication/core_protocol_values.h": "protocol/uart_v1/core_protocol_values.h",
+    "firmware/app/communication/core_server.c": "protocol/uart_v1/core_server.c",
+    "firmware/app/communication/core_server.h": "protocol/uart_v1/core_server.h",
+    "firmware/app/communication/byte_stream_transport.h": "protocol/ports/byte_stream_transport.h",
+    "firmware/app/communication/tests/core_protocol_model.c": "protocol/tests/uart_v1/core_protocol_model.c",
+    "firmware/app/communication/tests/core_server_model.c": "protocol/tests/uart_v1/core_server_model.c",
+    "firmware/app/communication/tests/target_core_mapping_model.c": "protocol/tests/uart_v1/target_core_mapping_model.c",
+    "firmware/app/communication/tests/verify_core_protocol.py": "protocol/tests/uart_v1/verify_core_protocol.py",
+    "firmware/app/communication/tests/verify_core_server.py": "protocol/tests/uart_v1/verify_core_server.py"
+  },
+  "consumers": [
+    "firmware/app/communication/README.md",
+    "firmware/app/communication/core_protocol.c",
+    "firmware/app/communication/core_protocol_values.c",
+    "firmware/app/communication/core_protocol_values.h",
+    "firmware/app/communication/core_server.c",
+    "firmware/app/communication/core_server.h",
+    "firmware/app/communication/tests/core_protocol_model.c",
+    "firmware/app/communication/tests/core_server_model.c",
+    "firmware/app/communication/tests/target_core_mapping_model.c",
+    "firmware/app/communication/tests/verify_core_protocol.py",
+    "firmware/app/communication/tests/verify_core_server.py",
+    "firmware/app/system_runtime/README.md",
+    "firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1.uvprojx",
+    "firmware/targets/BLDC_G431/runtime/README.md",
+    "firmware/targets/BLDC_G431/runtime/RTOS_INTEGRATION.md",
+    "firmware/targets/BLDC_G431/runtime/target_core_server.c",
+    "firmware/targets/BLDC_G431/runtime/target_core_server.h",
+    "firmware/targets/BLDC_G431/runtime/target_system_runtime.c",
+    "firmware/targets/BLDC_G431/runtime/tests/uart_dma_model.c",
+    "firmware/targets/BLDC_G431/runtime/tests/uart_transport_loopback.c",
+    "firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py",
+    "firmware/targets/BLDC_G431/runtime/uart_dma_transport.c",
+    "host/README.md",
+    "host/protocol/README.md",
+    "interface/README.md"
+  ],
+  "keil": {
+    "BLDC_control V1.uvprojx": [
+      {
+        "target": "BLDC_G431_Run",
+        "include_paths": [
+          "../Core/Inc",
+          "../Drivers/STM32G4xx_HAL_Driver/Inc",
+          "../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy",
+          "../Drivers/CMSIS/Device/ST/STM32G4xx/Include",
+          "../Drivers/CMSIS/Include",
+          "../../../platform_contract",
+          "../runtime",
+          "../../../app/motor",
+          "../../../app/communication",
+          "../../../app/system_runtime",
+          "../../../../control",
+          "..\\..\\..\\third_party\\FreeRTOS\\Source\\include",
+          "..\\..\\..\\third_party\\FreeRTOS\\Source\\portable\\RVDS\\ARM_CM4F"
+        ],
+        "communication_members": [
+          "../runtime/target_core_server.c",
+          "../../../app/communication/core_protocol.c",
+          "../../../app/communication/core_protocol_values.c",
+          "../../../app/communication/core_server.c"
+        ]
+      }
+    ],
+    "BLDC_G431_Validation.uvprojx": [
+      {
+        "target": "BLDC_control V1",
+        "include_paths": [
+          "../Core/Inc",
+          "../Drivers/STM32G4xx_HAL_Driver/Inc",
+          "../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy",
+          "../Drivers/CMSIS/Device/ST/STM32G4xx/Include",
+          "../Drivers/CMSIS/Include",
+          "../../../platform_contract",
+          "../validation",
+          "../../../app/motor",
+          "../../../../control"
+        ],
+        "communication_members": [
+          "../../../app/communication/vofa.c",
+          "../../../app/communication/motor_vofa.c"
+        ]
+      },
+      {
+        "target": "BLDC_G431_Observe",
+        "include_paths": [
+          "../Core/Inc",
+          "../Drivers/STM32G4xx_HAL_Driver/Inc",
+          "../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy",
+          "../Drivers/CMSIS/Device/ST/STM32G4xx/Include",
+          "../Drivers/CMSIS/Include",
+          "../../../platform_contract",
+          "../runtime",
+          "../../../app/motor",
+          "../../../app/communication",
+          "../../../../control"
+        ],
+        "communication_members": [
+          "../../../app/communication/vofa.c",
+          "../../../app/communication/motor_vofa.c"
+        ]
+      },
+      {
+        "target": "BLDC_G431_Timing",
+        "include_paths": [
+          "../Core/Inc",
+          "../Drivers/STM32G4xx_HAL_Driver/Inc",
+          "../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy",
+          "../Drivers/CMSIS/Device/ST/STM32G4xx/Include",
+          "../Drivers/CMSIS/Include",
+          "../../../platform_contract",
+          "../runtime",
+          "../../../app/motor",
+          "../../../app/communication",
+          "../../../../control"
+        ],
+        "communication_members": [
+          "../../../app/communication/vofa.c",
+          "../../../app/communication/motor_vofa.c"
+        ]
+      }
+    ]
+  },
+  "protected_local_settings_sha256": {
+    "firmware/targets/BLDC_G431/MDK-ARM/BLDC_G431_Validation.uvprojx": "114517d91e26571922bb9b41befc2cf7679347096009d406691c3beabd4c162c",
+    "firmware/targets/BLDC_G431/MDK-ARM/BLDC_control V1.uvoptx": "bb0411550fa2074e91479b0d3c73c9fe894a0a3b4b520566d9bc4bbb6cefbdef"
+  },
+  "sequencing": [
+    "P1仅迁移路径，保留UART代码字节及Host/黄金向量",
+    "P2共享Profile与Firmware绑定",
+    "P3 CAN合同/纯C与Python模型",
+    "P4同一Target静态选择",
+    "P5内部回环及无功率交接",
+    "FOC基线/复核/调优及P6最终回归"
+  ],
+  "unchanged_acceptance": "正式250Hz；500Hz缺96/5001帧、1.92%原FAIL保持",
+  "not_proven": [
+    "外部CAN物理链路/ACK/仲裁/运动",
+    "FOC性能与VOFA本阶段基线/最终尚未执行",
+    "持续带载、绝对电流精度、完整WCET、故障恢复、最终Tag"
+  ],
+  "hardware_access": false,
+  "can_or_pi_modified": false
+}

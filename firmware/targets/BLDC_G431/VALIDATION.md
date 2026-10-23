@@ -16,7 +16,129 @@
 旧功率包与保护注入要求电机三相断开；有限开环仅按[专用流程](validation/OPEN_LOOP.md)接电机。
 本页是证据索引，不是待执行的带电操作队列。下方逐次记录中的“当前”“下一步”只指当时的镜像和阶段。
 
+本次合并准备收敛为协议分层、同一 Run 的 UART/CAN 静态选择、CAN 内部回环、控制配置归位
+及已完成的有限 FOC 调优与诊断证据。原任务 P6 的最终速度性能和重复性验收仍未通过，
+留待后续处理，不将本次收尾记为原任务全部 PASS。外部 CAN 物理总线、电流绝对精度、
+持续运行和完整 WCET 不在本次已证明范围；默认仍为 UART，全部原有安全边界保持。
+[合并前离线检查](validation/evidence/protocol-can/merge-preparation.json)复核 UART 黄金字节、
+UART/CAN 事务及 Host 模型，并以干净源码副本补全最新 CAN Normal 构建；未新增硬件动作。
+
+## 协议拆分与CAN静态接入增量
+
+[P0基线](validation/evidence/protocol-can/p0.json)核对已合并UART源闭包、冻结镜像与旧模型来源。
+[P1迁移](validation/evidence/protocol-can/p1.json)将UART实现及字节流合同移入顶层`protocol/`；
+原七份生产源码/头内容不变，Codec 12组、Server/Client 34组、DMA 11组通过，四个Target
+全量构建均零错误零警告。三个Validation HEX与基线完全相同；Run的Flash 66648 B、静态RAM
+21184 B不变，可装载内容仅build ID的8字节常量改变，其余逐字节相同。
+本增量未连接设备或烧录，无新增UART实物、CAN或调优证据；旧实物记录仍绑定原镜像。
+
+[P2共享绑定](validation/evidence/protocol-can/p2.json)将业务编号/结果/设备值与Device Port置于
+`protocol/common/`，Firmware负责RuntimeRequest/Completion规范化，Target只接本机端口与
+UART统计。Codec 12组、Server/Client及真实绑定36组、实时交接19组、静态RTOS 15组通过；
+纯协议正式源只使用`protocol/`头目录编译。Run全量构建零错误零警告，Flash 67320 B
+（增加672 B转换代码）、静态RAM仍21184 B；Communication已知静态调用深度仍1224 B，
+不代表新镜像栈实测。UART黄金字节/Host Codec不变，控制/保护/RTOS/DMA源码未修改。
+本检查点无硬件操作，CAN与调优尚未验证。
+
+[P3 CAN模型](validation/evidence/protocol-can/p3.json)按确认后的Node 1～127映射，验证763个ID
+互不重叠、28份人工黄金帧与19组ARM Codec/Server/真实绑定模型；覆盖Stop重入、Session替换、
+优先队列、Bus-off撤会话与恢复前提。UART 12组/47924断言和Server 36组回归通过。
+Run全量构建零错误零警告，Flash/RAM与P2相同；可装载内容仅build ID的8字节改变。
+此时CAN尚未链接正式Run，控制器、内部回环和实物均未验证；旧实物证据不据此改写。
+
+[P4双静态构建](validation/evidence/protocol-can/p4.json)在同一Run选择UART或CAN；两个Profile
+均全量构建零错误零警告，最终恢复UART。链接检查证明未选硬件句柄/Server/缓冲区及拒绝占位
+均移除。真实HAL帧端口9组、UART DMA 11组、UART Server 36组及RTOS模型通过。
+UART Flash/RAM为66664/21088 B，CAN为60504/17792 B；任务栈分配未改。
+500 kbit/s、过滤器及恢复流程已有离线证据，尚无FDCAN控制器内部回环、实物调度或外部总线证据。
+
+[P5内部回环](validation/evidence/protocol-can/p5.json)在冻结专项镜像上通过26组无功率实测：
+实际TX Message RAM、控制器回环、FIFO/IRQ、唯一Communication、CanServer及Runtime ticket/
+Completion贯通。24个注入帧中6个被硬件过滤，18个进入RX；16个应答匹配，DLC/reserved非法帧
+未获业务身份。Start忠实返回NOT_READY，普通重复不重交接；无会话Stop完成后相同帧再次执行，
+会话和普通水位不变。共4317个硬件TX全部完成，RX lost为0；通过轮次末态IDLE/目标0/MOE0/六LOW，
+Motor/Guard/Internal均0。通信/遥测栈最低635/272 word，满足各自25%余量要求。
+
+首轮诊断整块读取FDCAN寄存器触及保留地址，触发ARA（0x00800000）并关断通信，尚未发测试帧。
+保留原故障记录；脚本改为只读有效寄存器，经操作者RST后同一固件完整通过，不放宽错误路径。
+正式IOC保持Normal，专项代码在默认构建完全移除；默认UART镜像已恢复到板上并独立全Flash核对。
+不证明TCAN3414DR、CANH/CANL、终端、真实ACK/仲裁/外部Error Passive/Bus-off、双节点或CAN运动。
+
 ## 当前能力与证据矩阵
+
+[原始双 ADC 供电对照](validation/evidence/foc-tuning/raw-adc-analysis.json)保存同一诊断固件
+在逻辑 3V3 和 12 V 默认关断下各 512 对连续整数码，未发送运动命令。B/C 标准差从
+1.15/1.11 码升至 3.19/3.20 码，相关系数从 0.026 升至 0.879；共同分量方差约增 14.66 倍，
+差分底噪基本不变。12 V 本启动 UART 收发均 0、无会话，因此运动和活动遥测均不是该扰动
+出现的必要条件。1 kHz 调度分相均值仅解释少量方差；具体供电/参考/地/模拟前端来源及
+其对速度纹波的贡献仍未确定，不作为调优通过或硬件故障结论。
+[原码曲线](validation/evidence/foc-tuning/raw-adc-comparison.png)由保存 CSV 经 MATLAB 绘制，
+统计、分相和 DFT 与 Python 独立复算一致。请求工具的两次写后核验报错也保留在证据中；
+每轮仅写一次，随后双份完整冻结记录一致，未重发或自动复位补采。诊断只在编译宏启用时
+占用 2108 B（含对齐的 RAM 增量 2112 B），不成为正式控制路径的长期负担。
+采集完成后已撤去正式 Run 的诊断宏，离线重建零错误零警告；Flash 加载 66728 B、RAM
+21088 B，除 8 字节构建身份外与 Ki600 正式镜像逐字节相同。未再次烧录；板上最后安装的
+仍为采集用诊断镜像。当前源码保留请求字的诊断小修正只做 ARM 模型验证，不追认为旧镜像
+已经实测；诊断构建来源及正常入口恢复身份分别记录在上述摘要中。
+
+[前端与噪声投影分析](validation/evidence/foc-tuning/frontend-noise-analysis.json)进一步按网表
+核对同源 VREF+ 偏置与 ADC 参考的低频抵消关系；优先调查高频路径差异、Buck 轻载开关及
+局部参考地/OPAMP 动态，而不是把任意 3V3 波动直接判作根因。TP10/TP12 名义约 3.3 V，
+TP2/TP3 是放大前输入、零电流约 0.1014 V，内部放大后才约 1.623 V。
+保存的 12 V 静态误差经当前两相重构/Clarke 等效为 α 约 7.09、β 约 1.04 名义 mA 标准差；
+若其协方差在运动时不变，q 噪声强度有机械 14 阶起伏。这是条件模型，不证明速度均值的
+14 阶因果关系。51.2 ms 短窗也不足以从频谱验证 40/60 rpm 的该阶速度纹波。
+[模型曲线](validation/evidence/foc-tuning/frontend-noise-model.png)及 Python/MATLAB 复算
+均为离线分析，未修改固件或新增实测；具体模拟来源仍待有区分能力的定点测量。
+
+[静态电源波形](validation/evidence/foc-tuning/scope-observations.json)记录操作者在原 12 V
+静态供电下的 DS100 测量：短地底噪报告约 1.52 mVpp，VREF+ 直流报告 3.31～3.32 V；
+VREF+ 快窗约 24.4 mVpp，200 µs/格下 VREF+ 与 3V3 均约 30.4 mVpp，保留三张原始照片。
+两个测点先后测量，不证明瞬时相关；自动测频不用于认定 Buck 工作频率，纹波不等于布局
+缺陷、ADC 误差或速度误差根因。本轮只读镜像检查因未识别到探针而未完成，没有烧录、
+复位或发送采集/运动命令；板上身份仍按最后安装记录，不冒充新鲜 MOE/镜像读回。
+
+[电流低通与第三相路由评估](validation/evidence/foc-tuning/current-filter-evaluation.json)
+用两份保存原码各剔除相同前 128 点后比较 384 点。12 V 条件下，α 误差标准差从 7.229
+名义 mA 经 1 kHz 离散一阶低通降至 4.059 mA，低频群延迟约 119.35 µs，200 Hz 附加
+相位约 −8.43°；群延迟不是 CPU 执行时间。200/500/1000/2000 Hz 共八组序列与 32 个
+频响点经 Python/MATLAB 独立复算一致，[比较图](validation/evidence/foc-tuning/current-filter-evaluation.png)
+为离线回放，不证明闭环裕度或速度性能。G431 只有两个 ADC；A/OPAMP3 到 ADC2 CH18，
+与 B/OPAMP2 的 ADC2 CH16 共用 ADC，增加 rank 不等于三相同一采样孔径。A 的现有增益
+占位值也未作为方向确认。该分析检查点的正式实现仍为 B/C 同步采样、无数字电流低通、5 ms 速度
+低通；本轮未修改固件、PI、限流或采样时序。下一增量拟单独评估可旁路的 1 kHz 电流
+控制反馈低通，保护继续使用原始校正相电流，第三相与增流另行对照；P6 性能尚未通过。
+
+[1 kHz 控制反馈低通候选](validation/evidence/foc-tuning/current-filter-candidate.json)已完成
+离线实现、冻结、逻辑供电安装和一次有限运行。算法位于 `control/current_feedback_filter.h`，Runtime
+只在 RUN 控制输入支路更新 alpha/beta；0 旁路、1 直通，首有效样本初始化，Stop/故障
+清历史。原始校正相电流与快速过流、采样/提交时序、PI、限幅、保护及协议对象布局保持。
+RUN 发布 PI 实际采用的滤后 DQ，IDLE/Stop 观测仍用未滤波电流。
+FOC ARM 模型 47 组覆盖旧/新节拍、原码回放、旁路逐位一致、首样本/重启、原始过流、
+坏采样/坏历史关断与合成正反跟踪；Run/Observe/交接模型另行通过，均不作为实物或 WCET
+证明。四 Target Rebuild 全部零错误零警告；Run 实际 Flash 加载/RAM 为 67080/21104 B，较原正常
+构建增加 352/16 B，构建身份 `0x137624c44b3f866e`。228 项保守输入闭包仅算法新头、
+Runtime 源/头及 Profile 四项变化；独立离线 GDB 核对加载镜像系数、PI 和边界值一致。
+[安装与默认关断](validation/evidence/foc-tuning/current-filter-install.json)独立读回全部 67080 B
+匹配，4096 点校零 READY，UART 身份与推进时间正确，运动请求为零，前后 MOE0/六路 LOW。
+安装前探针连接失败和主机快照检查误判均保留原日志；未因此重复烧录或自动清故障。
+
+[同参数有限对照](validation/evidence/foc-tuning/current-filter-comparison.json)只执行一次
++40 rpm、约 1.2 秒 Stop；电流 PI 0.5/600、速度 PI 0.002/0.008 及全部原边界不变。
+250 Hz 同一域连续 480 帧无丢失，通信错误增量为零；停机时无故障、首因为空、六路关闭，
+前后完整 Flash 一致，操作者报告无异常。首次主机串口打开阻塞时尚未提交任何命令，
+只读证明 Start/电机命令均为零；操作者重接串口并确认曾复位/重开电源后，重新前检才执行。
+
+与原 Ki600/相同速度 PI 的历史单次记录相比，尾部 20% 速度峰峰值 21.75→17.64 rpm、
+标准差 4.844→4.711 rpm，仍未观察到持续进入 ±5% 误差带。RUN 的电流反馈口径由原始
+DQ 改为滤后 DQ，所见电流误差变小不能当成独立物理精度提升；±5% 仅沿用描述约定，
+不替换任务书验收门槛。单点电流跟踪误差峰值反而
+增大。不同启动及初始角度、仅一次有限窗口，不足以声明显著因果收益。对照曲线与导出
+样本见[图](validation/evidence/foc-tuning/current-filter-comparison.png)及
+[CSV](validation/evidence/foc-tuning/current-filter-comparison.csv)。相同 0.2～1.196 秒窗口按整数
+控制时间筛选，14 阶角度分量幅度约 4.167→4.179 rpm，未被低通消除；仍不能据此区分
+真实机械纹波与编码器周期误差。本次没有实际时序故障，
+但不代替完整 IRQ/WCET、长期稳定性和独立转速验证；P6 速度性能仍为 FAIL。
 
 | 能力 | 已有证据 | 当前限制 |
 | --- | --- | --- |

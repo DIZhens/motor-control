@@ -1,0 +1,30 @@
+#ifndef G431_TARGET_COMMUNICATION_CONFIG_H
+#define G431_TARGET_COMMUNICATION_CONFIG_H
+
+/* 同一个正式Run在构建期选择唯一链路；Validation不装配通信任务。 */
+#define BLDC_G431_COMMUNICATION_UART_V1 1
+#define BLDC_G431_COMMUNICATION_CAN_V1 2
+#ifndef BLDC_G431_COMMUNICATION
+#define BLDC_G431_COMMUNICATION BLDC_G431_COMMUNICATION_UART_V1
+#endif
+#if BLDC_G431_COMMUNICATION != BLDC_G431_COMMUNICATION_UART_V1 \
+    && BLDC_G431_COMMUNICATION != BLDC_G431_COMMUNICATION_CAN_V1
+#error Unsupported G431 communication profile
+#endif
+
+#ifndef BLDC_G431_CAN_NODE_ID
+#define BLDC_G431_CAN_NODE_ID 1
+#endif
+#if BLDC_G431_CAN_NODE_ID < 1 || BLDC_G431_CAN_NODE_ID > 127
+#error CAN Node ID must be 1 through 127; Node 0 is reserved
+#endif
+
+/* 专项无功率验证开关；正式构建保持0，不能从线上命令切换。 */
+#ifndef BLDC_G431_CAN_LOOPBACK_VALIDATION
+#define BLDC_G431_CAN_LOOPBACK_VALIDATION 0
+#endif
+#if BLDC_G431_CAN_LOOPBACK_VALIDATION && BLDC_G431_COMMUNICATION != BLDC_G431_COMMUNICATION_CAN_V1
+#error Internal loopback validation requires the CAN profile
+#endif
+
+#endif

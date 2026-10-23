@@ -26,6 +26,10 @@ uint32_t model_explicit_boundaries; /* 1仅由下面的显式update事件装载p
 float model_voltage_ratio = 0.45f;
 float model_normal_utilization = 0.45f;
 float model_current_trip_a = 1.2f;
+float model_filter_coefficient; /* 默认旁路；各采样节拍的滤波候选由模型显式设置。 */
+uint32_t model_filter_ready;
+uint32_t model_filter_corruption; /* 仅故障模型使用：1坏alpha历史，2坏系数，3未配置，4坏beta历史。 */
+float model_filter_values[4]; /* 原始alpha/beta和控制支路滤后alpha/beta。 */
 uint32_t model_facts_ok = 1U;
 uint32_t model_zero_permitted = 1U;
 uint32_t model_trig_enabled; /* 0保留默认软件；1注入带独立上下文的测试后端。 */
@@ -157,6 +161,21 @@ void model_diagnostics(void)
     model_values[15] = model_runtime.current_output.applied_vq_v;
     model_controller_dq[0] = model_runtime.current_output.id_a;
     model_controller_dq[1] = model_runtime.current_output.iq_a;
+    model_filter_ready = model_runtime.current_feedback_filter.initialized ? 1U : 0U;
+    model_filter_values[0] = model_runtime.current_measurement.output.alpha_a;
+    model_filter_values[1] = model_runtime.current_measurement.output.beta_a;
+    model_filter_values[2] = model_runtime.current_feedback_filter.alpha_a;
+    model_filter_values[3] = model_runtime.current_feedback_filter.beta_a;
+}
+
+/* 模型直接破坏私有历史，验证不能将坏滤波值作为有效反馈继续stage。 */
+void model_corrupt_filter(void)
+{
+    if (model_filter_corruption == 1U) { model_runtime.current_feedback_filter.alpha_a = NAN; }
+    if (model_filter_corruption == 2U) { model_runtime.current_feedback_filter.coefficient = NAN; }
+    if (model_filter_corruption == 3U) { model_runtime.current_feedback_filter.configured = false; }
+    if (model_filter_corruption == 4U) { model_runtime.current_feedback_filter.beta_a = INFINITY; }
+    model_diagnostics();
 }
 
 bool realtime_motor_io_get_facts(RealtimeMotorIoFacts *facts)
@@ -299,6 +318,7 @@ void model_init(void)
     config.control.max_bus_voltage_v = 16.0f;
     config.control.phase_current_trip_a = model_current_trip_a;
     config.control.actuation_prediction_time_s = model_prediction_s;
+    config.control.current_feedback_filter_coefficient = model_filter_coefficient;
     motor_init(&model_motor);
     motor_finish_boot(&model_motor);
     model_init_ok = control_runtime_init(&model_runtime, &model_motor, &config) ? 1U : 0U;
