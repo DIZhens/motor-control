@@ -45,6 +45,18 @@ Run全量构建零错误零警告，Flash/RAM与P2相同；可装载内容仅bui
 UART Flash/RAM为66664/21088 B，CAN为60504/17792 B；任务栈分配未改。
 500 kbit/s、过滤器及恢复流程已有离线证据，尚无FDCAN控制器内部回环、实物调度或外部总线证据。
 
+[P5内部回环](validation/evidence/protocol-can/p5.json)在冻结专项镜像上通过26组无功率实测：
+实际TX Message RAM、控制器回环、FIFO/IRQ、唯一Communication、CanServer及Runtime ticket/
+Completion贯通。24个注入帧中6个被硬件过滤，18个进入RX；16个应答匹配，DLC/reserved非法帧
+未获业务身份。Start忠实返回NOT_READY，普通重复不重交接；无会话Stop完成后相同帧再次执行，
+会话和普通水位不变。共4317个硬件TX全部完成，RX lost为0；通过轮次末态IDLE/目标0/MOE0/六LOW，
+Motor/Guard/Internal均0。通信/遥测栈最低635/272 word，满足各自25%余量要求。
+
+首轮诊断整块读取FDCAN寄存器触及保留地址，触发ARA（0x00800000）并关断通信，尚未发测试帧。
+保留原故障记录；脚本改为只读有效寄存器，经操作者RST后同一固件完整通过，不放宽错误路径。
+正式IOC保持Normal，专项代码在默认构建完全移除；默认UART镜像已恢复到板上并独立全Flash核对。
+不证明TCAN3414DR、CANH/CANL、终端、真实ACK/仲裁/外部Error Passive/Bus-off、双节点或CAN运动。
+
 ## 当前能力与证据矩阵
 
 | 能力 | 已有证据 | 当前限制 |

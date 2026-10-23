@@ -841,6 +841,16 @@
           </Files>
         </Group>
         <Group>
+          <GroupName>Application/User/Validation</GroupName>
+          <Files>
+            <File>
+              <FileName>can_loopback.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../validation/can_loopback.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
           <GroupName>Application/User/SystemRuntime</GroupName>
           <Files>
             <File>

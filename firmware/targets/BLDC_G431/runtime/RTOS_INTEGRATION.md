@@ -126,6 +126,16 @@ Warning/Passive只记录。Bus-off锁存后撤Session、优先Runtime Stop、禁
 截止失败进入Target Fail-closed。它们是后台服务检查，不改变任何实时保护/运动包络。
 模型不证明外部Bus-off；内部回环、外部物理总线和有限运动分别留存证据。
 
+内部回环专项：`BLDC_G431_CAN_LOOPBACK_VALIDATION=1`只允许配合CAN Profile构建。它在生成的
+Normal初始化之后、控制器Start之前改为Internal Loopback，并核对TEST/MON/LBCK；正式IOC不变。
+`validation/can_loopback.c`仅在该宏启用时建立SWD测试Mailbox和有界TX Message RAM记录；普通
+构建不含其状态/函数。测试帧只在低母线、IDLE、目标0、六路LOW/MOE0及无故障时交给控制器，
+完整RX仍进入同一CanServer/Runtime，不绕过Motor许可。它可以检查扩展/RTR过滤器，但生产端口
+继续拒绝发送扩展/RTR。验证后恢复UART并重新生成身份、Rebuild。
+
+FDCAN禁止整块寄存器dump：读取保留地址本身可触发ARA。诊断仅读取明确有效的配置/状态字，
+Message RAM也只读已配置的具体区域。实物通过范围与原失败记录见[验证页](../VALIDATION.md)。
+
 ## 字节流与后台边界
 
 [Byte-stream合同](../../../../protocol/ports/byte_stream_transport.h)不含HAL/RTOS/Motor类型，

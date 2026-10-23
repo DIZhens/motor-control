@@ -5,6 +5,12 @@
 #include "main.h"
 #include "fdcan.h"
 #include <string.h>
+#if BLDC_G431_CAN_LOOPBACK_VALIDATION
+#include "../validation/can_loopback.h"
+#define EXPECTED_CAN_MODE FDCAN_MODE_INTERNAL_LOOPBACK
+#else
+#define EXPECTED_CAN_MODE FDCAN_MODE_NORMAL
+#endif
 
 #define CAN_TX_TIMEOUT_MS 100U
 #define CAN_RECOVERY_TIMEOUT_MS 200U
@@ -69,7 +75,7 @@ CanFrameResult can_frame_init(void)
     if (s_initialized) { return CAN_FRAME_BUSY; }
     if (SystemCoreClock != 170000000U || hfdcan1.State != HAL_FDCAN_STATE_READY
         || hfdcan1.Init.ClockDivider != FDCAN_CLOCK_DIV1 || hfdcan1.Init.FrameFormat != FDCAN_FRAME_CLASSIC
-        || hfdcan1.Init.Mode != FDCAN_MODE_NORMAL || hfdcan1.Init.AutoRetransmission != ENABLE
+        || hfdcan1.Init.Mode != EXPECTED_CAN_MODE || hfdcan1.Init.AutoRetransmission != ENABLE
         || hfdcan1.Init.NominalPrescaler != 17U || hfdcan1.Init.NominalSyncJumpWidth != 1U
         || hfdcan1.Init.NominalTimeSeg1 != 15U || hfdcan1.Init.NominalTimeSeg2 != 4U
         || hfdcan1.Init.StdFiltersNbr != 3U || hfdcan1.Init.ExtFiltersNbr != 0U
@@ -137,7 +143,11 @@ CanFrameResult can_frame_try_send(const CanFrame *frame)
     FDCAN_TxHeaderTypeDef header = {0};
     CanFrameResult result;
     uint32_t saved;
-    if (frame == NULL || frame->id > 0x7FFU || frame->extended || frame->remote || frame->dlc > 8U) {
+    if (frame == NULL || frame->id > 0x7FFU || frame->dlc > 8U
+#if !BLDC_G431_CAN_LOOPBACK_VALIDATION
+        || frame->extended || frame->remote
+#endif
+        ) {
         return CAN_FRAME_BAD_ARGUMENT;
     }
     if (!s_status.started) { return CAN_FRAME_NOT_STARTED; }
@@ -146,6 +156,10 @@ CanFrameResult can_frame_try_send(const CanFrame *frame)
     else if (s_status.tx_in_flight || s_status.bus_off || s_status.recovering) { result = CAN_FRAME_BUSY; }
     else {
         header.Identifier = frame->id; header.IdType = FDCAN_STANDARD_ID; header.TxFrameType = FDCAN_DATA_FRAME;
+#if BLDC_G431_CAN_LOOPBACK_VALIDATION
+        header.IdType = frame->extended ? FDCAN_EXTENDED_ID : FDCAN_STANDARD_ID;
+        header.TxFrameType = frame->remote ? FDCAN_REMOTE_FRAME : FDCAN_DATA_FRAME;
+#endif
         /* 当前CubeG4 1.6.3 HAL的DLC是0..15原值，不是旧版本的寄存器左移值。 */
         header.DataLength = frame->dlc; header.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
         header.BitRateSwitch = FDCAN_BRS_OFF; header.FDFormat = FDCAN_CLASSIC_CAN;
@@ -158,7 +172,11 @@ CanFrameResult can_frame_try_send(const CanFrame *frame)
             s_tx_ms = HAL_GetTick(); s_status.tx_in_flight = true; result = CAN_FRAME_ACCEPTED;
         }
     }
-    unlock(saved); return result;
+    unlock(saved);
+#if BLDC_G431_CAN_LOOPBACK_VALIDATION
+    if (result == CAN_FRAME_ACCEPTED) { g431_can_loopback_tx_accepted(frame); }
+#endif
+    return result;
 }
 bool can_frame_read_status(CanFrameStatus *status)
 {
@@ -213,12 +231,18 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *handle, uint32_t events)
     uint32_t flags = CAN_FRAME_RX_AVAILABLE;
     if (handle != &hfdcan1) { return; }
     if ((events & FDCAN_IT_RX_FIFO0_MESSAGE_LOST) != 0U) { s_status.rx_lost++; flags |= CAN_FRAME_RX_LOST; }
+#if BLDC_G431_CAN_LOOPBACK_VALIDATION
+    g431_can_loopback_irq(CAN_FRAME_RX_AVAILABLE);
+#endif
     emit(flags, true);
 }
 void HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef *handle, uint32_t buffers)
 {
     if (handle != &hfdcan1) { return; }
     if (s_status.tx_in_flight && (buffers & s_tx_buffer) != 0U) { tx_complete_locked(); }
+#if BLDC_G431_CAN_LOOPBACK_VALIDATION
+    g431_can_loopback_irq(CAN_FRAME_TX_COMPLETE);
+#endif
     emit(CAN_FRAME_TX_COMPLETE, true);
 }
 void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *handle, uint32_t events)

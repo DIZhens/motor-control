@@ -19,4 +19,12 @@
 #error CAN Node ID must be 1 through 127; Node 0 is reserved
 #endif
 
+/* 专项无功率验证开关；正式构建保持0，不能从线上命令切换。 */
+#ifndef BLDC_G431_CAN_LOOPBACK_VALIDATION
+#define BLDC_G431_CAN_LOOPBACK_VALIDATION 0
+#endif
+#if BLDC_G431_CAN_LOOPBACK_VALIDATION && BLDC_G431_COMMUNICATION != BLDC_G431_COMMUNICATION_CAN_V1
+#error Internal loopback validation requires the CAN profile
+#endif
+
 #endif

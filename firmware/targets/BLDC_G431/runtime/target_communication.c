@@ -14,6 +14,9 @@
 #include "fdcan.h"
 #include "can_frame_port.h"
 #include "target_can_server.h"
+#if BLDC_G431_CAN_LOOPBACK_VALIDATION
+#include "../validation/can_loopback.h"
+#endif
 #endif
 
 /* ARM链接器在移除未使用节之前解析全部输入对象的外部符号。未选库的窄端口只提供
@@ -41,6 +44,9 @@ void target_communication_hardware_init(void)
     HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
 #else
     MX_FDCAN1_Init();
+#if BLDC_G431_CAN_LOOPBACK_VALIDATION
+    g431_can_loopback_configure();
+#endif
 #endif
 }
 

@@ -4,6 +4,9 @@
 #include "can_server.h"
 #include "target_runtime.h"
 #include "main.h"
+#if BLDC_G431_CAN_LOOPBACK_VALIDATION
+#include "../validation/can_loopback.h"
+#endif
 
 static CanServer s_can_server;
 void target_can_server_start(void) { can_server_init(&s_can_server, BLDC_G431_CAN_NODE_ID); }
@@ -16,6 +19,9 @@ void target_can_server_service(void)
     CanFrameResult result;
     uint32_t batch;
     MotorSnapshot snapshot;
+#if BLDC_G431_CAN_LOOPBACK_VALIDATION
+    g431_can_loopback_service();
+#endif
     can_server_poll(&s_can_server, HAL_GetTick());
     /* 每轮有界排空；硬件FIFO只有3项，持续输入由IRQ及1ms后台轮询继续推进。 */
     for (batch = 0U; batch < 6U && !s_can_server.failed; ++batch) {
@@ -23,6 +29,9 @@ void target_can_server_service(void)
         if (result == CAN_FRAME_EMPTY || result == CAN_FRAME_BUSY) { break; }
         if (result != CAN_FRAME_ACCEPTED) { target_runtime_fail_closed(RUNTIME_INTERNAL_TRANSPORT); break; }
         can_server_feed(&s_can_server, &frame, HAL_GetTick());
+#if BLDC_G431_CAN_LOOPBACK_VALIDATION
+        g431_can_loopback_server_progress(&s_can_server);
+#endif
     }
     can_server_poll(&s_can_server, HAL_GetTick());
     if (s_can_server.suspended && !s_can_server.failed
@@ -39,5 +48,8 @@ void target_can_server_service(void)
     }
     can_server_flush(&s_can_server);
     can_server_observe(&s_can_server);
+#if BLDC_G431_CAN_LOOPBACK_VALIDATION
+    g431_can_loopback_server_progress(&s_can_server);
+#endif
 }
 #endif
