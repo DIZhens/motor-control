@@ -6,6 +6,7 @@
 #endif
 
 #include <stddef.h>
+#include "legacy_command.h"
 
 uint32_t model_handoff_command_type;
 float model_handoff_target;

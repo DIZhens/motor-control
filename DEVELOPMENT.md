@@ -12,8 +12,6 @@
 
 恢复工作时，从 `README.md` 找到目标模块入口，读取本文件，再用 `git status --short`、`git branch --show-current` 和 `git log -5 --format=full` 核对本地工作面；从最近的阶段检查点提交正文恢复目标、完成条件、已证明与未证明项及下一步，随后按需读取架构、接口与 Target 验证页。恢复不得依赖联网、PR 页面或历史讨论记录。
 
-可在仓库根目录用 PowerShell 7 运行 `pwsh -NoProfile -File .\project_context.ps1`，集中显示上述 Git 信息和正式文档路径；脚本默认按自身位置定位仓库，也接受 `-RepositoryPath <目录>`。它只读本地信息，以 UTF-8 输出，不修改索引、不连接设备或网络，也不打印整份架构文档。
-
 ## 1. 文档职责
 
 ```text
@@ -191,11 +189,11 @@ HEX 身份变化用于区分证据归属，不自动要求重跑全部板级流�
 
 ### 4.4 本地验证依赖
 
-ARM 模型与候选文件解析所需 Python 包统一由根目录 [requirements-dev.txt](requirements-dev.txt) 固定版本，已在 Python 3.13.2 上核对。新环境从仓库根目录安装，不依赖历史 `local-evidence` 内的包副本：
+ARM 模型与候选解析使用 `unicorn`、`pyelftools`，串口工具使用 `pyserial`。可以复用用户本地 Python 环境；也可以建立仅本地的 `.venv`。仓库验证入口不读取本地辅助清单，不依赖历史 `local-evidence` 内的包副本。新环境可按所需验证安装这些包：
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pip install unicorn pyelftools pyserial
 .\.venv\Scripts\python.exe firmware/targets/BLDC_G431/validation/tests/verify_platform.py
 ```
 
@@ -312,7 +310,7 @@ pyqtgraph
 pytest
 ```
 
-当前 Python 验证依赖由根目录 `requirements-dev.txt` 和本地 `.venv/` 管理；未来独立 Host 工程的依赖随其工程文件维护，不把 Python/Qt 依赖扩散到 Firmware。
+Python 工具可使用用户本地环境或 `.venv/`；所需包见第 4.4 节。未来独立 Host 工程的依赖随其工程文件维护，不把 Python/Qt 依赖扩散到 Firmware。
 
 Host 实现遵守以下规则：
 

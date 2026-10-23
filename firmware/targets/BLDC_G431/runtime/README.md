@@ -18,8 +18,8 @@
 1. `Core/Src/main.c` 调用 `system_runtime_start()`；Bootstrap 核对时基、创建静态 Mailbox 和后台任务，再调用 Target 装配。
 2. `target_runtime.c` 先 safe-off，绑定 sample/trip、位置/母线及实时 I/O，最后启动驱动时序。启动时序不等于使能功率。
 3. ADC sample-ready 调用 `control_runtime_step()`，处理反馈、Stop/请求和控制计算；该边界独占 Motor、估计器及 PI 状态。
-4. Communication 提交完整请求，`runtime_exchange` 传递 ticket/Completion；Telemetry 只读发布值。后台不直接写实时历史。
-5. TIM6 独立检查心跳和有限运行边界，故障先关断再交接；不等待任务执行。
+4. Communication 经 `target_runtime_submit_request()` 提交完整请求，`runtime_exchange` 是唯一命令/参数/Stop 交接；ADC 消费并产生准确 ticket 的 Completion。Telemetry 只读发布值，后台不直接写实时历史。
+5. TIM6 独立检查心跳和有限运行边界。时限到达先 safe-off，再调用 `runtime_exchange_request_internal_stop()`；由下个 fast tick 消费 Stop 和完成旧请求取消。内部 Stop 不分配外部 ticket，已排队的外部 Stop 仍保留自身身份，不等待任务关断。
 
 | 文件 | 职责 |
 | --- | --- |

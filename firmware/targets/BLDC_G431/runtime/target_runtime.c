@@ -91,10 +91,6 @@ bool target_runtime_pop_completion(RuntimeCommandCompletion *completion)
 #endif
 static volatile RuntimePublication s_publication;
 static volatile uint32_t s_publication_sequence;
-static volatile MotorCommand s_pending_command;
-static volatile bool s_command_pending;
-static volatile bool s_stop_pending;
-static volatile bool s_reject_pending;
 static volatile uint32_t s_last_sample_cycles;
 static uint32_t s_last_guard_cycles;
 static uint32_t s_publication_divider;
@@ -264,31 +260,6 @@ static void complete_request(const RuntimeCommandCompletion *completion)
     }
 }
 
-static bool take_command(MotorCommand *command, bool *rejected)
-{
-    *rejected = false;
-    if (s_stop_pending) {
-        s_stop_pending = false;
-        s_command_pending = false;
-        s_reject_pending = false;
-        command->type = MOTOR_COMMAND_STOP;
-        command->target_velocity_rpm = 0.0f;
-        return true;
-    }
-    if (s_command_pending) {
-        __DMB();
-        *command = s_pending_command;
-        s_command_pending = false;
-        return true;
-    }
-    if (s_reject_pending) {
-        s_reject_pending = false;
-        *rejected = true;
-        return true;
-    }
-    return false;
-}
-
 /* ADC为业务写者；TIM6只在短临界区执行有限时长撤销和Stop交接。 */
 static void monitor_finite_run(const MotorCommand *command, bool has_command)
 {
@@ -336,8 +307,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     uint32_t now_cycles = DWT->CYCCNT;
     uint32_t faults = g_target_runtime_guard_faults;
     MotorCommand command;
-    bool rejected;
-    bool command_available;
+    bool command_available = false;
     bool business_changed;
     RuntimeCommandEnvelope envelope;
     RuntimeCommandCompletion completion;
@@ -373,11 +343,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
         faults |= TARGET_RUNTIME_FAULT_UNEXPECTED_POWER;
     }
     if (!target_runtime_session_permitted()) { faults |= TARGET_RUNTIME_FAULT_INTERNAL; }
-    /* 旧VOFA/独立守卫的Stop与新交接共享一个实时Stop边界；不丢新请求的取消身份。 */
-    if (s_stop_pending) {
-        runtime_exchange_request_internal_stop(&s_exchange);
-        s_stop_pending = false; s_command_pending = false; s_reject_pending = false;
-    }
+    /* 外部请求与内部守卫Stop只从同一交接消费；外部ticket由Exchange保留。 */
     has_envelope = runtime_exchange_take(&s_exchange, &envelope, &cancelled_ticket);
     if (has_envelope && ((unsigned int)envelope.request.kind > RUNTIME_REQUEST_TELEMETRY
         || (envelope.request.kind == RUNTIME_REQUEST_MOTOR
@@ -387,13 +353,11 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
         target_runtime_fail_closed(RUNTIME_INTERNAL_TRANSACTION_CORRUPT);
         faults |= TARGET_RUNTIME_FAULT_INTERNAL; has_envelope = false;
     }
-    rejected = false;
     if (has_envelope) {
         memset(&completion, 0, sizeof(completion));
         completion.ticket = envelope.ticket; completion.kind = envelope.request.kind;
         if (envelope.request.kind == RUNTIME_REQUEST_MOTOR) {
             command = envelope.request.value.motor; command_available = true;
-            if (command.type == MOTOR_COMMAND_STOP) { s_command_pending = false; s_reject_pending = false; }
             if (command.type == MOTOR_COMMAND_START_VELOCITY && s_parameters.telemetry.rate_hz == 500U) {
                 /* 参数为500Hz时不进入Motor；正常协议Server同样在提交前返回PRECONDITION_FAILED。 */
                 completion.outcome = RUNTIME_PRECONDITION_FAILED;
@@ -413,12 +377,11 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
                 completion.value.telemetry = s_parameters.telemetry;
             }
         }
-    } else { command_available = take_command(&command, &rejected); }
-    /* Observe先执行隔离试具，再推进OFF观察；Run直接推进唯一正式实例。 */
+    }
     business_changed = control_runtime_step(&s_control_runtime, current->observation_time,
         current, power_disabled,
-        faults, rejected ? NULL : &command, command_available);
-    if (command_available && !rejected && command.type == MOTOR_COMMAND_START_VELOCITY
+        faults, command_available ? &command : NULL, command_available);
+    if (command_available && command.type == MOTOR_COMMAND_START_VELOCITY
         && s_motor.command_result == MOTOR_COMMAND_RESULT_ACCEPTED
         && s_control_runtime.phase == CONTROL_RUNTIME_START_QUIET) {
         if (control_runtime_install_start_speed_pi(&s_control_runtime,
@@ -426,7 +389,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
             runtime_parameters_activate(&s_parameters);
         } else { target_runtime_fail_closed(RUNTIME_INTERNAL_TRANSACTION_CORRUPT); }
     }
-    monitor_finite_run(rejected ? NULL : &command, command_available);
+    monitor_finite_run(command_available ? &command : NULL, command_available);
     if (s_control_runtime.phase == CONTROL_RUNTIME_OFF || s_motor.faults != 0U
         || !target_runtime_session_permitted()) { runtime_parameters_deactivate(&s_parameters); }
     if (cancelled_ticket != 0U) {
@@ -484,9 +447,7 @@ void target_runtime_guard_irq(void)
         realtime_motor_io_safe_off();
         g_target_runtime_run_status.active = 0U;
         g_target_runtime_run_status.limit_reason = 1U;
-        s_command_pending = false;
-        s_reject_pending = false;
-        s_stop_pending = true;
+        runtime_exchange_request_internal_stop(&s_exchange);
     }
     restore_interrupts(primask);
     if (now_cycles == s_last_guard_cycles) {
@@ -574,64 +535,12 @@ void target_runtime_start(void)
 }
 
 
-TargetRuntimeSubmitResult target_runtime_submit_command(const MotorCommand *command)
-{
-    uint32_t primask = __get_PRIMASK();
-    bool rejected = command == NULL;
-    bool stop;
-    TargetRuntimeSubmitResult result;
-
-    if (!rejected) {
-        switch (command->type) {
-        case MOTOR_COMMAND_START_VELOCITY:
-        case MOTOR_COMMAND_UPDATE_VELOCITY:
-        case MOTOR_COMMAND_STOP:
-        case MOTOR_COMMAND_CLEAR_FAULT:
-            break;
-        default:
-            rejected = true;
-            break;
-        }
-    }
-    stop = !rejected && command->type == MOTOR_COMMAND_STOP;
-
-    __disable_irq();
-    if (!rejected && (command->type == MOTOR_COMMAND_START_VELOCITY
-        || command->type == MOTOR_COMMAND_UPDATE_VELOCITY) && !target_runtime_session_permitted()) {
-        restore_interrupts(primask); return TARGET_RUNTIME_SUBMIT_REJECTED;
-    }
-    if (!rejected && command->type == MOTOR_COMMAND_START_VELOCITY && s_parameters.telemetry.rate_hz == 500U) {
-        restore_interrupts(primask); return TARGET_RUNTIME_SUBMIT_REJECTED;
-    }
-    if (!stop && (s_exchange.ordinary_pending || s_exchange.stop_pending || s_exchange.internal_stop)) {
-        s_reject_pending = true; restore_interrupts(primask);
-        return rejected ? TARGET_RUNTIME_SUBMIT_REJECTED : TARGET_RUNTIME_SUBMIT_BUSY;
-    }
-    if (stop) {
-        s_command_pending = false;
-        s_stop_pending = true;
-        result = TARGET_RUNTIME_SUBMIT_QUEUED;
-    } else if (rejected || s_command_pending || s_stop_pending) {
-        s_reject_pending = true;
-        result = rejected ? TARGET_RUNTIME_SUBMIT_REJECTED : TARGET_RUNTIME_SUBMIT_BUSY;
-    } else {
-        s_pending_command = *command;
-        __DMB();
-        s_command_pending = true;
-        result = TARGET_RUNTIME_SUBMIT_QUEUED;
-    }
-    restore_interrupts(primask);
-    return result;
-}
-
 RuntimeExchangeResult target_runtime_submit_request(const RuntimeRequest *request,
     uint32_t *ticket, uint32_t *cancelled_ticket)
 {
     uint32_t primask;
     RuntimeExchangeResult result;
-    bool stop;
     if (request == NULL || ticket == NULL || cancelled_ticket == NULL) { return RUNTIME_EXCHANGE_BAD_REQUEST; }
-    stop = request->kind == RUNTIME_REQUEST_MOTOR && request->value.motor.type == MOTOR_COMMAND_STOP;
     primask = __get_PRIMASK(); __disable_irq();
     if (!target_runtime_session_permitted() && (request->kind != RUNTIME_REQUEST_MOTOR
         || request->value.motor.type == MOTOR_COMMAND_START_VELOCITY
@@ -643,13 +552,7 @@ RuntimeExchangeResult target_runtime_submit_request(const RuntimeRequest *reques
         && s_parameters.telemetry.rate_hz == 500U) {
         restore_interrupts(primask); return RUNTIME_EXCHANGE_PRECONDITION_FAILED;
     }
-    if (s_stop_pending || (!stop && (s_command_pending || s_reject_pending))) {
-        restore_interrupts(primask); return RUNTIME_EXCHANGE_BUSY;
-    }
     result = runtime_exchange_submit(&s_exchange, request, ticket, cancelled_ticket);
-    if (result == RUNTIME_EXCHANGE_QUEUED && stop) {
-        s_command_pending = false; s_reject_pending = false;
-    }
     if (result == RUNTIME_EXCHANGE_TICKET_EXHAUSTED) {
         target_runtime_fail_closed(RUNTIME_INTERNAL_TRANSACTION_CORRUPT);
     }

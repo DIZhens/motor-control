@@ -41,7 +41,7 @@ def verify(Model, symbols, passed):
         m.call('exchange_read')
         if not result(m)[13]:
             return None
-        layout = read(m, 'exchange_layout', '18I')
+        layout = read(m, 'exchange_layout', '19I')
         raw = bytes(m.cpu.mem_read(symbols['exchange_sample'], layout[7]))
         def item(index, fmt):
             return struct.unpack_from('<' + fmt, raw, layout[index])[0]
@@ -52,7 +52,7 @@ def verify(Model, symbols, passed):
 
     def fault(m):
         m.call('exchange_read')
-        offset = read(m, 'exchange_layout', '18I')[17]
+        offset = read(m, 'exchange_layout', '19I')[17]
         return read(m, 'exchange_fault', 'B')[0], read(m, 'exchange_fault', 'I', offset)[0]
 
     def ready():
@@ -71,6 +71,29 @@ def verify(Model, symbols, passed):
         c = pop(m)
         assert c[:4] == (ticket, 0, 0, 1)
         return ticket
+
+    def expire_guard(m):
+        started = m.memory_word(symbols['g_target_runtime_run_status'] + 12)
+        now = (started + 255000000) & 0xFFFFFFFF
+        m.memory_write(0xE0001004, now)
+        m.write('s_last_sample_cycles', now)
+        m.write('s_last_guard_cycles', (now - 8500) & 0xFFFFFFFF)
+        offset = read(m, 'exchange_layout', '19I')[18]
+        address = symbols['s_exchange'] + offset
+        stop_writes = []
+
+        def internal_stop_write(uc, access, at, size, value, context):
+            assert m.memory_word(0x40012C44) & 0x8000 == 0
+            assert m.cpu.reg_read(UC_ARM_REG_PRIMASK) == 1
+            stop_writes.append(value)
+
+        handle = m.cpu.hook_add(UC_HOOK_MEM_WRITE, internal_stop_write, begin=address, end=address)
+        before = m.motor()
+        m.memory_write(0x40001010, 1)
+        m.call('model_guard')
+        m.cpu.hook_del(handle)
+        assert stop_writes == [1] and m.motor() == before
+        assert pop(m) is None
 
     m = Model()
     gains, meta = profiles(m)
@@ -93,7 +116,7 @@ def verify(Model, symbols, passed):
     assert math.isclose(gains[2], .002, rel_tol=1e-6) and math.isclose(gains[3], .008, rel_tol=1e-6)
     assert gains[4:] == before[0][4:] and meta[:3] == (2, 0, 0)
     assert pop(m) is None
-    old = bytes(m.cpu.mem_read(symbols['exchange_parameters'], read(m, 'exchange_layout', '18I')[0]))
+    old = bytes(m.cpu.mem_read(symbols['exchange_parameters'], read(m, 'exchange_layout', '19I')[0]))
     version = m.word('s_publication_sequence'); m.write('s_publication_sequence', version | 1)
     m.call('exchange_read')
     assert result(m)[12] == 0 and bytes(m.cpu.mem_read(symbols['exchange_parameters'], len(old))) == old
@@ -154,7 +177,7 @@ def verify(Model, symbols, passed):
     tick(m); assert pop(m)[4] == 2 and profiles(m) == before
     submit(m, command=0, target=40.); tick(m)
     assert pop(m)[3] == 4 and profiles(m) == before
-    offset = read(m, 'exchange_layout', '18I')[16]
+    offset = read(m, 'exchange_layout', '19I')[16]
     actual = struct.unpack('<2f', m.cpu.mem_read(symbols['s_control_runtime'] + offset, 8))
     assert actual == before[0][4:] and actual != before[0][:2]
     submit(m, command=2); tick(m); pop(m)
@@ -173,7 +196,7 @@ def verify(Model, symbols, passed):
     tick(m); assert pop(m)[0] == stop_ticket and pop(m) is None and profiles(m) == before
     passed('Completion保留每次写的权威修订，后续写不污染旧结果；Stop取消排队参数写')
 
-    m = ready(); layout = read(m, 'exchange_layout', '18I')
+    m = ready(); layout = read(m, 'exchange_layout', '19I')
     m.cpu.mem_write(symbols['s_parameters'] + layout[1], struct.pack('<I', 0xFFFFFFFF))
     submit(m, kind=1, kp=.002, ki=.008); tick(m); assert pop(m)[5] == 0
     accepted_start(m)
@@ -241,20 +264,50 @@ def verify(Model, symbols, passed):
 
     m = ready(); accepted_start(m); tick(m, 2)
     _, ticket, _ = submit(m, command=1, target=40.)
-    # 仅推进独立守卫的真实时长边界，ADC尚未消费Update。
-    started = m.memory_word(symbols['g_target_runtime_run_status'] + 12)
-    now = (started + 255000000) & 0xFFFFFFFF
-    m.memory_write(0xE0001004, now)
-    m.write('s_last_sample_cycles', now); m.write('s_last_guard_cycles', (now - 8500) & 0xFFFFFFFF)
-    m.memory_write(0x40001010, 1); m.call('model_guard')
-    assert pop(m) is None
+    # 到达真实时长边界；CPU写钩子检查safe-off先于internal_stop且临界区保持。
+    expire_guard(m)
     tick(m)
     c = pop(m)
     assert c[0] == ticket and c[2] == 1 and pop(m) is None
     assert m.motor()[0:2] == (1, 0) and m.motor()[4] == 0 and profiles(m)[1][2] == 0
     passed('TIM6安全Stop只交接，ADC唯一生产取消Completion；旧Update不执行且不丢ticket')
 
-    m = Model(); layout = read(m, 'exchange_layout', '18I'); m.call('exchange_unit_init')
+    m = ready(); accepted_start(m); tick(m, 2)
+    _, update_ticket, _ = submit(m, command=1, target=40.)
+    _, stop_ticket, cancelled = submit(m, command=2)
+    assert cancelled == update_ticket
+    count = m.motor()[3]
+    expire_guard(m)
+    assert submit(m, command=2) == (1, 0xA5A5A5A5, 0xA5A5A5A5)
+    tick(m)
+    assert pop(m)[:4] == (stop_ticket, 0, 0, 1) and pop(m) is None
+    assert m.motor()[0:2] == (1, 0) and m.motor()[3] == count + 1
+    tick(m, 3)
+    assert pop(m) is None and m.word('model_enable_count') == 1
+    passed('外部Stop先排队再到TIM6时限：保留外部ticket，仅一次Stop完成，已取消Update不重放')
+
+    m = ready(); start_ticket = accepted_start(m); tick(m, 2)
+    expire_guard(m)
+    assert submit(m, command=2) == (1, 0xA5A5A5A5, 0xA5A5A5A5)
+    tick(m)
+    assert pop(m) is None and m.motor()[0:2] == (1, 0)
+    _, stop_ticket, cancelled = submit(m, command=2)
+    assert stop_ticket == start_ticket + 1 and cancelled == 0
+    tick(m)
+    assert pop(m)[:4] == (stop_ticket, 0, 0, 1) and pop(m) is None
+    passed('TIM6先请求内部Stop：后到外部Stop保持BUSY且无身份分配，内部Stop无伪Completion，退休后新外部Stop正常完成')
+
+    m = ready(); accepted_start(m); tick(m, 2)
+    before = profiles(m)
+    _, pi_ticket, _ = submit(m, kind=1, kp=.003, ki=.012)
+    expire_guard(m); tick(m)
+    c = pop(m)
+    assert c[0] == pi_ticket and c[2] == 1 and pop(m) is None
+    assert profiles(m)[0] == before[0] and profiles(m)[1][:2] == before[1][:2]
+    assert profiles(m)[1][2] == 0 and m.motor()[0:2] == (1, 0)
+    passed('内部守卫Stop取消待消费参数写：ADC只完成原ticket的取消，Staged/Active值与修订保持')
+
+    m = Model(); layout = read(m, 'exchange_layout', '19I'); m.call('exchange_unit_init')
     unit_base = symbols['exchange_unit']
     for off in layout[2:4]:
         m.cpu.mem_write(unit_base + off, struct.pack('<I', 0xFFFFFFFE))
@@ -279,7 +332,7 @@ def verify(Model, symbols, passed):
     assert submit(m)[0] == 3 and fault(m)[0] == 6
     passed('SPSC跨u32 head/tail回绕、slot-before-head与真实DMB、满队列不改数据；ticket用尽不重用')
 
-    m = Model(); layout = read(m, 'exchange_layout', '18I')
+    m = Model(); layout = read(m, 'exchange_layout', '19I')
     m.cpu.mem_write(symbols['s_exchange'] + layout[2], struct.pack('<I', 5))
     assert pop(m) is None and fault(m) == (6, 1)
     passed('完成队列身份/计数不变量损坏直接Fail-closed，不作为普通空队列或外部错误处理')

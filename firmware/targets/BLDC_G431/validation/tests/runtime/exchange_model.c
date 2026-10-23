@@ -32,7 +32,7 @@ const uint32_t exchange_layout[] = {
     offsetof(SpeedCommissioningSample, limit_flags),
     offsetof(ControlRuntime, speed_controller) + offsetof(SpeedController, config)
         + offsetof(SpeedControllerConfig, kp_a_per_rpm),
-    offsetof(RuntimeInternalFaultStatus, count)
+    offsetof(RuntimeInternalFaultStatus, count), offsetof(RuntimeExchange, internal_stop)
 };
 
 static void source(void)

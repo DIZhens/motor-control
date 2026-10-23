@@ -10,6 +10,11 @@ def verify(Model, symbols, passed):
         m.phase = 'sample'
         for _ in range(count):
             m.call('model_sample')
+        # 本套件只验证功率/有限边界；消费本组请求的完成，事务身份另由Exchange套件检查。
+        while True:
+            m.call('exchange_pop')
+            if m.memory_word(symbols['exchange_result'] + 12) == 0:
+                break
         m.phase = ''
 
     def status(m):
@@ -61,7 +66,7 @@ def verify(Model, symbols, passed):
     tick(m)
     assert m.motor()[2] == 1 and m.motor()[4] == 40.0
     tick(m)
-    assert m.motor()[2] == 6 and m.motor()[4] == 40.0
+    assert m.motor()[2] == 1 and m.motor()[4] == 40.0
     assert submit(m, 1, 30.0) == 0
     assert submit(m, 2) == 0
     assert submit(m, 0, 60.0) == 1
@@ -73,8 +78,8 @@ def verify(Model, symbols, passed):
     assert m.word('model_enable_count') == 1
     assert submit(m, 99) == 2
     tick(m)
-    assert m.motor()[2] == 6 and m.word('model_enable_count') == 1
-    passed('MotorCommand交接复制完整请求，BUSY保留旧目标，Stop覆盖并退休后到普通/非法事件')
+    assert m.motor()[2] == 1 and m.word('model_enable_count') == 1
+    passed('旧输入夹具只适配RuntimeRequest：完整复制、BUSY不产生新命令、Stop取消旧请求、非法输入不进入Motor')
 
     m = ready()
     ok, healthy = snapshot(m)

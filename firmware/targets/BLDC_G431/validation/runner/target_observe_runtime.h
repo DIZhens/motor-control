@@ -2,6 +2,7 @@
 #define BLDC_G431_TARGET_OBSERVE_RUNTIME_H
 
 #include "../../runtime/target_runtime.h"
+#include "../communication/legacy_command.h"
 
 #include "../timing/current_capture.h"
 #include "../timing/compute_comparison.h"

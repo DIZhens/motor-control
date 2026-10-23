@@ -1,5 +1,5 @@
 /* 自动生成：修改正式源码/配置后运行runtime/tools/generate_build_identity.py。 */
 #ifndef G431_FIRMWARE_BUILD_IDENTITY_H
 #define G431_FIRMWARE_BUILD_IDENTITY_H
-#define G431_FIRMWARE_BUILD_ID 0xcb04339e37c61b1cULL
+#define G431_FIRMWARE_BUILD_ID 0x26bd6622c925ee7eULL
 #endif

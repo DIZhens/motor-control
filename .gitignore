@@ -1,3 +1,7 @@
+# 仅本地辅助文件
+/project_context.ps1
+/requirements-dev.txt
+
 # Python
 __pycache__/
 *.py[cod]

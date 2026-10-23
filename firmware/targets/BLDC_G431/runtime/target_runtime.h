@@ -34,21 +34,6 @@ typedef struct {
 extern volatile TargetRuntimeRunStatus g_target_runtime_run_status;
 
 
-/* 后台到 ADC 邮箱的交接结果，不是 Motor 的业务处理结果或进入 RUN 的应答。 */
-typedef enum {
-    TARGET_RUNTIME_SUBMIT_QUEUED = 0, /* 完整请求已复制，等待实时边界处理。 */
-    TARGET_RUNTIME_SUBMIT_BUSY = 1, /* 邮箱或 Stop 已占用；不覆盖原普通请求。 */
-    TARGET_RUNTIME_SUBMIT_REJECTED = 2 /* 非法请求只记录拒绝事件，不产生运动意图。 */
-} TargetRuntimeSubmitResult;
-
-/*
- * 仅由同一后台所有者调用；复制完整 MotorCommand，不保留调用者指针。
- * Stop 覆盖普通请求并优先交接；后到普通请求不能越过待处理 Stop。
- * NULL 仅代表通信层已经完整接收但判为非法的拒绝事件，不是 MotorCommand；
- * 返回 REJECTED。BUSY/非法事件若遇到待处理 Stop，随后随该 Stop 一起退休。
- */
-TargetRuntimeSubmitResult target_runtime_submit_command(const MotorCommand *command);
-
 /*
  * 后台最多尝试三次复制一致快照，不屏蔽控制中断；失败时不改写输出。
  * 成功表示取得完整副本，不保证各观测有效。未合入的 guard、时钟异常或

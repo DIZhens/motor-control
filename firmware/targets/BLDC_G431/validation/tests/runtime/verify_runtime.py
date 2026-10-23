@@ -176,7 +176,8 @@ with tempfile.TemporaryDirectory(prefix="g431-observe-runtime-") as directory:
     if OPTIONS.finite_run:
         sources += [TARGET / 'runtime/g431_control_profile.c',
                     TARGET / 'runtime/runtime_exchange.c',
-                    TARGET / 'runtime/runtime_parameters.c', TESTS / 'exchange_model.c']
+                    TARGET / 'runtime/runtime_parameters.c', TESTS / 'exchange_model.c',
+                    TESTS / 'legacy_command_adapter.c']
     else:
         sources += [TARGET / 'validation/timing/current_capture.c', TARGET / 'validation/timing/compute_probe.c', TARGET / 'validation/timing/compute_comparison.c', TARGET / 'validation/timing/irq_timing.c', TARGET / 'validation/timing/controller_profile.c', TARGET / 'validation/timing/stage_budget.c', TARGET / 'validation/timing/stage_budget_runtime.c']
     for source in sources:

@@ -20,7 +20,7 @@ communication/    Firmware / Host 共享规范、可移植协议与 PC 工具
 4. [G431 Runtime](firmware/targets/BLDC_G431/runtime/README.md)：实时交接、静态任务与运行装配。
 5. [通信入口](communication/README.md)：共享语义、UART/CAN 映射、Target 接入与 Host。
 
-跨模块约束见[总体架构](ARCHITECTURE.md)，Git、工具链及验证方式见[开发规则](DEVELOPMENT.md)。根目录 `project_context.ps1` 可只读恢复本地分支、检查点和文档入口。
+跨模块约束见[总体架构](ARCHITECTURE.md)，Git、工具链及验证方式见[开发规则](DEVELOPMENT.md)。恢复工作时，用 `git status --short`、`git branch --show-current` 和 `git log -5 --format=full` 核对本地状态，再按检查点读取对应模块入口。
 
 ## 实现与验证范围
 

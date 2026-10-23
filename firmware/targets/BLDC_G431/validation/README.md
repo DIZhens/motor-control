@@ -23,6 +23,32 @@
 [合并前离线检查](evidence/protocol-can/merge-preparation.json)复核 UART 黄金字节、
 UART/CAN 事务及 Host 模型，并以干净源码副本补全最新 CAN Normal 构建；未新增硬件动作。
 
+## Showcase Stage 2A：Runtime 单路径离线收敛通过
+
+以 `a0537f0` 为基线，正式 `target_runtime.c/.h` 已删除旧 pending command/reject/stop 状态、
+`take_command()` 和旧 `submit_command()` API；命令、参数与 Stop 只经过 RuntimeExchange。
+TIM6 时限仍先 safe-off，再直接请求 internal STOP，由 ADC 消费、取消旧请求和生产 Completion。
+Exchange 公共实现及语义未改，内部 Stop 不生成伪外部完成，已排队外部 Stop 保留自己的 ticket。
+
+旧同名 API 仅保留在 Observe 和[无状态模型适配器](tests/runtime/legacy_command_adapter.c)，
+其声明位于 [Validation 头文件](communication/legacy_command.h)，不进入正式 Run。
+有限 Run 模型的旧输入改为构造 RuntimeRequest，拒绝/BUSY 不再伪装成一条生产 Motor 命令。
+Observe 的旧拒绝事件行为保持。两个本地辅助文件已退跟踪并精确忽略，恢复与验证不要求它们存在。
+
+修改前 8 个受影响入口通过；修改后 12 个入口通过，其中 Exchange 为 22 组、有限 Run 为 12 组、
+Observe 为 46 组。新用例检查真实 ARM 写入的 safe-off/PRIMASK 顺序、两种内外 Stop 到达次序、
+取消参数写、准确 ticket、无伪 Completion 和旧运动意图不重放。UART/CAN 事务、黄金向量及控制模型通过。
+G431 Run、Observe、Timing 和旧台架均全量 Rebuild，0 error / 0 warning。
+
+| Run 资源 | 基线 | 本次 | 变化 |
+| --- | --- | --- | --- |
+| Flash 实际加载 | 67080 B | 66896 B | −184 B |
+| 静态 RAM | 21104 B | 21088 B | −16 B |
+
+最终构建身份 `0x26bd6622c925ee7e`，见[离线证据](evidence/showcase-v1/stage2a.json)及
+[源闭包](evidence/showcase-v1/stage2a-identity.json)。本次未连接硬件、未烧录、未进行电机运动，
+不产生新实物证据；旧镜像归属、原 P6 未通过及 500 Hz 1.92% 失败记录保持。
+
 ## Showcase v1 目录归位：离线验证通过
 
 从合并基线 `4a9d20528b777ba97b65286cc66f9fcb34f85175` 在 `stage/showcase-v1` 完成结构迁移。

@@ -3,6 +3,7 @@
 #include <stddef.h>
 
 #include "motor_vofa.h"
+#include "legacy_command.h"
 #include "../../runtime/target_runtime.h"
 #include "target_uart.h"
 
