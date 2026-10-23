@@ -32,7 +32,10 @@ const ControlRuntimeConfig g431_control_config = {
         .min_bus_voltage_v = 10.0f,
         .max_bus_voltage_v = 14.0f,
         .phase_current_trip_a = 0.65f,
-        .actuation_prediction_time_s = 0.000125f
+        .actuation_prediction_time_s = 0.000125f,
+        /* 10 kHz 下离散 -3 dB 为 1 kHz；仅用于受限对照，0可恢复旁路。
+         * 新增信号群延迟不作为采样/执行边界或电角度预测时间的修改。 */
+        .current_feedback_filter_coefficient = 0.4558867801f
     },
     .angle_trig = g431_cordic_sincos,
     .angle_trig_context = &s_cordic_math

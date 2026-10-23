@@ -98,9 +98,21 @@ VREF+ 快窗约 24.4 mVpp，200 µs/格下 VREF+ 与 3V3 均约 30.4 mVpp，保�
 频响点经 Python/MATLAB 独立复算一致，[比较图](validation/evidence/foc-tuning/current-filter-evaluation.png)
 为离线回放，不证明闭环裕度或速度性能。G431 只有两个 ADC；A/OPAMP3 到 ADC2 CH18，
 与 B/OPAMP2 的 ADC2 CH16 共用 ADC，增加 rank 不等于三相同一采样孔径。A 的现有增益
-占位值也未作为方向确认。当前正式实现仍为 B/C 同步采样、无数字电流低通、5 ms 速度
+占位值也未作为方向确认。该分析检查点的正式实现仍为 B/C 同步采样、无数字电流低通、5 ms 速度
 低通；本轮未修改固件、PI、限流或采样时序。下一增量拟单独评估可旁路的 1 kHz 电流
 控制反馈低通，保护继续使用原始校正相电流，第三相与增流另行对照；P6 性能尚未通过。
+
+[1 kHz 控制反馈低通候选](validation/evidence/foc-tuning/current-filter-candidate.json)已完成
+离线实现与冻结，尚未安装到板上。算法位于 `control/current_feedback_filter.h`，Runtime
+只在 RUN 控制输入支路更新 alpha/beta；0 旁路、1 直通，首有效样本初始化，Stop/故障
+清历史。原始校正相电流与快速过流、采样/提交时序、PI、限幅、保护及协议对象布局保持。
+RUN 发布 PI 实际采用的滤后 DQ，IDLE/Stop 观测仍用未滤波电流。
+FOC ARM 模型 47 组覆盖旧/新节拍、原码回放、旁路逐位一致、首样本/重启、原始过流、
+坏采样/坏历史关断与合成正反跟踪；Run/Observe/交接模型另行通过，均不作为实物或 WCET
+证明。四 Target Rebuild 全部零错误零警告；Run 实际 Flash 加载/RAM 为 67080/21104 B，较原正常
+构建增加 352/16 B，构建身份 `0x137624c44b3f866e`。228 项保守输入闭包仅算法新头、
+Runtime 源/头及 Profile 四项变化；独立离线 GDB 核对加载镜像系数、PI 和边界值一致。
+安装后先检查默认关断；有限运行及实际执行时序、滤波对速度性能的收益仍待同镜像实测。
 
 | 能力 | 已有证据 | 当前限制 |
 | --- | --- | --- |
