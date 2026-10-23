@@ -54,7 +54,7 @@ def run_current_filter_cases(Model, Pmsm, dt, cases):
     cases.append('滤波首样本直通、两轴阶跃/衰减符合独立递推；原始相电流保持，PI与RUN快照采用同一滤后DQ')
 
     if math.isclose(dt,0.0001):
-        evidence=Path(__file__).resolve().parents[2] / 'evidence/foc-tuning'
+        evidence=Path(__file__).resolve().parents[1] / 'fixtures/current-filter'
         rows=list(csv.DictReader((evidence/'raw-adc-12v-static.csv').open(encoding='utf-8-sig')))
         source_b=[float(row['adc2_b']) for row in rows]
         source_c=[float(row['adc1_c']) for row in rows]

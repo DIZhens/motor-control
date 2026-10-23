@@ -3,7 +3,7 @@
 本文件是UART字节映射的唯一权威合同；共享业务编号与能力见
 [Motor Node Profile](MOTOR_NODE_PROFILE_V1.md)。Firmware与Python的UART实现及黄金向量以本文件为准；[设备合同](DEVICE_CONTRACT.md)继续拥有 Motor 语义，
 [设计说明](PROTOCOL_DESIGN.md)只保留设计边界。合同冻结不表示固件、Host或实物验收已完成。
-VOFA 是独立验证构建，正式镜像不自动探测或混发两种格式。CAN 后续另定帧映射。
+VOFA 是独立验证构建，正式镜像不自动探测或混发两种格式。CAN 的当前帧合同由 [CAN_MAPPING_V1.md](CAN_MAPPING_V1.md) 定义。
 
 ## 1. 字节与帧
 

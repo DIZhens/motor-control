@@ -20,7 +20,7 @@ communication/target_communication.c
 | [platform](platform) | 真实 TIM/ADC/PWM/SSI/保护及 CORDIC 后端 |
 | [runtime](runtime/README.md) | 正式 Run 装配、交接、参数、发布和原生静态 FreeRTOS |
 | [communication](communication/README.md) | UART DMA/FDCAN、Server 装配及设备绑定 |
-| [validation](validation/README.md) | Observe、旧台架、专项诊断、模型、工具与证据 |
+| [validation](validation/README.md) | Observe、旧台架、专项诊断、模型与工具 |
 | `Core/`、`Drivers/`、`MDK-ARM/`、`.ioc` | CubeMX / Keil 工程与供应驱动 |
 
 ## 打开哪个工程
@@ -34,4 +34,4 @@ communication/target_communication.c
 
 Observe 使用 `validation/runner/target_observe_runtime.c`，正式 Run 使用 `runtime/target_runtime.c`；两者共享公共 Motor、ControlRuntime 和 Platform，不同时链接两套入口。Validation 不链接 FreeRTOS。
 
-先按 [Runtime 构建说明](runtime/README.md#构建与入口)生成身份并 Rebuild。CubeMX 再生成时核对两份 Keil 工程，保持正式/Validation 成员隔离。所有实测范围、原镜像身份和未通过项只在 [Validation](validation/README.md)汇总。
+先按 [Runtime 构建说明](runtime/README.md#构建与入口)生成身份并 Rebuild。CubeMX 再生成时核对两份 Keil 工程，保持正式/Validation 成员隔离。当前能力限制与自动验证入口见 [Validation](validation/README.md)；镜像归属和阶段结论见 Git 检查点，详细测量保留本地。

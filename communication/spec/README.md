@@ -26,5 +26,5 @@ Protocol Contract
 线格式已有[C / Python 离线编解码及验证入口](../protocol/README.md)，
 双方分别对照[固定黄金向量](test_vectors/core_protocol_v1.json)。Run的会话、DMA、RTOS和
 有限运动已有独立证据，实际验收范围见[G431验证页](../../firmware/targets/BLDC_G431/validation/README.md)，
-不以合同冻结或库模型推断硬件通过。位置环、标准 Modbus / CANopen 栈和完整工业协议生态后续再做，
+不以合同冻结或库模型推断硬件通过。V1 不包含位置环、标准 Modbus / CANopen 栈和完整工业协议生态，
 不沿用旧工程的对象字典作为默认前提。

@@ -12,8 +12,14 @@
 #define EXPECTED_CAN_MODE FDCAN_MODE_NORMAL
 #endif
 
-#define CAN_TX_TIMEOUT_MS 100U
-#define CAN_RECOVERY_TIMEOUT_MS 200U
+/* 170 MHz / prescaler 17 / (1 + 15 + 4) = 500 kbit/s；核对 CubeMX 配置而不重配置。 */
+#define CAN_NOMINAL_PRESCALER 17U
+#define CAN_NOMINAL_SJW 1U
+#define CAN_NOMINAL_SEG1 15U
+#define CAN_NOMINAL_SEG2 4U
+#define CAN_STANDARD_ID_MASK 0x7FFU /* 11-bit 标准 ID。 */
+#define CAN_TX_TIMEOUT_MS 100U /* 单帧异常完成上限 [ms]。 */
+#define CAN_RECOVERY_TIMEOUT_MS 200U /* 显式链路恢复截止 [ms]，不自动重放运动。 */
 #define CAN_FATAL_FLAGS (FDCAN_IR_MRAF | FDCAN_IR_WDI | FDCAN_IR_ARA)
 #define CAN_NOTIFICATIONS (FDCAN_IT_RX_FIFO0_NEW_MESSAGE | FDCAN_IT_RX_FIFO0_MESSAGE_LOST \
     | FDCAN_IT_TX_COMPLETE | FDCAN_IT_ERROR_WARNING | FDCAN_IT_ERROR_PASSIVE \
@@ -76,14 +82,14 @@ CanFrameResult can_frame_init(void)
     if (SystemCoreClock != 170000000U || hfdcan1.State != HAL_FDCAN_STATE_READY
         || hfdcan1.Init.ClockDivider != FDCAN_CLOCK_DIV1 || hfdcan1.Init.FrameFormat != FDCAN_FRAME_CLASSIC
         || hfdcan1.Init.Mode != EXPECTED_CAN_MODE || hfdcan1.Init.AutoRetransmission != ENABLE
-        || hfdcan1.Init.NominalPrescaler != 17U || hfdcan1.Init.NominalSyncJumpWidth != 1U
-        || hfdcan1.Init.NominalTimeSeg1 != 15U || hfdcan1.Init.NominalTimeSeg2 != 4U
+        || hfdcan1.Init.NominalPrescaler != CAN_NOMINAL_PRESCALER || hfdcan1.Init.NominalSyncJumpWidth != CAN_NOMINAL_SJW
+        || hfdcan1.Init.NominalTimeSeg1 != CAN_NOMINAL_SEG1 || hfdcan1.Init.NominalTimeSeg2 != CAN_NOMINAL_SEG2
         || hfdcan1.Init.StdFiltersNbr != 3U || hfdcan1.Init.ExtFiltersNbr != 0U
         || NVIC_GetPriority(FDCAN1_IT0_IRQn) != 5U || NVIC_GetEnableIRQ(FDCAN1_IT0_IRQn) == 0U
         || NVIC_GetEnableIRQ(FDCAN1_IT1_IRQn) != 0U) { return CAN_FRAME_HARDWARE_ERROR; }
     /* G4 HAL固定分配每FIFO 3项、每项72字节；不用其他系列的可变Message RAM参数。 */
     filter.IdType = FDCAN_STANDARD_ID; filter.FilterType = FDCAN_FILTER_MASK;
-    filter.FilterConfig = FDCAN_FILTER_TO_RXFIFO0; filter.FilterID2 = 0x7FFU;
+    filter.FilterConfig = FDCAN_FILTER_TO_RXFIFO0; filter.FilterID2 = CAN_STANDARD_ID_MASK;
     for (i = 0U; i < 3U; ++i) {
         filter.FilterIndex = i; filter.FilterID1 = ids[i];
         if (HAL_FDCAN_ConfigFilter(&hfdcan1, &filter) != HAL_OK) { return CAN_FRAME_HARDWARE_ERROR; }
@@ -143,7 +149,7 @@ CanFrameResult can_frame_try_send(const CanFrame *frame)
     FDCAN_TxHeaderTypeDef header = {0};
     CanFrameResult result;
     uint32_t saved;
-    if (frame == NULL || frame->id > 0x7FFU || frame->dlc > 8U
+    if (frame == NULL || frame->id > CAN_STANDARD_ID_MASK || frame->dlc > 8U
 #if !BLDC_G431_CAN_LOOPBACK_VALIDATION
         || frame->extended || frame->remote
 #endif

@@ -43,7 +43,7 @@ Stop 清活动目标和控制积分、使旧 actuation epoch 失效，保留正�
 控制或功率失败则关断并锁故障，撤销校准资格，不自动重试。Clear、Hardware Trip re-arm 和新
 Start 必须分开；当前没有可用恢复流程，需要复位后重新装配。接收恢复、连接或重连均不得自动启动或重放旧请求。
 
-## 后续补齐边界
+## 当前未包含的能力
 
 ### 本阶段速度调参合同
 
@@ -61,7 +61,7 @@ Start 必须分开；当前没有可用恢复流程，需要复位后重新装�
 内部ticket/Completion、协议结果、Motor业务结果及RUN状态分别表示，不能用最近一次命令结果
 推断某个请求已完成。内部Fail-closed保持现有safe-off和下一实时边界合入故障的所有权，不改变
 HCC；普通外部坏帧不派生新的运动命令、自动Stop或故障恢复。
-该内部锁存来源使用Target fault bit7，详细首因由后续COMMUNICATION_STATUS提供；
+该内部锁存来源使用Target fault bit7，详细首因由COMMUNICATION_STATUS提供；
 此来源已接入Run的内部关断与ARM模型，并有逻辑供电下的故障锁存证据，不表示Clear获得新的恢复能力。
 
 ### 其他剩余边界

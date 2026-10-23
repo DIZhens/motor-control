@@ -245,7 +245,9 @@ void can_server_observe(CanServer *s)
     uint32_t i, newly;
     if (!valid_state(s) || s->suspended) { return; }
     if (protocol_device_read_object(CORE_MOTOR_SNAPSHOT, &value) != CORE_RESULT_OK
-        || (value.motor_snapshot.valid_flags & 0xC1U) != 0xC1U) { s->snapshot_valid = false; return; }
+        || (value.motor_snapshot.valid_flags & CORE_SNAPSHOT_EVENT_VALID) != CORE_SNAPSHOT_EVENT_VALID) {
+        s->snapshot_valid = false; return;
+    }
     newly = s->snapshot_valid ? value.motor_snapshot.fault_flags & ~s->previous_faults : 0U;
     if (newly != 0U) {
         if (s->event_count == CAN_V1_EVENT_CAPACITY) {
@@ -274,9 +276,12 @@ void can_server_flush(CanServer *s)
     else if (s->heartbeat_pending) {
         source = 2U;
         if (!can_frame_read_status(&status)) { failed(s, PROTOCOL_FAULT_TRANSPORT); return; }
-        flags = (s->snapshot_valid ? 1U : 0U) | (s->session != 0U ? 2U : 0U)
-            | (status.error_warning ? 4U : 0U) | (status.error_passive ? 8U : 0U)
-            | (status.bus_off || status.recovering ? 16U : 0U) | (s->failed ? 32U : 0U);
+        flags = (s->snapshot_valid ? CAN_V1_STATE_SNAPSHOT_VALID : 0U)
+            | (s->session != 0U ? CAN_V1_STATE_SESSION_VALID : 0U)
+            | (status.error_warning ? CAN_V1_STATE_ERROR_WARNING : 0U)
+            | (status.error_passive ? CAN_V1_STATE_ERROR_PASSIVE : 0U)
+            | (status.bus_off || status.recovering ? CAN_V1_STATE_BUS_OFF_RECOVERING : 0U)
+            | (s->failed ? CAN_V1_STATE_INTERNAL_FAILED : 0U);
         can_v1_state(s->node, s->heartbeat_counter, s->snapshot_valid ? (uint8_t)s->snapshot.motor_state : 0U,
             flags, s->snapshot_valid ? s->snapshot.fault_flags : 0U, &frame);
     } else {

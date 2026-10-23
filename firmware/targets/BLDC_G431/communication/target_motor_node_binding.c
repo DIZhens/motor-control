@@ -5,7 +5,14 @@
 /* Target只连接本机身份与既有Runtime publication/交接，不拥有协议事务。 */
 bool motor_node_binding_target_info(CoreDeviceInfo *value)
 {
-    *value = (CoreDeviceInfo){1U, 1U, 1U, 1U, 0x3FU, 20000U, G431_FIRMWARE_BUILD_ID};
+    *value = (CoreDeviceInfo){
+        .protocol_version = 1U, .device_contract_version = 1U,
+        .target_id = 1U, .control_profile_id = 1U,
+        .capability_flags = CORE_CAPABILITY_OBJECT_READ | CORE_CAPABILITY_FINITE_VELOCITY
+            | CORE_CAPABILITY_STAGED_SPEED_PI | CORE_CAPABILITY_TELEMETRY
+            | CORE_CAPABILITY_EVENT | CORE_CAPABILITY_SESSIONLESS_STOP,
+        .control_time_ticks_per_second = 20000U, .firmware_build_id = G431_FIRMWARE_BUILD_ID
+    };
     return true;
 }
 bool motor_node_binding_target_snapshot(MotorSnapshot *value)

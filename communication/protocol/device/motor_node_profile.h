@@ -27,6 +27,45 @@ enum {
     CORE_STOP = 3, CORE_CLEAR_FAULT = 4
 };
 
+/* 冻结的设备能力与有效位；数值与 Wire 合同一致，不表示当前运行许可。 */
+#define CORE_CAPABILITY_OBJECT_READ (1U << 0) /* 对象读取。 */
+#define CORE_CAPABILITY_FINITE_VELOCITY (1U << 1) /* 显式有限速度命令。 */
+#define CORE_CAPABILITY_STAGED_SPEED_PI (1U << 2) /* 暂存速度PI。 */
+#define CORE_CAPABILITY_TELEMETRY (1U << 3) /* 本合同遥测。 */
+#define CORE_CAPABILITY_EVENT (1U << 4) /* 事件。 */
+#define CORE_CAPABILITY_SESSIONLESS_STOP (1U << 5) /* 无会话Stop。 */
+#define CORE_CAPABILITY_MASK 0x3FU
+#define CORE_SNAPSHOT_VALID_TIME (1U << 0) /* 时间/频率。 */
+#define CORE_SNAPSHOT_VALID_TARGET (1U << 1) /* 目标速度。 */
+#define CORE_SNAPSHOT_VALID_VELOCITY (1U << 2) /* 实际速度。 */
+#define CORE_SNAPSHOT_VALID_ID (1U << 3) /* Id。 */
+#define CORE_SNAPSHOT_VALID_IQ (1U << 4) /* Iq。 */
+#define CORE_SNAPSHOT_VALID_BUS_VOLTAGE (1U << 5) /* 母线。 */
+#define CORE_SNAPSHOT_VALID_STATE (1U << 6) /* 状态。 */
+#define CORE_SNAPSHOT_VALID_FAULTS (1U << 7) /* 故障。 */
+#define CORE_SNAPSHOT_VALID_COMMAND_RESULT (1U << 8) /* 命令结果。 */
+#define CORE_SNAPSHOT_VALID_MASK 0x1FFU
+#define CORE_SNAPSHOT_STATUS_VALID (CORE_SNAPSHOT_VALID_TARGET | CORE_SNAPSHOT_VALID_STATE \
+    | CORE_SNAPSHOT_VALID_FAULTS | CORE_SNAPSHOT_VALID_COMMAND_RESULT)
+#define CORE_SNAPSHOT_EVENT_VALID (CORE_SNAPSHOT_VALID_TIME | CORE_SNAPSHOT_VALID_STATE \
+    | CORE_SNAPSHOT_VALID_FAULTS)
+#define CORE_SAMPLE_VALID_TIME (1U << 0) /* 控制时间。 */
+#define CORE_SAMPLE_VALID_POSITION (1U << 1) /* 位置观测时间和机械坐标。 */
+#define CORE_SAMPLE_VALID_TARGET (1U << 2) /* 目标速度。 */
+#define CORE_SAMPLE_VALID_VELOCITY (1U << 3) /* 实际速度。 */
+#define CORE_SAMPLE_VALID_IQ_REFERENCE (1U << 4) /* Iq参考。 */
+#define CORE_SAMPLE_VALID_IQ_FEEDBACK (1U << 5) /* Iq反馈。 */
+#define CORE_SAMPLE_VALID_ID_FEEDBACK (1U << 6) /* Id反馈。 */
+#define CORE_SAMPLE_VALID_BUS_VOLTAGE (1U << 7) /* 母线电压。 */
+#define CORE_SAMPLE_VALID_STATUS (1U << 8) /* 状态和故障。 */
+#define CORE_SAMPLE_VALID_GENERATIONS (1U << 9) /* 参数及遥测代际。 */
+#define CORE_SAMPLE_VALID_MASK 0x3FFU
+#define CORE_SAMPLE_LIMIT_SPEED_CURRENT (1U << 0) /* 速度 PI 输出电流限幅。 */
+#define CORE_SAMPLE_LIMIT_D_INTEGRAL (1U << 1) /* d轴电流 PI 积分限幅。 */
+#define CORE_SAMPLE_LIMIT_Q_INTEGRAL (1U << 2) /* q轴电流 PI 积分限幅。 */
+#define CORE_SAMPLE_LIMIT_VOLTAGE (1U << 3) /* 电压矢量/调制限幅。 */
+#define CORE_SAMPLE_LIMIT_MASK 0x0FU
+
 /* 只读设备能力与构建身份，不表示本次具备启动许可。 */
 typedef struct {
     uint16_t protocol_version, device_contract_version, target_id, control_profile_id;

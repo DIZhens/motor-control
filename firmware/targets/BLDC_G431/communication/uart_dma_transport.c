@@ -7,12 +7,24 @@
 
 #include <string.h>
 
+/* 460.7 kbit/s、8N1 下 512 B 整圈约 11.1 ms；8 ms 保留连续性判定余量。
+ * 130 B 最长线上约 2.82 ms；10 ms 是异常完成上限，不是正常发送耗时。 */
 #define RX_SIZE 512U
 #define TX_SIZE 130U
+#define UART_CORE_CLOCK_HZ 170000000U
+#define UART_CYCLES_PER_MS 170000U
+#define UART_BAUD_RATE 460800U
+#define UART_BRR 369U /* 170 MHz / 369 ≈ 460.7 kbit/s。 */
+#define UART_IRQ_PRIORITY 5U
+#define UART_BASEPRI_MASK 0x50U /* 4 位优先级：只屏蔽 UART/后台的 5..15。 */
+#define RX_PROGRESS_MAX_MS 8U
+#define TX_COMPLETION_MAX_MS 10U
+#define RX_PREEMPTION_MARGIN_BYTES 8U /* 寄存器采样允许被控制 IRQ 抢占。 */
+#define RX_MIN_CYCLES_PER_BYTE 3300U /* 8N1 理论约 3690 cycle/byte，取保守下界。 */
 #define RX_FLAGS (DMA_ISR_HTIF2 | DMA_ISR_TCIF2 | DMA_ISR_TEIF2)
 #define UART_ERRORS (USART_ISR_PE | USART_ISR_FE | USART_ISR_NE | USART_ISR_ORE)
-#define PROGRESS_MAX_CYCLES (8U * 170000U)
-#define TX_MAX_CYCLES (10U * 170000U)
+#define PROGRESS_MAX_CYCLES (RX_PROGRESS_MAX_MS * UART_CYCLES_PER_MS)
+#define TX_MAX_CYCLES (TX_COMPLETION_MAX_MS * UART_CYCLES_PER_MS)
 enum { TX_IDLE, TX_COPYING, TX_DMA, TX_UART };
 
 static uint8_t s_rx[RX_SIZE], s_tx[TX_SIZE];
@@ -27,7 +39,7 @@ static uint32_t s_tx_state, s_tx_length, s_tx_cycles;
 static uint32_t lock(void)
 {
     uint32_t saved = __get_BASEPRI();
-    __set_BASEPRI_MAX(0x50U); __DSB(); __ISB();
+    __set_BASEPRI_MAX(UART_BASEPRI_MASK); __DSB(); __ISB();
     return saved;
 }
 static void unlock(uint32_t saved) { __DMB(); __set_BASEPRI(saved); __ISB(); }
@@ -94,9 +106,11 @@ static uint32_t progress_locked(void)
     position = (RX_SIZE - remaining) & (RX_SIZE - 1U);
     delta = (position - s_last_position) & (RX_SIZE - 1U);
     if ((uint32_t)(cycles - s_last_cycles) >= PROGRESS_MAX_CYCLES
-        || (uint32_t)(ms - s_last_ms) > 8U
+        || (uint32_t)(ms - s_last_ms) > RX_PROGRESS_MAX_MS
         /* 约束异常停钟/调试暂停后恢复；允许寄存器采样被控制IRQ抢占的8字节余量。 */
-        || (delta > 8U && (uint32_t)(cycles - s_last_cycles) < (delta - 8U) * 3300U)) {
+        || (delta > RX_PREEMPTION_MARGIN_BYTES
+            && (uint32_t)(cycles - s_last_cycles)
+                < (delta - RX_PREEMPTION_MARGIN_BYTES) * RX_MIN_CYCLES_PER_BYTE)) {
         coherent = false;
     }
     DMA1->IFCR = after & (DMA_IFCR_CHTIF2 | DMA_IFCR_CTCIF2);
@@ -123,15 +137,16 @@ ByteStreamResult byte_stream_init(void)
 {
     uint32_t saved = lock();
     if (s_initialized) { unlock(saved); return BYTE_STREAM_BUSY; }
-    if (SystemCoreClock != 170000000U || (DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) == 0U
-        || huart1.Init.BaudRate != 460800U || USART1->BRR != 369U
+    if (SystemCoreClock != UART_CORE_CLOCK_HZ || (DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) == 0U
+        || huart1.Init.BaudRate != UART_BAUD_RATE || USART1->BRR != UART_BRR
         || (USART1->CR1 & (USART_CR1_UE | USART_CR1_RE | USART_CR1_TE | USART_CR1_PCE
             | USART_CR1_M0 | USART_CR1_M1 | USART_CR1_OVER8 | USART_CR1_FIFOEN))
             != (USART_CR1_UE | USART_CR1_RE | USART_CR1_TE)
         || (USART1->CR2 & USART_CR2_STOP) != 0U
         || (USART1->CR3 & (USART_CR3_RTSE | USART_CR3_CTSE)) != 0U
-        || NVIC_GetPriority(USART1_IRQn) != 5U || NVIC_GetPriority(DMA1_Channel2_IRQn) != 5U
-        || NVIC_GetPriority(DMA1_Channel3_IRQn) != 5U
+        || NVIC_GetPriority(USART1_IRQn) != UART_IRQ_PRIORITY
+        || NVIC_GetPriority(DMA1_Channel2_IRQn) != UART_IRQ_PRIORITY
+        || NVIC_GetPriority(DMA1_Channel3_IRQn) != UART_IRQ_PRIORITY
         || NVIC_GetEnableIRQ(USART1_IRQn) == 0U || NVIC_GetEnableIRQ(DMA1_Channel2_IRQn) == 0U
         || NVIC_GetEnableIRQ(DMA1_Channel3_IRQn) == 0U
         || (DMA1_Channel2->CCR & (DMA_CCR_EN | DMA_CCR_DIR | DMA_CCR_PINC | DMA_CCR_PSIZE

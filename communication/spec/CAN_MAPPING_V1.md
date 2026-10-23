@@ -118,7 +118,7 @@ Error Warning/Passive只记录和发布，不立即关断。Bus-off停止接受�
 清未发送普通响应/Event/Motion，通过既有优先路径请求Stop，不重放旧Start/Update。
 已有Stop保留；新增内部Stop无虚构Host响应。Target在任务上下文受控恢复硬件，并在所有旧
 在途请求准确退休后确认恢复；无法证明一致则Fail-closed。恢复后仍无会话，Host需显式建新会话。
-本任务不改变Motor生命周期、采样/计算/提交时序、1.5秒/2圈或其他安全阈值。
+CAN 映射不得改变 Motor 生命周期、采样/计算/提交时序及 Target 的时长、位移或其他安全阈值。
 
 ## 验证与范围
 

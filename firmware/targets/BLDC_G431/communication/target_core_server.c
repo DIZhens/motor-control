@@ -7,6 +7,8 @@
 #include "byte_stream_transport.h"
 #include "main.h"
 
+#define UART_SERVICE_BATCH_LIMIT 4U /* 限制每个后台服务周期的收包工作量。 */
+
 static CoreServer s_server;
 void target_core_server_start(void) { core_server_init(&s_server); }
 void target_core_server_service(void)
@@ -16,7 +18,7 @@ void target_core_server_service(void)
     size_t count;
     ByteStreamResult result;
     core_server_poll(&s_server, HAL_GetTick());
-    for (batch = 0U; batch < 4U; ++batch) {
+    for (batch = 0U; batch < UART_SERVICE_BATCH_LIMIT; ++batch) {
         result = byte_stream_read(bytes, sizeof(bytes), &count, &epoch);
         if (result == BYTE_STREAM_DISCONTINUITY) { core_server_discontinuity(&s_server); continue; }
         if (result == BYTE_STREAM_EMPTY || result == BYTE_STREAM_HARDWARE_ERROR) { break; }

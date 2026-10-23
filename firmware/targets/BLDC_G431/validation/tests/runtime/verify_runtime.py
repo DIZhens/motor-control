@@ -105,7 +105,10 @@ if OPTIONS.finite_run:
     assert observe.findtext("./TargetOption/TargetCommonOption/OutputName") == target_name
 assert observe.findtext("./TargetOption/TargetArmAds/Cads/Optim") == "4"
 assert observe.findtext("./TargetOption/TargetArmAds/Cads/oTime") == "0"
-hot_groups = {"Application/User/Runtime", "Application/User/Motor", "Control"}
+runtime_group_name = "Application/User/Target Integration" if OPTIONS.finite_run else "Validation/Observe Support"
+hot_groups = {runtime_group_name,
+              "Application/User/Motor" if OPTIONS.finite_run else "Shared/Motor",
+              "Application/User/Control" if OPTIONS.finite_run else "Shared/Control"}
 for group in observe.findall("./Groups/Group"):
     policy = group.findtext("./GroupOption/GroupArmAds/Cads/oTime")
     if group.findtext("GroupName") in hot_groups:
@@ -116,15 +119,15 @@ for group in observe.findall("./Groups/Group"):
         assert policy in (None, "2"), group.findtext("GroupName")
 assert hot_groups <= {group.findtext("GroupName") for group in observe.findall("./Groups/Group")}
 runtime_group = next(group for group in observe.findall("./Groups/Group")
-                     if group.findtext("GroupName") == "Application/User/Runtime")
+                     if group.findtext("GroupName") == runtime_group_name)
 runtime_sources = {member.findtext("FileName") for member in runtime_group.findall("./Files/File")}
 if OPTIONS.finite_run:
     assert runtime_sources == {"target_runtime.c", "target_system_runtime.c", "cordic_math.c", "uart_dma_transport.c", "target_core_server.c", "target_motor_node_binding.c", "target_communication.c",
         "target_can_server.c", "fdcan_frame_transport.c", "g431_control_profile.c"}
     assert 'BLDC_G431_FREERTOS' in defines
-    assert "Application/User/Timing" not in {group.findtext("GroupName") for group in observe.findall("./Groups/Group")}
+    assert "Validation/Timing" not in {group.findtext("GroupName") for group in observe.findall("./Groups/Group")}
     validation_group = next(group for group in observe.findall("./Groups/Group")
-                            if group.findtext("GroupName") == "Application/User/Validation")
+                            if group.findtext("GroupName") == "Validation/CAN Loopback")
     assert [member.findtext("FileName") for member in validation_group.findall("./Files/File")] == ["can_loopback.c"]
     # 同一 Target 的专项入口仅在构建宏下有效；正式镜像移除由原生 ELF 检查证明。
     communication_config = (TARGET / 'communication/target_communication_config.h').read_text(encoding="utf-8")

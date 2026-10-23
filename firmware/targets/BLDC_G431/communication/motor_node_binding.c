@@ -12,6 +12,23 @@ typedef char MotorResultMappingMustMatch[
     && MOTOR_COMMAND_RESULT_FAULT_ACTIVE == CORE_MOTOR_RESULT_FAULT_ACTIVE
     && MOTOR_COMMAND_RESULT_BAD_COMMAND == CORE_MOTOR_RESULT_BAD_COMMAND) ? 1 : -1];
 
+/* Runtime 不依赖 Protocol；只有绑定层核对两侧冻结的 bit 对应关系。 */
+typedef char MotorTelemetryBitsMustMatch[
+    (MOTOR_TELEMETRY_VALID_TIME == CORE_SAMPLE_VALID_TIME
+    && MOTOR_TELEMETRY_VALID_POSITION == CORE_SAMPLE_VALID_POSITION
+    && MOTOR_TELEMETRY_VALID_TARGET == CORE_SAMPLE_VALID_TARGET
+    && MOTOR_TELEMETRY_VALID_VELOCITY == CORE_SAMPLE_VALID_VELOCITY
+    && MOTOR_TELEMETRY_VALID_IQ_REFERENCE == CORE_SAMPLE_VALID_IQ_REFERENCE
+    && MOTOR_TELEMETRY_VALID_IQ_FEEDBACK == CORE_SAMPLE_VALID_IQ_FEEDBACK
+    && MOTOR_TELEMETRY_VALID_ID_FEEDBACK == CORE_SAMPLE_VALID_ID_FEEDBACK
+    && MOTOR_TELEMETRY_VALID_BUS_VOLTAGE == CORE_SAMPLE_VALID_BUS_VOLTAGE
+    && MOTOR_TELEMETRY_VALID_STATUS == CORE_SAMPLE_VALID_STATUS
+    && MOTOR_TELEMETRY_VALID_GENERATIONS == CORE_SAMPLE_VALID_GENERATIONS
+    && MOTOR_TELEMETRY_LIMIT_SPEED_CURRENT == CORE_SAMPLE_LIMIT_SPEED_CURRENT
+    && MOTOR_TELEMETRY_LIMIT_D_INTEGRAL == CORE_SAMPLE_LIMIT_D_INTEGRAL
+    && MOTOR_TELEMETRY_LIMIT_Q_INTEGRAL == CORE_SAMPLE_LIMIT_Q_INTEGRAL
+    && MOTOR_TELEMETRY_LIMIT_VOLTAGE == CORE_SAMPLE_LIMIT_VOLTAGE) ? 1 : -1];
+
 bool protocol_device_permitted(void) { return motor_node_binding_target_permitted(); }
 
 void protocol_device_fail_closed(ProtocolDeviceFault reason)
@@ -43,9 +60,12 @@ CoreResult protocol_device_read_object(uint16_t id, MotorNodeValue *value)
         m->control_time_ticks_per_second = snapshot.control_time_ticks_per_second;
         m->motor_state = (uint32_t)snapshot.state; m->fault_flags = snapshot.faults;
         m->motor_command_result = (uint32_t)snapshot.command_result;
-        m->valid_flags = (snapshot.status_valid ? 0x1C2U : 0U) | (snapshot.control_time_valid ? 1U : 0U)
-            | (snapshot.velocity_valid ? 4U : 0U) | (snapshot.id_valid ? 8U : 0U)
-            | (snapshot.iq_valid ? 16U : 0U) | (snapshot.bus_voltage_valid ? 32U : 0U);
+        m->valid_flags = (snapshot.status_valid ? CORE_SNAPSHOT_STATUS_VALID : 0U)
+            | (snapshot.control_time_valid ? CORE_SNAPSHOT_VALID_TIME : 0U)
+            | (snapshot.velocity_valid ? CORE_SNAPSHOT_VALID_VELOCITY : 0U)
+            | (snapshot.id_valid ? CORE_SNAPSHOT_VALID_ID : 0U)
+            | (snapshot.iq_valid ? CORE_SNAPSHOT_VALID_IQ : 0U)
+            | (snapshot.bus_voltage_valid ? CORE_SNAPSHOT_VALID_BUS_VOLTAGE : 0U);
         m->target_velocity_rpm = snapshot.target_velocity_rpm; m->velocity_rpm = snapshot.velocity_rpm;
         m->id_a = snapshot.id_a; m->iq_a = snapshot.iq_a; m->bus_voltage_v = snapshot.bus_voltage_v;
         return CORE_RESULT_OK;
@@ -56,10 +76,13 @@ CoreResult protocol_device_read_object(uint16_t id, MotorNodeValue *value)
             value->telemetry_config.rate_hz = parameters.telemetry.rate_hz;
             value->telemetry_config.generation = parameters.telemetry.generation;
         } else if (id == CORE_SPEED_PI_DEFAULT) {
-            value->speed_pi = (CoreSpeedPi){parameters.speed_default.kp, parameters.speed_default.ki, 0U, false};
+            value->speed_pi = (CoreSpeedPi){
+                .kp = parameters.speed_default.kp, .ki = parameters.speed_default.ki,
+                .generation = 0U, .currently_in_use = false};
         } else {
             profile = id == CORE_SPEED_PI_STAGED ? &parameters.speed_staged : &parameters.speed_active;
-            value->speed_pi = (CoreSpeedPi){profile->value.kp, profile->value.ki, profile->generation, profile->in_use};
+            value->speed_pi = (CoreSpeedPi){.kp = profile->value.kp, .ki = profile->value.ki,
+                .generation = profile->generation, .currently_in_use = profile->in_use};
         }
         return CORE_RESULT_OK;
     default: return CORE_UNKNOWN_OBJECT;
@@ -86,7 +109,8 @@ ProtocolSubmitResult protocol_device_submit(const ProtocolDeviceRequest *request
         break;
     case PROTOCOL_REQUEST_SPEED_PI:
         mapped.kind = RUNTIME_REQUEST_SPEED_PI;
-        mapped.value.speed_pi = (RuntimeSpeedPi){request->value.speed_pi.kp, request->value.speed_pi.ki};
+        mapped.value.speed_pi = (RuntimeSpeedPi){
+            .kp = request->value.speed_pi.kp, .ki = request->value.speed_pi.ki};
         break;
     case PROTOCOL_REQUEST_TELEMETRY:
         mapped.kind = RUNTIME_REQUEST_TELEMETRY;
@@ -128,11 +152,12 @@ bool protocol_device_completion(ProtocolDeviceCompletion *value)
             else if (raw.parameter_result == RUNTIME_PARAMETER_WRONG_STATE) { mapped.result_code = CORE_OBJECT_WRONG_STATE; }
             else if (raw.parameter_result != RUNTIME_PARAMETER_APPLIED) { goto corrupt; }
             else if (raw.kind == RUNTIME_REQUEST_SPEED_PI) {
-                mapped.value.speed_pi = (CoreSpeedPi){raw.value.speed_pi.value.kp, raw.value.speed_pi.value.ki,
-                    raw.value.speed_pi.generation, raw.value.speed_pi.in_use};
+                mapped.value.speed_pi = (CoreSpeedPi){
+                    .kp = raw.value.speed_pi.value.kp, .ki = raw.value.speed_pi.value.ki,
+                    .generation = raw.value.speed_pi.generation, .currently_in_use = raw.value.speed_pi.in_use};
             } else {
-                mapped.value.telemetry = (CoreTelemetryConfig){raw.value.telemetry.enabled ? 1U : 0U,
-                    raw.value.telemetry.rate_hz, raw.value.telemetry.generation};
+                mapped.value.telemetry = (CoreTelemetryConfig){.enabled = raw.value.telemetry.enabled ? 1U : 0U,
+                    .rate_hz = raw.value.telemetry.rate_hz, .generation = raw.value.telemetry.generation};
             }
             break;
         default: goto corrupt;

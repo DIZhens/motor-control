@@ -79,13 +79,13 @@ CoreResult core_object_decode(uint16_t id, bool write_value,
         v.device_info.capability_flags = r32(p + 8U);
         v.device_info.control_time_ticks_per_second = r32(p + 12U);
         v.device_info.firmware_build_id = r64(p + 16U);
-        if ((v.device_info.capability_flags & ~0x3FU) != 0U) { return CORE_BAD_VALUE; }
+        if ((v.device_info.capability_flags & ~CORE_CAPABILITY_MASK) != 0U) { return CORE_BAD_VALUE; }
         break;
     case CORE_MOTOR_SNAPSHOT:
         m->control_time_ticks = r64(p); m->control_time_ticks_per_second = r32(p + 8U);
         m->motor_state = r32(p + 12U); m->fault_flags = r32(p + 16U);
         m->motor_command_result = r32(p + 20U); valid = r32(p + 24U); m->valid_flags = valid;
-        if ((valid & ~0x1FFU) != 0U) { return CORE_BAD_VALUE; }
+        if ((valid & ~CORE_SNAPSHOT_VALID_MASK) != 0U) { return CORE_BAD_VALUE; }
         for (i = 0U; i < 5U; ++i) {
             if (!observation_valid(p + 28U + 4U * i, 1U << (i + 1U), valid)) { return CORE_BAD_VALUE; }
         }
@@ -166,14 +166,16 @@ CoreResult core_object_encode(uint16_t id, bool write_value, const CoreObject *v
         w32(p + 12U, v->device_info.control_time_ticks_per_second);
         w64(p + 16U, v->device_info.firmware_build_id); break;
     case CORE_MOTOR_SNAPSHOT:
-        m = &v->motor_snapshot; valid = m->valid_flags & 0x1FFU;
+        m = &v->motor_snapshot; valid = m->valid_flags & CORE_SNAPSHOT_VALID_MASK;
         w64(p, m->control_time_ticks); w32(p + 8U, m->control_time_ticks_per_second);
         w32(p + 12U, m->motor_state); w32(p + 16U, m->fault_flags);
         w32(p + 20U, m->motor_command_result);
-        observation(p + 28U, m->target_velocity_rpm, 2U, &valid);
-        observation(p + 32U, m->velocity_rpm, 4U, &valid);
-        observation(p + 36U, m->id_a, 8U, &valid); observation(p + 40U, m->iq_a, 16U, &valid);
-        observation(p + 44U, m->bus_voltage_v, 32U, &valid); w32(p + 24U, valid); break;
+        observation(p + 28U, m->target_velocity_rpm, CORE_SNAPSHOT_VALID_TARGET, &valid);
+        observation(p + 32U, m->velocity_rpm, CORE_SNAPSHOT_VALID_VELOCITY, &valid);
+        observation(p + 36U, m->id_a, CORE_SNAPSHOT_VALID_ID, &valid);
+        observation(p + 40U, m->iq_a, CORE_SNAPSHOT_VALID_IQ, &valid);
+        observation(p + 44U, m->bus_voltage_v, CORE_SNAPSHOT_VALID_BUS_VOLTAGE, &valid);
+        w32(p + 24U, valid); break;
     case CORE_COMMUNICATION_STATUS:
         w32(p + 0U, v->communication_status.session_id);
         w32(p + 4U, v->communication_status.rx_bytes);
@@ -350,22 +352,22 @@ CoreResult core_sample_encode(const CoreSpeedSample *v, uint8_t *output, size_t 
     uint32_t valid;
     if (v == NULL || output == NULL || length == NULL) { return CORE_BAD_PAYLOAD; }
     if (capacity < sizeof(p)) { return CORE_LENGTH_MISMATCH; }
-    valid = v->valid_flags & 0x3FFU;
+    valid = v->valid_flags & CORE_SAMPLE_VALID_MASK;
     memset(p, 0, sizeof(p));
     w32(p, v->sample_sequence);
-    w64(p + 4U, (valid & 1U) != 0U ? v->control_time_ticks : 0U);
-    w64(p + 12U, (valid & 2U) != 0U ? v->position_observation_time : 0U);
-    observation(p + 20U, v->target_velocity_rpm, 4U, &valid);
-    observation(p + 24U, v->velocity_rpm, 8U, &valid);
-    observation(p + 28U, v->mechanical_position_turns, 2U, &valid);
-    if ((valid & 2U) == 0U) { w64(p + 12U, 0U); }
-    observation(p + 32U, v->iq_reference_a, 16U, &valid);
-    observation(p + 36U, v->iq_feedback_a, 32U, &valid);
-    observation(p + 40U, v->id_feedback_a, 64U, &valid);
-    observation(p + 44U, v->bus_voltage_v, 128U, &valid);
-    if ((valid & 256U) != 0U) { w32(p + 48U, v->motor_state); w32(p + 52U, v->fault_flags); }
-    w32(p + 56U, valid); w16(p + 60U, (uint16_t)(v->limit_flags & 15U));
-    if ((valid & 512U) != 0U) {
+    w64(p + 4U, (valid & CORE_SAMPLE_VALID_TIME) != 0U ? v->control_time_ticks : 0U);
+    w64(p + 12U, (valid & CORE_SAMPLE_VALID_POSITION) != 0U ? v->position_observation_time : 0U);
+    observation(p + 20U, v->target_velocity_rpm, CORE_SAMPLE_VALID_TARGET, &valid);
+    observation(p + 24U, v->velocity_rpm, CORE_SAMPLE_VALID_VELOCITY, &valid);
+    observation(p + 28U, v->mechanical_position_turns, CORE_SAMPLE_VALID_POSITION, &valid);
+    if ((valid & CORE_SAMPLE_VALID_POSITION) == 0U) { w64(p + 12U, 0U); }
+    observation(p + 32U, v->iq_reference_a, CORE_SAMPLE_VALID_IQ_REFERENCE, &valid);
+    observation(p + 36U, v->iq_feedback_a, CORE_SAMPLE_VALID_IQ_FEEDBACK, &valid);
+    observation(p + 40U, v->id_feedback_a, CORE_SAMPLE_VALID_ID_FEEDBACK, &valid);
+    observation(p + 44U, v->bus_voltage_v, CORE_SAMPLE_VALID_BUS_VOLTAGE, &valid);
+    if ((valid & CORE_SAMPLE_VALID_STATUS) != 0U) { w32(p + 48U, v->motor_state); w32(p + 52U, v->fault_flags); }
+    w32(p + 56U, valid); w16(p + 60U, (uint16_t)(v->limit_flags & CORE_SAMPLE_LIMIT_MASK));
+    if ((valid & CORE_SAMPLE_VALID_GENERATIONS) != 0U) {
         w32(p + 64U, v->active_profile_generation); w32(p + 68U, v->telemetry_config_generation);
     }
     memcpy(output, p, sizeof(p)); *length = sizeof(p);
@@ -375,21 +377,24 @@ CoreResult core_sample_encode(const CoreSpeedSample *v, uint8_t *output, size_t 
 CoreResult core_sample_decode(const uint8_t *p, size_t n, CoreSpeedSample *sample)
 {
     CoreSpeedSample v;
-    static const uint32_t bit[7] = {4U, 8U, 2U, 16U, 32U, 64U, 128U};
+    static const uint32_t bit[7] = {CORE_SAMPLE_VALID_TARGET, CORE_SAMPLE_VALID_VELOCITY,
+        CORE_SAMPLE_VALID_POSITION, CORE_SAMPLE_VALID_IQ_REFERENCE, CORE_SAMPLE_VALID_IQ_FEEDBACK,
+        CORE_SAMPLE_VALID_ID_FEEDBACK, CORE_SAMPLE_VALID_BUS_VOLTAGE};
     uint32_t valid;
     size_t i;
     if (p == NULL || sample == NULL || n != 72U) { return CORE_BAD_PAYLOAD; }
     valid = r32(p + 56U);
-    if ((valid & ~0x3FFU) != 0U || (r16(p + 60U) & ~15U) != 0U || r16(p + 62U) != 0U) {
+    if ((valid & ~CORE_SAMPLE_VALID_MASK) != 0U
+        || (r16(p + 60U) & ~CORE_SAMPLE_LIMIT_MASK) != 0U || r16(p + 62U) != 0U) {
         return CORE_BAD_PAYLOAD;
     }
     for (i = 0U; i < 7U; ++i) {
         if (!observation_valid(p + 20U + 4U * i, bit[i], valid)) { return CORE_BAD_VALUE; }
     }
-    if (((valid & 1U) == 0U && r64(p + 4U) != 0U) ||
-        ((valid & 2U) == 0U && r64(p + 12U) != 0U) ||
-        ((valid & 256U) == 0U && (r32(p + 48U) != 0U || r32(p + 52U) != 0U)) ||
-        ((valid & 512U) == 0U && (r32(p + 64U) != 0U || r32(p + 68U) != 0U))) {
+    if (((valid & CORE_SAMPLE_VALID_TIME) == 0U && r64(p + 4U) != 0U) ||
+        ((valid & CORE_SAMPLE_VALID_POSITION) == 0U && r64(p + 12U) != 0U) ||
+        ((valid & CORE_SAMPLE_VALID_STATUS) == 0U && (r32(p + 48U) != 0U || r32(p + 52U) != 0U)) ||
+        ((valid & CORE_SAMPLE_VALID_GENERATIONS) == 0U && (r32(p + 64U) != 0U || r32(p + 68U) != 0U))) {
         return CORE_BAD_VALUE;
     }
     memset(&v, 0, sizeof(v));

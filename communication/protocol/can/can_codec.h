@@ -18,6 +18,14 @@ enum {
     CAN_V1_LIMIT_SHIFT = 8U, CAN_V1_MOTION_FLAGS_MASK = 0x0F03U
 };
 
+/* State/Heartbeat 的冻结状态位；不能以未收到故障帧推断健康。 */
+#define CAN_V1_STATE_SNAPSHOT_VALID (1U << 0) /* 快照有效。 */
+#define CAN_V1_STATE_SESSION_VALID (1U << 1) /* 会话有效。 */
+#define CAN_V1_STATE_ERROR_WARNING (1U << 2) /* 错误警告。 */
+#define CAN_V1_STATE_ERROR_PASSIVE (1U << 3) /* 错误被动。 */
+#define CAN_V1_STATE_BUS_OFF_RECOVERING (1U << 4) /* Bus-off或恢复中。 */
+#define CAN_V1_STATE_INTERNAL_FAILED (1U << 5) /* 内部Fail-closed。 */
+
 typedef struct {
     uint16_t session, sequence;
     uint8_t service;

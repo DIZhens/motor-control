@@ -98,13 +98,13 @@ void can_v1_motion(uint8_t node, uint16_t sequence, const CoreSpeedSample *sampl
     int16_t target = 0, velocity = 0;
     uint16_t flags = 0U;
     *frame = make_frame((uint16_t)(CAN_V1_MOTION_BASE + node));
-    if ((sample->valid_flags & 4U) != 0U && can_v1_rpm_x100(sample->target_velocity_rpm, &target)) {
+    if ((sample->valid_flags & CORE_SAMPLE_VALID_TARGET) != 0U && can_v1_rpm_x100(sample->target_velocity_rpm, &target)) {
         flags |= CAN_V1_TARGET_VALID;
     }
-    if ((sample->valid_flags & 8U) != 0U && can_v1_rpm_x100(sample->velocity_rpm, &velocity)) {
+    if ((sample->valid_flags & CORE_SAMPLE_VALID_VELOCITY) != 0U && can_v1_rpm_x100(sample->velocity_rpm, &velocity)) {
         flags |= CAN_V1_VELOCITY_VALID;
     }
-    flags |= (uint16_t)((sample->limit_flags & 0xFU) << CAN_V1_LIMIT_SHIFT);
+    flags |= (uint16_t)((sample->limit_flags & CORE_SAMPLE_LIMIT_MASK) << CAN_V1_LIMIT_SHIFT);
     write16(frame->data, sequence); write16(frame->data + 2, (uint16_t)target);
     write16(frame->data + 4, (uint16_t)velocity); write16(frame->data + 6, flags);
 }

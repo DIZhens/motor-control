@@ -311,7 +311,8 @@ static void observe_snapshot(CoreServer *s)
 {
     CoreMotorSnapshot *m = &s->answer.value.motor_snapshot;
     if (s->session == 0U || s->failed || core_server_port_read_object(CORE_MOTOR_SNAPSHOT,
-        &s->answer.value) != CORE_RESULT_OK || (m->valid_flags & 0xC1U) != 0xC1U) { return; }
+        &s->answer.value) != CORE_RESULT_OK
+        || (m->valid_flags & CORE_SNAPSHOT_EVENT_VALID) != CORE_SNAPSHOT_EVENT_VALID) { return; }
     if (s->snapshot_valid) {
         if (s->previous_state != m->motor_state) {
             event(s, CORE_STATE_CHANGED, s->previous_state, m->motor_state, m->control_time_ticks);

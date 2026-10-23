@@ -23,4 +23,4 @@ G431 的 SystemRuntime 和协议到设备的绑定目前随 G431 装配维护，
 
 可移植协议位于 [communication/protocol](../communication/protocol/README.md)，共享合同位于 [communication/spec](../communication/spec/README.md)。控制算法不依赖 HAL、RTOS 或协议；Motor 通过公共 Platform 能力运行，具体外设实现留在 Target。
 
-G431 的构建与实测结论统一由 [Validation](targets/BLDC_G431/validation/README.md)记录。两板的编译、模型与实物结论分别验收，长期职责见[架构](../ARCHITECTURE.md)，工具链规则见[开发说明](../DEVELOPMENT.md)。
+G431 的验证入口与能力限制见 [Validation](targets/BLDC_G431/validation/README.md)，阶段结果见 Git 检查点。两板的编译、模型与实物结论分别验收，长期职责见[架构](../ARCHITECTURE.md)，工具链规则见[开发说明](../DEVELOPMENT.md)。

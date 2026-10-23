@@ -10,6 +10,14 @@
 #define BOOTSTRAP_WORDS 768U
 #define COMMUNICATION_WORDS 768U
 #define TELEMETRY_WORDS 384U
+#define BOOTSTRAP_PRIORITY 3U
+#define COMMUNICATION_PRIORITY 2U
+#define TELEMETRY_PRIORITY 1U
+#define COMMUNICATION_MAX_WAIT_TICKS 1U /* 1 kHz Kernel tick：最长等待 1 ms。 */
+#define STACK_WATERMARK_PERIOD_TICKS 1000U
+#define TELEMETRY_DEFAULT_PERIOD_TICKS 4U /* 默认 250 Hz。 */
+#define BOOTSTRAP_SELF_TEST_TICKS 2U /* HAL 与 Kernel 两时基启动自检窗口。 */
+#define TELEMETRY_MAILBOX_DEPTH 1U /* latest value 单槽，不额外缓存待发样本。 */
 static StaticTask_t s_bootstrap_tcb, s_communication_tcb, s_telemetry_tcb, s_idle_tcb;
 static StackType_t s_bootstrap_stack[BOOTSTRAP_WORDS], s_communication_stack[COMMUNICATION_WORDS];
 static StackType_t s_telemetry_stack[TELEMETRY_WORDS], s_idle_stack[configMINIMAL_STACK_SIZE];
@@ -63,10 +71,10 @@ static void communication_task(void *argument)
     (void)argument;
     for (;;) {
         /* ADC只写Completion；后台最长1ms醒来，随后由协议Server接管排空。 */
-        (void)ulTaskNotifyTake(pdTRUE, 1U);
+        (void)ulTaskNotifyTake(pdTRUE, COMMUNICATION_MAX_WAIT_TICKS);
         g_system_runtime_status.communication_passes++;
         system_runtime_target_communication_service();
-        if ((TickType_t)(xTaskGetTickCount() - watermark_tick) >= 1000U) {
+        if ((TickType_t)(xTaskGetTickCount() - watermark_tick) >= STACK_WATERMARK_PERIOD_TICKS) {
             watermark_tick = xTaskGetTickCount();
             g_system_runtime_status.communication_stack_free = uxTaskGetStackHighWaterMark(NULL);
             g_system_runtime_status.telemetry_stack_free = uxTaskGetStackHighWaterMark(s_telemetry);
@@ -123,7 +131,7 @@ static void telemetry_task(void *argument)
     bool published;
     (void)argument;
     for (;;) {
-        period = 4U;
+        period = TELEMETRY_DEFAULT_PERIOD_TICKS;
         published = false;
         if (system_runtime_target_read_telemetry(&config)) {
             if (config.rate_hz != 50U && config.rate_hz != 250U && config.rate_hz != 500U) {
@@ -164,18 +172,18 @@ static void bootstrap_task(void *argument)
     (void)argument;
     g_system_runtime_status.phase = SYSTEM_RUNTIME_BOOTSTRAP;
     /* 这是两个独立时基的启动自检，不是操作者准备倒计时。 */
-    vTaskDelay(2U);
+    vTaskDelay(BOOTSTRAP_SELF_TEST_TICKS);
     g_system_runtime_status.hal_tick_bootstrap = system_runtime_target_hal_tick();
     g_system_runtime_status.kernel_tick_bootstrap = xTaskGetTickCount();
     if ((uint32_t)(g_system_runtime_status.hal_tick_bootstrap - hal_before) == 0U
-        || (TickType_t)(xTaskGetTickCount() - tick_before) < 2U) { fatal(RUNTIME_INTERNAL_BOOTSTRAP); }
-    s_mailbox = xQueueCreateStatic(1U, sizeof(RuntimeTelemetryValue),
+        || (TickType_t)(xTaskGetTickCount() - tick_before) < BOOTSTRAP_SELF_TEST_TICKS) { fatal(RUNTIME_INTERNAL_BOOTSTRAP); }
+    s_mailbox = xQueueCreateStatic(TELEMETRY_MAILBOX_DEPTH, sizeof(RuntimeTelemetryValue),
         s_telemetry_storage, &s_telemetry_queue);
     if (s_mailbox == NULL) { fatal(RUNTIME_INTERNAL_BOOTSTRAP); }
     s_communication = xTaskCreateStatic(communication_task, "Communication", COMMUNICATION_WORDS,
-        NULL, 2U, s_communication_stack, &s_communication_tcb);
+        NULL, COMMUNICATION_PRIORITY, s_communication_stack, &s_communication_tcb);
     s_telemetry = xTaskCreateStatic(telemetry_task, "Telemetry", TELEMETRY_WORDS,
-        NULL, 1U, s_telemetry_stack, &s_telemetry_tcb);
+        NULL, TELEMETRY_PRIORITY, s_telemetry_stack, &s_telemetry_tcb);
     /* Idle已由vTaskStartScheduler静态创建。Bootstrap仍最高优先级，长期任务尚未执行。 */
     s_idle = xTaskGetIdleTaskHandle();
     if (s_communication == NULL || s_telemetry == NULL || s_idle == NULL
@@ -194,7 +202,7 @@ void system_runtime_start(void)
     if (g_system_runtime_status.phase != SYSTEM_RUNTIME_RESET) { fatal(RUNTIME_INTERNAL_BOOTSTRAP); }
     if (!system_runtime_target_pre_scheduler()) { fatal(RUNTIME_INTERNAL_BOOTSTRAP); }
     g_system_runtime_status.hal_tick_before_scheduler = system_runtime_target_hal_tick();
-    bootstrap = xTaskCreateStatic(bootstrap_task, "Bootstrap", BOOTSTRAP_WORDS, NULL, 3U,
+    bootstrap = xTaskCreateStatic(bootstrap_task, "Bootstrap", BOOTSTRAP_WORDS, NULL, BOOTSTRAP_PRIORITY,
         s_bootstrap_stack, &s_bootstrap_tcb);
     if (bootstrap == NULL) { fatal(RUNTIME_INTERNAL_BOOTSTRAP); }
     g_system_runtime_status.phase = SYSTEM_RUNTIME_SCHEDULER_START;

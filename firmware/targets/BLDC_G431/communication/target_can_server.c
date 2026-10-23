@@ -8,6 +8,8 @@
 #include "../validation/communication/can_loopback.h"
 #endif
 
+#define CAN_SERVICE_FRAME_LIMIT 6U /* 限制每个后台服务周期的收包工作量。 */
+
 static CanServer s_can_server;
 void target_can_server_start(void) { can_server_init(&s_can_server, BLDC_G431_CAN_NODE_ID); }
 
@@ -22,7 +24,7 @@ void target_can_server_service(void)
 #endif
     can_server_poll(&s_can_server, HAL_GetTick());
     /* 每轮有界排空；硬件FIFO只有3项，持续输入由IRQ及1ms后台轮询继续推进。 */
-    for (batch = 0U; batch < 6U && !s_can_server.failed; ++batch) {
+    for (batch = 0U; batch < CAN_SERVICE_FRAME_LIMIT && !s_can_server.failed; ++batch) {
         result = can_frame_pop(&frame);
         if (result == CAN_FRAME_EMPTY || result == CAN_FRAME_BUSY) { break; }
         if (result != CAN_FRAME_ACCEPTED) { target_runtime_fail_closed(RUNTIME_INTERNAL_TRANSPORT); break; }

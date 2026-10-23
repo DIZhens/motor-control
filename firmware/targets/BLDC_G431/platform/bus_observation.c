@@ -15,6 +15,7 @@
 #define MILLIVOLTS_PER_VOLT (1000.0f)
 #define VBUS_DIVIDER_SCALE ((47.0f + 5.1f) / 5.1f)
 
+/* regular rank1=VBUS、rank2=VREFINT、rank3=芯片温度；先用 VREFINT 估算 VDDA 再换算 VBUS。 */
 #define ADC1_REGULAR_SEQUENCE_LENGTH (3U)
 #define ADC1_VBUS_RANK_INDEX (0U)
 #define ADC1_VREFINT_RANK_INDEX (1U)

@@ -15,12 +15,16 @@
 #include "../platform/cordic_math.h"
 #include "g431_control_profile.h"
 
-#define CYCLES_PER_US (170U)
-#define SAMPLE_MIN_US (75U)
-#define SAMPLE_MAX_US (125U)
-#define PUBLICATION_DIVIDER (100U)
-#define FINITE_RUN_MAX_CYCLES (1500000U * CYCLES_PER_US)
-#define FINITE_RUN_MAX_DISPLACEMENT (2.0f)
+#define CYCLES_PER_US (170U) /* 170 MHz DWT，每微秒 170 cycle。 */
+#define SAMPLE_MIN_US (75U) /* 100 us fast sample 的允许节拍窗口下界。 */
+#define SAMPLE_MAX_US (125U) /* 节拍窗口上界 [us]。 */
+#define PUBLICATION_DIVIDER (100U) /* 每 100 fast tick 发布普通 Snapshot。 */
+#define FINITE_RUN_MAX_CYCLES (1500000U * CYCLES_PER_US) /* 独立 1.5 s，调速不续期。 */
+#define FINITE_RUN_MAX_DISPLACEMENT (2.0f) /* Start 后净位移边界 ±2 机械圈。 */
+#define GUARD_CORE_CLOCK_HZ 170000000U
+#define GUARD_TIMER_PRESCALER 169U
+#define GUARD_TIMER_RELOAD 49U /* 170 MHz / (169+1) / (49+1) = 20 kHz，即 50 us。 */
+#define OFF_TELEMETRY_DIVIDER 10U /* 非 RUN：10 kHz fast tick 分频为 1 kHz 发布。 */
 
 /* 同一实时边界生成的发布内容，供后台一致性读取。 */
 typedef struct {
@@ -220,35 +224,44 @@ static void publish_motor_telemetry(ControlTime now)
     control_runtime_snapshot(&s_control_runtime, now, true, &snapshot);
     next.sample_sequence = ++s_motor_telemetry_count;
     next.control_time_ticks = now;
-    if (snapshot.control_time_valid) { valid |= 1U; }
+    if (snapshot.control_time_valid) { valid |= MOTOR_TELEMETRY_VALID_TIME; }
     if (s_control_runtime.position_time_available && now >= s_control_runtime.last_position_time
         && now - s_control_runtime.last_position_time <= g431_control_config.position_max_age_ticks) {
         next.position_observation_time = s_control_runtime.last_position_time;
         next.mechanical_position_turns = s_control_runtime.mechanical_position_turns
             * (float)g431_control_config.electrical_angle.encoder_direction;
-        valid |= 2U;
+        valid |= MOTOR_TELEMETRY_VALID_POSITION;
     }
     next.target_velocity_rpm = snapshot.target_velocity_rpm; next.velocity_rpm = snapshot.velocity_rpm;
     next.iq_feedback_a = snapshot.iq_a; next.id_feedback_a = snapshot.id_a;
     next.bus_voltage_v = snapshot.bus_voltage_v;
     next.motor_state = snapshot.state; next.fault_flags = snapshot.faults;
-    if (snapshot.status_valid) { valid |= 4U | 256U; }
-    if (snapshot.velocity_valid) { valid |= 8U; }
-    if (snapshot.iq_valid) { valid |= 32U; }
-    if (snapshot.id_valid) { valid |= 64U; }
-    if (snapshot.bus_voltage_valid) { valid |= 128U; }
+    if (snapshot.status_valid) { valid |= MOTOR_TELEMETRY_VALID_TARGET | MOTOR_TELEMETRY_VALID_STATUS; }
+    if (snapshot.velocity_valid) { valid |= MOTOR_TELEMETRY_VALID_VELOCITY; }
+    if (snapshot.iq_valid) { valid |= MOTOR_TELEMETRY_VALID_IQ_FEEDBACK; }
+    if (snapshot.id_valid) { valid |= MOTOR_TELEMETRY_VALID_ID_FEEDBACK; }
+    if (snapshot.bus_voltage_valid) { valid |= MOTOR_TELEMETRY_VALID_BUS_VOLTAGE; }
     if (control_valid && s_control_runtime.speed_output.valid) {
-        next.iq_reference_a = s_control_runtime.speed_output.iq_reference_a; valid |= 16U;
-        if (s_control_runtime.speed_output.current_limited) { next.limit_flags |= 1U; }
+        next.iq_reference_a = s_control_runtime.speed_output.iq_reference_a;
+        valid |= MOTOR_TELEMETRY_VALID_IQ_REFERENCE;
+        if (s_control_runtime.speed_output.current_limited) {
+            next.limit_flags |= MOTOR_TELEMETRY_LIMIT_SPEED_CURRENT;
+        }
     }
     if (control_valid && s_control_runtime.current_output.valid) {
-        if (s_control_runtime.current_output.d_integral_limited) { next.limit_flags |= 2U; }
-        if (s_control_runtime.current_output.q_integral_limited) { next.limit_flags |= 4U; }
-        if (s_control_runtime.current_output.voltage_limited) { next.limit_flags |= 8U; }
+        if (s_control_runtime.current_output.d_integral_limited) {
+            next.limit_flags |= MOTOR_TELEMETRY_LIMIT_D_INTEGRAL;
+        }
+        if (s_control_runtime.current_output.q_integral_limited) {
+            next.limit_flags |= MOTOR_TELEMETRY_LIMIT_Q_INTEGRAL;
+        }
+        if (s_control_runtime.current_output.voltage_limited) {
+            next.limit_flags |= MOTOR_TELEMETRY_LIMIT_VOLTAGE;
+        }
     }
     next.active_profile_generation = s_parameters.speed_active.generation;
     next.telemetry_config_generation = s_parameters.telemetry.generation;
-    next.valid_flags = valid | 512U;
+    next.valid_flags = valid | MOTOR_TELEMETRY_VALID_GENERATIONS;
     s_motor_telemetry_version++; __DMB(); s_motor_telemetry = next; __DMB(); s_motor_telemetry_version++;
     s_motor_telemetry_available = true;
 }
@@ -269,7 +282,7 @@ static void monitor_finite_run(const MotorCommand *command, bool has_command)
         && s_motor.command_result == MOTOR_COMMAND_RESULT_ACCEPTED
         && s_control_runtime.phase == CONTROL_RUNTIME_START_QUIET) {
         run->accepted_starts++;
-        run->limit_reason = 0U;
+        run->limit_reason = TARGET_RUN_LIMIT_NONE;
         run->started_cycles = DWT->CYCCNT;
         run->last_position_time = s_control_runtime.last_position_time;
         run->last_position_turns = s_control_runtime.mechanical_position_turns;
@@ -294,7 +307,7 @@ static void monitor_finite_run(const MotorCommand *command, bool has_command)
             realtime_motor_io_safe_off();
             g_target_runtime_guard_faults |= TARGET_RUNTIME_FAULT_RUN_MOTION;
             motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_RUN_MOTION);
-            run->limit_reason = 2U;
+            run->limit_reason = TARGET_RUN_LIMIT_DISPLACEMENT;
             run->active = 0U;
         }
     }
@@ -406,7 +419,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     s_motor_telemetry_divider++;
     if ((s_control_runtime.phase == CONTROL_RUNTIME_RUNNING && previous_control_phase == CONTROL_RUNTIME_RUNNING
             && s_control_runtime.last_speed_time != previous_speed_time)
-        || (s_control_runtime.phase != CONTROL_RUNTIME_RUNNING && s_motor_telemetry_divider >= 10U)) {
+        || (s_control_runtime.phase != CONTROL_RUNTIME_RUNNING && s_motor_telemetry_divider >= OFF_TELEMETRY_DIVIDER)) {
         s_motor_telemetry_divider = 0U;
         publish_motor_telemetry(current->observation_time);
     }
@@ -446,7 +459,7 @@ void target_runtime_guard_irq(void)
          * 队列中的旧运动意图同时退休；ADC停滞时仍由心跳故障保持关断。 */
         realtime_motor_io_safe_off();
         g_target_runtime_run_status.active = 0U;
-        g_target_runtime_run_status.limit_reason = 1U;
+        g_target_runtime_run_status.limit_reason = TARGET_RUN_LIMIT_TIME;
         runtime_exchange_request_internal_stop(&s_exchange);
     }
     restore_interrupts(primask);
@@ -491,7 +504,7 @@ void target_runtime_start(void)
         realtime_motor_io_safe_off(); motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_INTERNAL);
         publish(0U, false); return;
     }
-    if ((SystemCoreClock != 170000000U) || (TIM6->PSC != 169U)) {
+    if ((SystemCoreClock != GUARD_CORE_CLOCK_HZ) || (TIM6->PSC != GUARD_TIMER_PRESCALER)) {
         motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_CLOCK);
         publish(0U, false);
         return;
@@ -524,7 +537,7 @@ void target_runtime_start(void)
     if (success) {
         s_last_sample_cycles = DWT->CYCCNT;
         s_last_guard_cycles = s_last_sample_cycles;
-        TIM6->ARR = 49U;
+        TIM6->ARR = GUARD_TIMER_RELOAD;
         TIM6->CNT = 0U;
         TIM6->EGR = TIM_EGR_UG;
         __HAL_TIM_CLEAR_FLAG(&htim6, TIM_FLAG_UPDATE);

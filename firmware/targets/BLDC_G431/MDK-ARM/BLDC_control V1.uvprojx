@@ -678,7 +678,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Runtime</GroupName>
+          <GroupName>Application/User/Target Integration</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -801,7 +801,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Communication</GroupName>
+          <GroupName>Application/User/Device Binding</GroupName>
           <Files>
             <File>
               <FileName>motor_node_binding.c</FileName>
@@ -846,7 +846,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Validation</GroupName>
+          <GroupName>Validation/CAN Loopback</GroupName>
           <Files>
             <File>
               <FileName>can_loopback.c</FileName>
@@ -856,7 +856,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/SystemRuntime</GroupName>
+          <GroupName>Application/User/System Runtime</GroupName>
           <Files>
             <File>
               <FileName>runtime_exchange.c</FileName>
@@ -964,7 +964,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Control</GroupName>
+          <GroupName>Application/User/Control</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>

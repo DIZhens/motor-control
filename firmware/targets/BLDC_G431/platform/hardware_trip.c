@@ -12,10 +12,12 @@
 #define DAC_FULL_SCALE_CODE (4095.0f)
 #define DAC_VREF_NOMINAL_V (3.3f)
 
+/* 名义比较器输入 VINP [V] ≈ 0.1014 + 0.8811 × VSHUNT；VSHUNT = I [A] × 0.05 Ω。 */
 #define CURRENT_FRONTEND_BIAS_V (0.1014f)
 #define CURRENT_FRONTEND_SHUNT_GAIN (0.8811f)
 #define CURRENT_SHUNT_RESISTANCE_OHM (0.05f)
 
+/* 母线比较器输入 [V] = VBUS × 5.1 / (47 + 5.1)，分压电阻单位 kΩ。 */
 #define VBUS_DIVIDER_RATIO (5.1f / (47.0f + 5.1f))
 
 static HardwareTripHandler s_handler;

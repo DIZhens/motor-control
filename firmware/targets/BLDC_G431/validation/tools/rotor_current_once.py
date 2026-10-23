@@ -22,7 +22,7 @@ LIMITS = {'iq_max_nominal_a':0.2,'voltage_request_upper_bound_v':1.8,'phase_trip
     'kp_v_per_a':0.5,'ki_v_per_a_s':300.0,'integral_limit_v':1.5,
     'velocity_limit_rpm':300.0,'displacement_limit_turns':2.0,'trajectory_s':1.0,
     'independent_deadline_s':1.5,'position_max_age_s':0.0015,'actuation_prediction_s':0.000125}
-DEFAULT_MAPPING = Path(__file__).resolve().parents[1] / 'evidence/current-survey/excitation-comparison.json'
+DEFAULT_MAPPING = Path(__file__).resolve().parents[1] / 'tests/fixtures/rotor-mapping/excitation-comparison.json'
 
 
 def parameters(iq, offset):

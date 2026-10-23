@@ -1,7 +1,7 @@
 # Core Protocol 客户端
 
 正式G431 Run使用460800/8N1、自研COBS/CRC二进制协议；VOFA可通过
-[PC单向数据桥](../vofa/README.md#正式-run-的-pc-数据桥)观察解码遥测，串口仍由协议客户端独占。
+[PC单向数据桥](../vofa/README.md#最少设置)观察解码遥测，串口仍由协议客户端独占。
 Wire合同见[Core Protocol V1](../../spec/CORE_PROTOCOL_V1.md)，实物范围见
 [G431验证页](../../../firmware/targets/BLDC_G431/validation/README.md)。
 

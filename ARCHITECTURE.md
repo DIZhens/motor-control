@@ -2,13 +2,13 @@
 
 本文档是本仓库长期架构合同。它只记录需要长期遵守的职责、依赖方向、替换边界、状态所有权和安全语义；具体 API 以对应源码头文件和 `communication/spec/` 合同为准。
 
-文中的 `Single-Motor Encoder Phase-Current FOC Profile V1` 定义长期硬件与实时能力边界，不等于一次交付必须实现本文所有模块、控制模式和通信方式。展示目标包含 G431 单电机、MT6701、FOC 电流内环和速度外环、UART 自研协议及 FreeRTOS 后台集成；控制基线先使用现有 UART / VOFA。CAN 实物接入、Qt Host 与位置环后续再做。活动阶段的具体目标和验收边界以本地 Git 检查点正文为准，见 `DEVELOPMENT.md`。
+文中的 `Single-Motor Encoder Phase-Current FOC Profile V1` 定义长期硬件与实时能力边界。具体 Target 的已实现能力与限制见模块入口，活动阶段的目标和验收边界以本地 Git 检查点为准；事实管理规则见 `DEVELOPMENT.md`。
 
 ## 1. 项目定位
 
 本仓库实现一套可跨电机控制硬件复用的 BLDC/PMSM 控制系统。
 
-“通用”不表示提前支持所有硬件和协议，而表示**在明确 Control Profile 内把替换成本局部化**。第一版目标收敛为：
+“通用”不表示提前支持所有硬件和协议，而表示**在明确 Control Profile 内把替换成本局部化**。V1 的控制对象边界为：
 
 ```text
 Single-Motor Encoder Phase-Current FOC Profile V1
@@ -141,7 +141,7 @@ Platform
 
 Motor 是固件公共业务语义的唯一权威。
 
-公共生命周期第一版保持最小：
+V1 公共生命周期保持最小：
 
 ```text
 BOOT → IDLE → RUN
@@ -678,7 +678,7 @@ Frontend和控制所有者，不建立运行时探测或Transport Registry。
 
 UART、USB CDC、TCP 可以自然复用字节流 framing；CAN 是帧式链路，允许使用自己的分包/映射方式，但不得因此重新定义设备业务语义。
 
-第一阶段不预设 CANopen Object Dictionary，也不让旧协议对象编号反向定义新 Motor API。
+V1 不采用 CANopen Object Dictionary，也不让旧协议对象编号反向定义新 Motor API。
 
 自研协议沿用上述边界，区分 Object、Command、Telemetry 和 Event。对象写入也要经过 Device / Motor 的权限、范围与状态判断；可写目标最终形成完整业务请求，不直接改 Runtime 目标、PI 状态或功率寄存器。请求关联与会话内重复检测属于通信事务语义，不改变 Motor 状态所有权，也不承诺跨复位恰好执行一次。
 
@@ -691,7 +691,7 @@ UART精确表示与事务规则以[UART Mapping](communication/spec/UART_MAPPING
 
 Host 是第一方设备应用，不是通用上位机平台。
 
-以下是后续第一方 Qt Host 的技术基线与边界，不是展示版本的前置条件。控制基线使用现成 VOFA；自研协议阶段先提供最小 PC 协议客户端与记录工具，VOFA 适配按实际需要接入。配置、通道映射和操作说明由 `communication/host/` 保存，设备语义仍由 `communication/spec/` 定义。
+当前 Host 提供协议客户端、记录分析和 VOFA 数据桥；Qt GUI 尚未实现。以下技术基线约束实际 GUI 接入时的依赖方向，不要求预建空模块。配置、通道映射和操作入口由 `communication/host/` 保存，设备语义由 `communication/spec/` 定义。
 
 首选技术基线：
 

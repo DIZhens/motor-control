@@ -25,9 +25,18 @@ enum {
 /* TIM6 独立写入；ADC 不再执行时，不能靠旧 Motor 快照判断健康。 */
 extern volatile uint32_t g_target_runtime_guard_faults;
 
+/* 有限运行撤销原因；记录以固定 32 位存储，独立于编译器的 enum 压缩选项。 */
+typedef enum {
+    TARGET_RUN_LIMIT_NONE = 0,
+    TARGET_RUN_LIMIT_TIME = 1,
+    TARGET_RUN_LIMIT_DISPLACEMENT = 2
+} TargetRuntimeRunLimitReason;
+
 /* Run Target私有只读记录；不作为协议或主机写入许可。停止后再读取完整结果。 */
 typedef struct {
-    uint32_t accepted_starts, active, limit_reason, started_cycles;
+    uint32_t accepted_starts, active;
+    uint32_t limit_reason; /* TargetRuntimeRunLimitReason，保留原 uint32_t 记录布局。 */
+    uint32_t started_cycles;
     uint64_t last_position_time;
     float displacement_turns, last_position_turns;
 } TargetRuntimeRunStatus;

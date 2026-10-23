@@ -673,7 +673,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Validation</GroupName>
+          <GroupName>Validation/Entry &amp; Bringup</GroupName>
           <Files>
             <File>
               <FileName>target_validation.c</FileName>
@@ -703,7 +703,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Runtime</GroupName>
+          <GroupName>Validation/Observe Support</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -821,7 +821,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Motor</GroupName>
+          <GroupName>Shared/Motor</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -909,7 +909,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Control</GroupName>
+          <GroupName>Shared/Control</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -1012,7 +1012,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Communication</GroupName>
+          <GroupName>Validation/Communication</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -1098,7 +1098,7 @@
           <GroupName>::CMSIS</GroupName>
         </Group>
         <Group>
-          <GroupName>Application/User/Timing</GroupName>
+          <GroupName>Validation/Timing</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -1859,7 +1859,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Validation</GroupName>
+          <GroupName>Validation/Entry &amp; Bringup</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -1952,7 +1952,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Runtime</GroupName>
+          <GroupName>Validation/Observe Support</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -2080,7 +2080,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Motor</GroupName>
+          <GroupName>Shared/Motor</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -2168,7 +2168,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Control</GroupName>
+          <GroupName>Shared/Control</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -2271,7 +2271,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Communication</GroupName>
+          <GroupName>Validation/Communication</GroupName>
           <Files>
             <File>
               <FileName>vofa.c</FileName>
@@ -2357,7 +2357,7 @@
           </GroupOption>
         </Group>
         <Group>
-          <GroupName>Application/User/Timing</GroupName>
+          <GroupName>Validation/Timing</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -3118,7 +3118,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Validation</GroupName>
+          <GroupName>Validation/Entry &amp; Bringup</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -3211,7 +3211,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Runtime</GroupName>
+          <GroupName>Validation/Observe Support</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -3329,7 +3329,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Motor</GroupName>
+          <GroupName>Shared/Motor</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -3417,7 +3417,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Control</GroupName>
+          <GroupName>Shared/Control</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -3520,7 +3520,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Communication</GroupName>
+          <GroupName>Validation/Communication</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -3674,7 +3674,7 @@
           </GroupOption>
         </Group>
         <Group>
-          <GroupName>Application/User/Timing</GroupName>
+          <GroupName>Validation/Timing</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
