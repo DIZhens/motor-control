@@ -2,6 +2,16 @@
 #include "motor_node_binding_target.h"
 #include <string.h>
 
+/* 内部枚举可独立维护，但既有线上编号不能因内部重排而悄悄改变。 */
+typedef char MotorResultMappingMustMatch[
+    (MOTOR_COMMAND_RESULT_NONE == CORE_MOTOR_RESULT_NONE
+    && MOTOR_COMMAND_RESULT_ACCEPTED == CORE_MOTOR_RESULT_ACCEPTED
+    && MOTOR_COMMAND_RESULT_NOT_READY == CORE_MOTOR_RESULT_NOT_READY
+    && MOTOR_COMMAND_RESULT_BAD_TARGET == CORE_MOTOR_RESULT_BAD_TARGET
+    && MOTOR_COMMAND_RESULT_WRONG_STATE == CORE_MOTOR_RESULT_WRONG_STATE
+    && MOTOR_COMMAND_RESULT_FAULT_ACTIVE == CORE_MOTOR_RESULT_FAULT_ACTIVE
+    && MOTOR_COMMAND_RESULT_BAD_COMMAND == CORE_MOTOR_RESULT_BAD_COMMAND) ? 1 : -1];
+
 bool protocol_device_permitted(void) { return motor_node_binding_target_permitted(); }
 
 void protocol_device_fail_closed(ProtocolDeviceFault reason)

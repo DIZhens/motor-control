@@ -5,6 +5,8 @@
 参数生命周期；具体链路只规定表示、关联和容量，不重新定义设备业务。
 合同定义不等于某链路已完成实现或实机验收。
 
+具体表示分别见[UART Mapping](UART_MAPPING_V1.md)和[CAN Mapping](CAN_MAPPING_V1.md)。
+
 ```text
 一个MCU运行时 = 一个Firmware Node = 一个Motor
 Motor Node Profile / Device Port

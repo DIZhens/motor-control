@@ -1,4 +1,4 @@
-# Protocol：UART V1
+# Protocol：Motor Node Profile 与链路映射
 
 通信业务通过设备合同与 Motor 交互；线格式编解码不读取 Motor 私有数据，不直接操作功率，
 不依赖 HAL、STM32 或 FreeRTOS。硬件字节流由 Target 提供。
@@ -12,8 +12,10 @@ Validation保留裸机115200/VOFA验证入口，两个协议没有自动探测�
 ```text
 protocol/common/         共享设备Profile与Device Port
 protocol/uart_v1/        UART framing、固定值编解码、Parser与事务Server
-protocol/ports/          链接期字节流合同
+protocol/can_v1/         Classical CAN紧凑映射与独立事务Server
+protocol/ports/          链接期字节流与CAN帧合同
 protocol/tests/uart_v1/  ARM C / Python 对照与事务模型
+protocol/tests/can_v1/   CAN黄金向量与ARM事务模型
 ```
 
 `common/`拥有共享业务编号、结果、设备值与窄Device Port；纯协议不包含Motor、
@@ -22,8 +24,25 @@ Firmware的`motor_node_binding.c`负责与原Runtime交接转换；协议只拥�
 G431的`target_motor_node_binding.c`提供本机publication/提交/关断连接，
 `target_core_server.c`保留UART专属统计和静态服务装配。
 
-当前实际Frontend仍为UART。CAN映射将使用共享Profile与Device Port，不共享COBS/Header；
-在CAN实现及对应证据形成前不宣称已具备CAN能力。
+当前实际Frontend仍为UART。CAN纯C实现使用同一Profile与Device Port，不共享COBS/Header；
+已完成下述离线模型，FDCAN控制器、调度与实际总线能力须各自验证。
+
+## CAN编解码与事务模型
+
+[CAN Mapping V1](../interface/CAN_MAPPING_V1.md)定义标准数据帧、Node 1～127、Session/Sequence、
+紧凑值和固定队列。广播Stop为0x000，指定Stop直接使用Node ID；其余服务段从0x080起，
+Node 0及每段base+0保留。所有请求先检查ID、标准数据帧、DLC和精确payload，再进入事务。
+无会话Stop仅在途去重；普通会话请求继续缓存重放。Bus-off模型撤销Session、优先提交Stop，
+明确完成后才允许链路恢复；恢复不会自动执行旧Start/Update。
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 protocol/tests/can_v1/verify_can.py
+.\.venv\Scripts\python.exe -X utf8 protocol/tests/verify_boundaries.py
+```
+
+CAN模型执行正式ARM Codec/Server、Firmware绑定及Runtime/Motor，通过独立人工黄金帧和
+[Python映射](../host/protocol/can_codec.py)对照；只替换帧收发和实时推进。它不证明FDCAN、
+中断/任务、内部回环、外部收发器、ACK、仲裁、真实Bus-off或CAN电机运动。
 
 ## UART编解码库
 

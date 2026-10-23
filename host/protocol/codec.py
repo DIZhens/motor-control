@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import IntEnum
+from .profile import Result
 import math
 import struct
 
@@ -26,32 +27,6 @@ class Status(IntEnum):
     FRAME_VERSION = 6
     FRAME_FLAGS = 7
     FRAME_KIND = 8
-
-
-class Result(IntEnum):
-    OK = 0
-    BAD_REQUEST = 0x0101
-    UNKNOWN_MESSAGE = 0x0102
-    BAD_PAYLOAD = 0x0103
-    UNSUPPORTED_FLAGS = 0x0104
-    UNSUPPORTED_VERSION = 0x0105
-    UNKNOWN_COMMAND = 0x0106
-    SESSION_REQUIRED = 0x0201
-    SESSION_INVALID = 0x0202
-    SEQUENCE_CONFLICT = 0x0203
-    IN_PROGRESS = 0x0204
-    SEQUENCE_INVALID = 0x0205
-    SESSION_BUSY = 0x0206
-    UNKNOWN_OBJECT = 0x0301
-    READ_ONLY = 0x0302
-    BAD_VALUE = 0x0303
-    OBJECT_WRONG_STATE = 0x0304
-    LENGTH_MISMATCH = 0x0305
-    BUSY = 0x0401
-    CANCELLED_BY_STOP = 0x0402
-    PRECONDITION_FAILED = 0x0403
-    SYSTEM_FAIL_CLOSED = 0x0501
-    INTERNAL_ERROR = 0x0502
 
 
 class CodecError(ValueError):

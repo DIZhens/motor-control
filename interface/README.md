@@ -18,6 +18,7 @@ Protocol Contract
 
 [MOTOR_NODE_PROFILE_V1.md](MOTOR_NODE_PROFILE_V1.md)拥有共享业务编号、结果与能力子集；
 [UART_MAPPING_V1.md](UART_MAPPING_V1.md)拥有UART字段、布局与Session/Sequence规则；
+[CAN_MAPPING_V1.md](CAN_MAPPING_V1.md)拥有Classical CAN ID、8字节布局与独立事务规则；
 [CORE_PROTOCOL_V1.md](CORE_PROTOCOL_V1.md)只作为历史兼容入口。
 [PROTOCOL_DESIGN.md](PROTOCOL_DESIGN.md)解释共享边界，不重复维护字段表。CAN采用独立帧映射，
 不能把UART的COBS/CRC/Header当作共享设备语义。合同冻结不代表实现或实物通过。

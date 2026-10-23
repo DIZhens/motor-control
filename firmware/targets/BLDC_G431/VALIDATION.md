@@ -33,6 +33,12 @@ UART统计。Codec 12组、Server/Client及真实绑定36组、实时交接19组
 不代表新镜像栈实测。UART黄金字节/Host Codec不变，控制/保护/RTOS/DMA源码未修改。
 本检查点无硬件操作，CAN与调优尚未验证。
 
+[P3 CAN模型](validation/evidence/protocol-can/p3.json)按确认后的Node 1～127映射，验证763个ID
+互不重叠、28份人工黄金帧与19组ARM Codec/Server/真实绑定模型；覆盖Stop重入、Session替换、
+优先队列、Bus-off撤会话与恢复前提。UART 12组/47924断言和Server 36组回归通过。
+Run全量构建零错误零警告，Flash/RAM与P2相同；可装载内容仅build ID的8字节改变。
+此时CAN尚未链接正式Run，控制器、内部回环和实物均未验证；旧实物证据不据此改写。
+
 ## 当前能力与证据矩阵
 
 | 能力 | 已有证据 | 当前限制 |
