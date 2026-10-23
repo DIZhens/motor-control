@@ -25,7 +25,7 @@ const ControlRuntimeConfig g431_control_config = {
         .enabled = true,
         .current_calibration_confirmed = true,
         .timing_confirmed = true,
-        .current = {0.5f, 0.5f, 300.0f, 300.0f, 50.0f, 1.5f, 0.2f,
+        .current = {0.5f, 0.5f, 600.0f, 600.0f, 50.0f, 1.5f, 0.2f,
             1.8f/14.0f, 0.000125f},
         .speed = {0.001f, 0.004f, 20.0f, 0.1f, 0.1f, 80.0f, 0.00125f},
         .speed_divider = 10U, /* 1 kHz 速度环。 */
