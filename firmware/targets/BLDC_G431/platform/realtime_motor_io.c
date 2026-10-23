@@ -81,7 +81,7 @@ static void raw_adc_capture_sample(uint32_t raw_b, uint32_t raw_c, bool valid,
     started = DWT->CYCCNT;
     terminal = capture->state == G431_RAW_ADC_IDLE
         ? G431_RAW_ADC_REJECTED : G431_RAW_ADC_ABORTED;
-    g_g431_raw_adc_request = 0U;
+    /* 请求字保持不变，避免 SWD 工具写后核验与清零竞争；state 独占单次防重入。 */
     count = capture->count;
     if (s_power_enabled || (htim1.Instance->BDTR & TIM_BDTR_MOE) != 0U) {
         reason = G431_RAW_ADC_POWER;

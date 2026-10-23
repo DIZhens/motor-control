@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-/* Target 私有、仅诊断构建启用；不是 HCC 或通信对象。主机只写 request。
+/* Target 私有、仅诊断构建启用；不是 HCC 或通信对象。主机只写 request，值保留至复位。
  * 每次启动最多接受一次请求；终态后整个记录不再写入，读回须复核终态和镜像身份。
  * 不改变功率状态；若时基停止，主机超时退出，禁止自动重试或重启。
  * first_slot 起每拍递增 1，ControlTime 每拍递增 2（100 us）。当前 SSI/Bus

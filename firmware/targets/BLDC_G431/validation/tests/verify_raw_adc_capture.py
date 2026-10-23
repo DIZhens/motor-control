@@ -64,6 +64,7 @@ def main():
         assert state['first_time'] == state['first_slot'] * 2
         assert state['last_entry_cycles'] - state['first_entry_cycles'] == 511 * 17000
         assert m.word('model_position_ticks') == m.word('model_bus_ticks') == 514
+        assert m.word('g_g431_raw_adc_request') == REQUEST  # SWD 写后核验不能被消费时清零。
         cases.append('512 对整数码连续完整，B/C 顺序/首尾时间/辅助 tick 不变')
         frozen = raw
         request(m)

@@ -790,5 +790,43 @@
     }
   },
   "local_evidence": "firmware/targets/BLDC_G431/validation/local-evidence/20261023-raw-adc",
-  "next": "分析已足以缩小范围。撤去正式Run诊断宏并离线核对基线一致性；后续围绕供电/参考/地做定向测量，不扩大PI扫描。"
+  "next": "分析已足以缩小范围。撤去正式Run诊断宏并离线核对基线一致性；后续围绕供电/参考/地做定向测量，不扩大PI扫描。",
+  "normal_restoration": {
+    "status": "NORMAL_RUN_RESTORED_OFFLINE_NOT_INSTALLED",
+    "build_id": "0x4b82ab7e16b61eed",
+    "full_sha256": "4b82ab7e16b61eedb87dc6149123edfc5f9b1da035f62c8bdfc8dbffbb7eeb8f",
+    "hex_sha256": "9a2ae71363d72bb1769bb6bc32e9720181f61439c012a540d97ab472f5d48da5",
+    "flash_load_bytes": 66728,
+    "static_ram_bytes": 21088,
+    "raw_adc_symbols_absent": true,
+    "compared_to": "0x6b86fa315e39d8fe Ki600正式UART镜像",
+    "changed_flash_bytes": 8,
+    "changed_addresses": [
+      "0x8010378",
+      "0x8010379",
+      "0x801037a",
+      "0x801037b",
+      "0x801037c",
+      "0x801037d",
+      "0x801037e",
+      "0x801037f"
+    ],
+    "only_firmware_build_id_changed": true,
+    "native_rebuild": "BLDC_G431_Run: 0 Error(s), 0 Warning(s)",
+    "models": {
+      "platform_cases": 107,
+      "raw_capture_cases": 9,
+      "request_word_persists": true,
+      "diagnostic_branch_retest": "ARM模型通过；保留请求字的新版诊断分支未再次上板，不追认为旧诊断镜像实测"
+    },
+    "source_checkpoint_for_hardware_captures": "23d2f06",
+    "board_state": "最后安装仍为0x5770b102921a0651诊断候选；两轮采集已冻结/关断，无Start，已通知可关闭OUTPUT，之后物理供电状态未知",
+    "hardware_access": false,
+    "files": {
+      "BLDC_G431_Run.hex": "9a2ae71363d72bb1769bb6bc32e9720181f61439c012a540d97ab472f5d48da5",
+      "BLDC_G431_Run.axf": "c0d0bd3e99db56122c7cad7a23702301db74db164d730cf7bc530c1d7c04a2da",
+      "BLDC_G431_Run.map": "d43d42a687f5569deac956111cec098d503ecd8bba69b341a68d004a7393abf3",
+      "BLDC_G431_Run.htm": "654c4503c45089966361d64c32ad5d4a544208f36e71d5c373ad508dec1acd17"
+    }
+  }
 }
