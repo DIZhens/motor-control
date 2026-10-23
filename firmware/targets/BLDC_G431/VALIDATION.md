@@ -16,6 +16,13 @@
 旧功率包与保护注入要求电机三相断开；有限开环仅按[专用流程](validation/OPEN_LOOP.md)接电机。
 本页是证据索引，不是待执行的带电操作队列。下方逐次记录中的“当前”“下一步”只指当时的镜像和阶段。
 
+本次合并准备收敛为协议分层、同一 Run 的 UART/CAN 静态选择、CAN 内部回环、控制配置归位
+及已完成的有限 FOC 调优与诊断证据。原任务 P6 的最终速度性能和重复性验收仍未通过，
+留待后续处理，不将本次收尾记为原任务全部 PASS。外部 CAN 物理总线、电流绝对精度、
+持续运行和完整 WCET 不在本次已证明范围；默认仍为 UART，全部原有安全边界保持。
+[合并前离线检查](validation/evidence/protocol-can/merge-preparation.json)复核 UART 黄金字节、
+UART/CAN 事务及 Host 模型，并以干净源码副本补全最新 CAN Normal 构建；未新增硬件动作。
+
 ## 协议拆分与CAN静态接入增量
 
 [P0基线](validation/evidence/protocol-can/p0.json)核对已合并UART源闭包、冻结镜像与旧模型来源。
