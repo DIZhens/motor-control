@@ -9,10 +9,10 @@ import subprocess
 import sys
 
 TARGET = Path(__file__).resolve().parents[2]
-ROOT = TARGET.parents[2]
+ROOT = Path(__file__).resolve().parents[5]
 sys.path.insert(0,str(ROOT))
-from host.protocol import can_codec as can
-from host.protocol.profile import Result
+from communication.host.protocol import can_codec as can
+from communication.host.protocol.profile import Result
 from candidate_manifest import read_hex
 
 FIELDS = '''version command_token acknowledged_token request_result request_id request_flags request_dlc

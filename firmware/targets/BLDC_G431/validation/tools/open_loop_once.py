@@ -91,7 +91,7 @@ def prepare(build, output, gdb, expected=None):
     def source_hashes():
         paths = candidate.source_paths(common.TARGET)
         import os
-        for directory in [common.TARGET.parents[1] / "app/motor", common.TARGET.parents[2] / "control"]:
+        for directory in [common.TARGET.parents[1] / name for name in ["motor", "control", "control/commissioning"]]:
             for path in directory.glob("*.h"):
                 paths[Path(os.path.relpath(path, common.TARGET)).as_posix()] = path
         return {name: candidate.digest(path) for name, path in paths.items()}

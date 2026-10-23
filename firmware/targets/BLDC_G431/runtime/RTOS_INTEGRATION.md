@@ -1,9 +1,9 @@
 # G431 后台运行时集成合同
 
-本文件固定Target资源、启动和依赖选择；已实现及实机范围见[验证页](../VALIDATION.md)。
-共享业务编号见[Motor Node Profile](../../../../interface/MOTOR_NODE_PROFILE_V1.md)，
-UART线上合同见[UART Mapping V1](../../../../interface/UART_MAPPING_V1.md)。
-CAN线上合同见[CAN Mapping V1](../../../../interface/CAN_MAPPING_V1.md)。
+本文件固定Target资源、启动和依赖选择；已实现及实机范围见[验证页](../validation/README.md)。
+共享业务编号见[Motor Node Profile](../../../../communication/spec/MOTOR_NODE_PROFILE_V1.md)，
+UART线上合同见[UART Mapping V1](../../../../communication/spec/UART_MAPPING_V1.md)。
+CAN线上合同见[CAN Mapping V1](../../../../communication/spec/CAN_MAPPING_V1.md)。
 现有有限FOC参数及硬件能力合同保持不变。
 
 ## 供应包与集成方式
@@ -67,9 +67,9 @@ Task notification1、栈检查2、max priorities4。只链接实际使用的Kern
 
 栈按实际MAP调用链及FPU上下文预留，word为4字节。静态调用链已知部分为Bootstrap304 B、
 Communication1224 B、Telemetry408 B、Idle40 B，仍有间接调用/汇编未知量及硬件异常压栈。
-UART构建静态RAM为21088/32768 B，CAN构建17792/32768 B；二者均包含4 KiB主栈和原512 B
+UART构建静态RAM为21104/32768 B，CAN构建17800/32768 B；二者均包含4 KiB主栈和原512 B
 C库堆保留区，无动态分配调用或FreeRTOS heap实现。UART保留512 B RX/130 B TX及2832 B
-Server；CAN使用464 B Server与控制器专用Message RAM，不占用UART状态。Server只peek原
+Server；CAN使用456 B Server与控制器专用Message RAM，不占用UART状态。Server只peek原
 Mailbox，不添加第二个待发样本槽。已知Communication静态调用深度UART为1224 B、CAN为504 B，
 仍不能替代真实调度、高水位及异常压栈验证。
 不能把静态占用当作栈安全证明；长期任务实测最小剩余栈必须≥初始25%，Bootstrap删除前记录自身数值。
@@ -83,8 +83,10 @@ Completion、装配Motor保持关断、启动Drive Timing/TIM6、绑定事件Sin
 
 ADC只形成Completion与1 kHz速度调参publication，不发Task notification或Queue。
 Communication保留1ms超时唤醒，有界服务Server/Completion、RX及终态/Event/最新遥测发送。
-Telemetry在有效会话中按配置周期生成Mailbox值和单写产生计数；Communication映射独立
-线上序号，TX接受才退休，BUSY保留、下一份覆盖计数；epoch/generation不符的值直接丢弃。
+Telemetry只读SystemRuntime通用订阅、Runtime配置和MotorTelemetrySample，按周期生成Mailbox
+值及单写产生计数；无订阅不生产，复制后在短临界区复核身份，切换期间的旧副本不发布。
+Communication经Device Port begin/end订阅并映射独立线上序号；TX接受才退休，BUSY保留。
+仅同订阅同generation的覆盖计数，subscription/generation不符的值直接丢弃。
 同一产生身份复用既有wire编码工作区，Mailbox更新则重新编码，不保留旧值发送队列。
 服务先处理RX、截止及Completion，再尝试续帧，最后读取最佳努力Event快照；不在TX完成
 IRQ中编码、复制整帧或做统计，事件FIFO选择优先级及单帧传输所有权不变。
@@ -110,7 +112,8 @@ CubeMX保留两份硬件初始化函数，关闭其在main中的自动调用；m
 Validation只显式初始化其原UART，仍不链接RTOS或新Server。
 
 Bootstrap通过`target_communication_start()`初始化唯一Server、端口、通知并启动；Communication
-通过`target_communication_service()`服务，Telemetry epoch同样静态分派。未选Server、状态、
+通过`target_communication_service()`服务；订阅由所选Server经Device Port交给SystemRuntime，
+Telemetry不反查所选链路。未选Server、状态、
 硬件句柄、通知和端口不进入最终可装载代码。ARM链接器要求先解析全部对象的外部符号，
 Target为未选纯协议库提供无状态拒绝定义；链接检查须证明这些定义随未选库一起移除。
 
@@ -134,11 +137,11 @@ Normal初始化之后、控制器Start之前改为Internal Loopback，并核对T
 继续拒绝发送扩展/RTR。验证后恢复UART并重新生成身份、Rebuild。
 
 FDCAN禁止整块寄存器dump：读取保留地址本身可触发ARA。诊断仅读取明确有效的配置/状态字，
-Message RAM也只读已配置的具体区域。实物通过范围与原失败记录见[验证页](../VALIDATION.md)。
+Message RAM也只读已配置的具体区域。实物通过范围与原失败记录见[验证页](../validation/README.md)。
 
 ## 字节流与后台边界
 
-[Byte-stream合同](../../../../protocol/ports/byte_stream_transport.h)不含HAL/RTOS/Motor类型，
+[Byte-stream合同](../../../../communication/protocol/transport/byte_stream_transport.h)不含HAL/RTOS/Motor类型，
 由Target链接期静态实现。事件Sink仅作对应上下文的有界通知；事件可重复/合并/延迟。
 权威事实为DMA生产位置、后台消费位置、连续性epoch和实际TX所有权。
 

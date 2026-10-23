@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import angle_survey_once as survey
 import verify_open_loop_tool as baseline
 

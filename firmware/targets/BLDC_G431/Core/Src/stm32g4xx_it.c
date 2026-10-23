@@ -32,7 +32,11 @@
 #include "timing_entry.h"
 #include "runtime_timing.h"
 #elif defined(BLDC_G431_RUNTIME_ENTRY)
+#if defined(BLDC_G431_FINITE_RUN)
 #include "target_runtime.h"
+#else
+#include "target_observe_runtime.h"
+#endif
 #if defined(BLDC_G431_DIAGNOSTICS)
 #include "irq_timing.h"
 #endif

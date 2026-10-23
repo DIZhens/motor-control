@@ -70,7 +70,7 @@ def prepare(build, output, gdb, expected=None):
     report = loop.prepare(build, output, gdb, expected)
     report["angle_survey_layout"] = extra_layout(output / "artifacts", gdb, output)
     report["angle_survey_schema"] = 2
-    report["angle_survey_tool_sha256"] = loop.candidate.digest(Path(__file__))
+    report["angle_survey_tool_sha256"] = loop.candidate.digest(Path(__file__).resolve().parent / 'angle_survey_once.py')
     report["open_loop_tool_sha256"] = loop.candidate.digest(Path(loop.__file__))
     loop.common.save(output / "prepared.json", report)
     return report
@@ -85,7 +85,7 @@ class Session(loop.Session):
         frozen, _ = loop.load_prepared(prepared)
         require(frozen.get("angle_survey_schema") == 2 and "angle_survey_layout" in frozen,
             "候选没有本版静态往返清单；禁止连接旧候选")
-        require(frozen["angle_survey_tool_sha256"] == loop.candidate.digest(Path(__file__))
+        require(frozen["angle_survey_tool_sha256"] == loop.candidate.digest(Path(__file__).resolve().parent / 'angle_survey_once.py')
             and frozen["open_loop_tool_sha256"] == loop.candidate.digest(Path(loop.__file__)),
             "执行工具已改变，请重新离线冻结候选")
         super().__init__(output, prepared, cli, action, *payload)

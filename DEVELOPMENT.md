@@ -12,13 +12,11 @@
 
 恢复工作时，从 `README.md` 找到目标模块入口，读取本文件，再用 `git status --short`、`git branch --show-current` 和 `git log -5 --format=full` 核对本地工作面；从最近的阶段检查点提交正文恢复目标、完成条件、已证明与未证明项及下一步，随后按需读取架构、接口与 Target 验证页。恢复不得依赖联网、PR 页面或历史讨论记录。
 
-可在仓库根目录用 PowerShell 7 运行 `pwsh -NoProfile -File .\tools\project_context.ps1`，集中显示上述 Git 信息和正式文档路径；脚本默认按自身位置定位仓库，也接受 `-RepositoryPath <目录>`。它只读本地信息，以 UTF-8 输出，不修改索引、不连接设备或网络，也不打印整份架构文档。
-
 ## 1. 文档职责
 
 ```text
 README.md
-    仓库入口和导航
+    短入口：导航、职责、构建/验证入口和当前限制，不保存阶段流水
 
 ARCHITECTURE.md
     系统长期架构合同
@@ -27,13 +25,25 @@ DEVELOPMENT.md
     Git、工具链、协作分工、验证与代码风格
 
 hardware/*/HARDWARE_BASELINE.md
-    物理硬件事实
+    当前物理硬件事实
 
-interface/
+hardware/*/HARDWARE_DESIGN.md
+    设计/制造报告；冻结后作为历史快照，不承担实时状态
+
+communication/spec/
     Firmware / Host 共享的 Device / Protocol Contract
 
-各主要目录 README.md
-    对应区域的职责、边界、构建入口和已冻结基础能力
+源码与公共头文件
+    当前实现、参数、单位和局部解释
+
+validation/tests/
+    可重复自动测试
+
+validation/tests/fixtures/
+    自动测试真正依赖的最小固定输入
+
+Git commit / merge checkpoint
+    阶段历史、PASS 摘要与未证明范围
 ```
 
 一次性的调试过程、完整日志、临时错误和测试流水账不进入长期文档。只有具有明确复用价值的验证流程，才优先固化为脚本、测试应用或一条明确的 verify 命令；一次性本地自动执行不要求为了形式留下脚本。
@@ -85,7 +95,7 @@ PR
 
 ### 2.2 公共合同的责任边界
 
-长期系统不变量以 `ARCHITECTURE.md` 为准；硬件能力 API 以 `firmware/platform_contract/` 为准；控制算法 API 随 `control/` 中的实现维护；Firmware 与 Host 的设备和协议语义以 `interface/` 为准。私有调试接口不自动升级为公共合同。
+长期系统不变量以 `ARCHITECTURE.md` 为准；硬件能力 API 以 `firmware/platform/` 为准；控制算法 API 随 `firmware/control/` 中的实现维护；Firmware 与 Host 的设备和协议语义以 `communication/spec/` 为准。私有调试接口不自动升级为公共合同。
 
 合同明确单位、状态、时序、所有权、失败与安全语义。合同已定义不等于实现完成，编译通过也不等于实机验收通过；未冻结的草案不得作为稳定接口承诺。
 
@@ -137,7 +147,7 @@ Git 提交、推送、合并按当前任务的明确授权执行；没有提交�
 - Commit、PR 的标题和说明统一使用中文，代码标识符、文件路径、API 名称保留原文。不因风格统一而重写历史提交。
 - 验证按“修改 → 影响边界 → 风险”选择；已通过的测试不会因为无关提交而自动作废。需要复测时必须说明具体影响链路。
 
-活动分支名称由实际 Git 状态决定，不固定写入长期开发合同。Tag 不用于普通阶段进度；只有需要固定可复现演示或发布版本时才按需使用。
+活动分支名称由实际 Git 状态决定，不固定写入长期开发合同。Tag 不用于普通阶段进度；只有需要固定可复现运行或发布版本时才按需使用。
 
 ## 4. 验证分层
 
@@ -160,7 +170,7 @@ Git 提交、推送、合并按当前任务的明确授权执行；没有提交�
 
 优先复用已有自动测试，例如：
 
-- `control/` 的 host-side algorithm test；
+- `firmware/control/` 的 host-side algorithm test；
 - Protocol codec / test vector；
 - Host mock/fake tests；
 - UART HIL；
@@ -191,11 +201,11 @@ HEX 身份变化用于区分证据归属，不自动要求重跑全部板级流�
 
 ### 4.4 本地验证依赖
 
-ARM 模型与候选文件解析所需 Python 包统一由根目录 [requirements-dev.txt](requirements-dev.txt) 固定版本，已在 Python 3.13.2 上核对。新环境从仓库根目录安装，不依赖历史 `local-evidence` 内的包副本：
+ARM 模型与候选解析使用 `unicorn`、`pyelftools`，串口工具使用 `pyserial`。可以复用用户本地 Python 环境；也可以建立仅本地的 `.venv`。仓库验证入口不读取本地辅助清单，不依赖历史 `local-evidence` 内的包副本。新环境可按所需验证安装这些包：
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pip install unicorn pyelftools pyserial
 .\.venv\Scripts\python.exe firmware/targets/BLDC_G431/validation/tests/verify_platform.py
 ```
 
@@ -300,7 +310,7 @@ Keil Download / Debug
 
 ## 6. Host 工具链与开发规则
 
-控制基线使用现成 VOFA 工具；自研协议阶段正式Run使用`host/protocol/`的Python客户端、连续记录和压力入口，VOFA保留在独立验证构建，二者不混发格式或同时占用串口。`host/`保存操作与工具说明，`interface/`保存双方共享的命令、单位和状态语义。暂不实现 Qt Host，也不为其预建空模块。
+控制基线使用现成 VOFA 工具；自研协议阶段正式Run使用`communication/host/protocol/`的Python客户端、连续记录和压力入口，VOFA保留在独立验证构建，二者不混发格式或同时占用串口。`communication/host/`保存操作与工具说明，`communication/spec/`保存双方共享的命令、单位和状态语义。暂不实现 Qt Host，也不为其预建空模块。
 
 后续第一方 Qt Host 的首选技术基线：
 
@@ -312,18 +322,18 @@ pyqtgraph
 pytest
 ```
 
-Host 依赖与虚拟环境由 `host/pyproject.toml` 等 Host 自身工程文件管理，不把 Python/Qt 依赖扩散到 Firmware。
+Python 工具可使用用户本地环境或 `.venv/`；所需包见第 4.4 节。未来独立 Host 工程的依赖随其工程文件维护，不把 Python/Qt 依赖扩散到 Firmware。
 
 Host 实现遵守以下规则：
 
 - GUI 只通过 Host Device API 使用设备，不直接拥有串口、CAN 或协议状态机；
 - Protocol Client 不依赖具体 Qt Widget；
 - Transport 不理解 Start、Target、Fault、Telemetry 等 Motor 业务语义；
-- `interface/` 是 Firmware 与 Host 的共同事实来源，Host 不私自复制一套不同的枚举、单位或状态语义；
+- `communication/spec/` 是 Firmware 与 Host 的共同事实来源，Host 不私自复制一套不同的枚举、单位或状态语义；
 - Device API、Protocol、Transport 和主要业务行为优先做到可 headless / mock / pytest 验证；
 - GUI 外观和交互中必须人工判断的部分再交给用户确认；
 - 不为了“工程化”预建 Manager、Repository、插件系统、通用 Dashboard 编辑器、通用协议编辑器或无真实职责的框架层；
-- Host 内部设计可按实际需求调整，但应保持 `ARCHITECTURE.md` 与 `interface/` 的长期边界。
+- Host 内部设计可按实际需求调整，但应保持 `ARCHITECTURE.md` 与 `communication/spec/` 的长期边界。
 
 第一方 Python 基础风格：
 
@@ -344,6 +354,8 @@ Host 实现遵守以下规则：
 
 ## 8. 验证证据
 
+详细验证输出默认写入 ignored 的 `validation/local-evidence/` 等本地目录。自动测试依赖的最小固定输入只放在 `validation/tests/fixtures/`，迁移时保留字节及来源语义；自动测试和工具默认执行不得隐式依赖被忽略的历史 evidence。需要现场或历史输入的人工工具可以接受显式路径或已有本地锚点。当前 tracked 文档不得链接本地-only 历史档案。
+
 长期验证证据优先级：
 
 ```text
@@ -354,7 +366,7 @@ Host 实现遵守以下规则：
 必要的简短验收结论
 ```
 
-原始串口日志、完整 Hex 报文、SWD 快照和调试过程保留在本地证据目录，不持续追加到说明文档。公开仓库只保存必要的条件、结果、限制与精选原始波形；注明镜像身份和本地记录范围，避免把未分发的文件写成读者可直接使用的验证入口。
+原始串口日志、完整 Hex 报文、SWD 快照和调试过程保留在本地证据目录，不持续追加到说明文档。公开仓库保留短入口、正式合同、源码与自动测试。逐轮 evidence、实验流水、历史阶段长文档及原始波形仅留用户本地，以精确 ignore 规则取消跟踪，不能删除用户原件或另建仓库 archive/history。阶段结果与未证明范围写入 Git 检查点；旧测量不改写成新镜像实测。
 
 项目文档说明工程决策、实现和证据，不记录无关的开发工具身份或讨论转发过程。第三方源码、器件资料及其他引用保留真实来源和许可。
 
@@ -364,7 +376,7 @@ Host 实现遵守以下规则：
 
 ## 9. Firmware 第一方 C 代码风格
 
-Firmware 与 `control/` 第一方 C 代码采用紧凑、主流、便于审查的风格。注释规则继续沿用旧仓库已经形成的写作方式。
+Firmware 与 `firmware/control/` 第一方 C 代码采用紧凑、主流、便于审查的风格。注释规则继续沿用旧仓库已经形成的写作方式。
 
 ### 9.1 基础格式
 

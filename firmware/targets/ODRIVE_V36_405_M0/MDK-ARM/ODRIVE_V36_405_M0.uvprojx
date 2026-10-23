@@ -362,7 +362,7 @@
               <MiscControls />
               <Define>USE_HAL_DRIVER,STM32F405xx,HSE_VALUE=8000000U</Define>
               <Undefine />
-              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../platform;../../../platform_contract;../validation</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../platform;../../../platform;../validation</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -569,22 +569,22 @@
             <File>
               <FileName>bus_observation.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\platform\bus_observation.c</FilePath>
+              <FilePath>../platform/bus_observation.c</FilePath>
             </File>
             <File>
               <FileName>control_time_source.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\platform\control_time_source.c</FilePath>
+              <FilePath>../platform/control_time_source.c</FilePath>
             </File>
             <File>
               <FileName>position_observation.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\platform\position_observation.c</FilePath>
+              <FilePath>../platform/position_observation.c</FilePath>
             </File>
             <File>
               <FileName>realtime_motor_io.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\platform\realtime_motor_io.c</FilePath>
+              <FilePath>../platform/realtime_motor_io.c</FilePath>
             </File>
           </Files>
         </Group>

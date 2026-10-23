@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import patch
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import candidate_manifest as candidate
 import logic_check as common
 import probe_once as probe
@@ -110,6 +110,18 @@ class Tests(unittest.TestCase):
         self.assertEqual(common.EXPECTED, self.manifest["files"][candidate.ARTIFACTS[0]])
         identity = json.loads((session.out / "candidate-identity.json").read_text())
         self.assertFalse(identity["hardware_qualified"])
+
+    def test_source_files_cover_migrated_headers_and_tools(self):
+        # 新位置不能因glob仍指向旧空目录而悄悄退出候选身份。
+        paths = [self.root / "firmware/platform/realtime_motor_io.h",
+                 self.root / "firmware/motor/control_runtime.h",
+                 self.root / "firmware/control/commissioning/rotor_alignment.h",
+                 self.target / "validation/timing/stage_budget.h",
+                 self.target / "validation/tools/timing/current_capture.py"]
+        for path in paths:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("/* fixture */", encoding="utf-8")
+        self.assertTrue(set(paths) <= set(candidate.source_paths(self.target).values()))
 
     def test_live_flash_mismatch_still_rejected(self):
         self.configure()

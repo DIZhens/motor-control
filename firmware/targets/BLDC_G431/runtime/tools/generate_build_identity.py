@@ -8,7 +8,7 @@ import struct
 import xml.etree.ElementTree as ET
 
 TARGET = Path(__file__).resolve().parents[2]
-ROOT = TARGET.parents[2]
+ROOT = Path(__file__).resolve().parents[5]
 PROJECT = TARGET / 'MDK-ARM/BLDC_control V1.uvprojx'
 HEADER = TARGET / 'runtime/firmware_build_identity.h'
 
@@ -18,10 +18,10 @@ def identity():
     targets = project.findall('./Targets/Target')
     assert len(targets) == 1 and targets[0].findtext('TargetName') == 'BLDC_G431_Run'
     target = targets[0]
-    paths = {PROJECT, TARGET / 'BLDC_control V1.ioc', Path(__file__).resolve()}
-    pending = [(PROJECT.parent / text.text.replace('\\', '/')).resolve()
+    paths = {PROJECT, TARGET / 'BLDC_control V1.ioc', TARGET / 'runtime/tools/generate_build_identity.py'}
+    pending = [(TARGET / 'MDK-ARM' / text.text.replace('\\', '/')).resolve()
                for text in target.findall('./Groups/Group/Files/File/FilePath')]
-    includes = [PROJECT.parent / text.replace('\\', '/') for text in
+    includes = [TARGET / 'MDK-ARM' / text.replace('\\', '/') for text in
                 target.findtext('./TargetOption/TargetArmAds/Cads/VariousControls/IncludePath').split(';') if text]
     while pending:
         path = pending.pop()

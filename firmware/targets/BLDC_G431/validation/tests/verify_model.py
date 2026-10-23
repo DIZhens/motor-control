@@ -45,22 +45,22 @@ with tempfile.TemporaryDirectory(prefix="g431-validation-model-") as directory:
         "LR_IROM1 0x08000000 0x00020000 {\n"
         " ER_IROM1 0x08000000 0x00020000 { .ANY (+RO) }\n"
         " RW_IRAM1 0x20000000 0x00008000 { .ANY (+RW +ZI) }\n}\n", encoding="utf-8")
-    settings = ET.parse(root / "MDK-ARM/BLDC_G431_Validation.uvprojx").find(".//Cads/VariousControls")
+    settings = ET.parse(root / 'MDK-ARM/BLDC_G431_Validation.uvprojx').find(".//Cads/VariousControls")
     command = [str(compiler / "armcc.exe"), "--cpu=Cortex-M4.fp", "--c99", "-O3",
                "--split_sections", "-g"]
     for include in settings.findtext("IncludePath").split(";"):
-        command += ["-I", str((root / "MDK-ARM" / include.replace("\\", "/")).resolve())]
+        command += ["-I", str((root / 'MDK-ARM' / include.replace("\\", "/")).resolve())]
     command += ["-D" + item for item in settings.findtext("Define").split(",")]
     objects = []
-    for source in [root / "validation/tests/model.c", root / "validation/target_validation.c",
-                   root / "validation/protection_probe.c", root / "validation/timing_probe.c",
-                   root / "validation/current_hold.c",
-                   root.parents[1] / "app/motor/voltage_open_loop.c",
-                   root.parents[2] / "control/current_controller.c",
-                   root.parents[2] / "control/electrical_angle.c",
-                   root.parents[2] / "control/position_estimator.c",
-                   root.parents[2] / "control/speed_controller.c",
-                   root.parents[2] / "control/foc_math.c"]:
+    for source in [root / 'validation/tests/model.c', root / 'validation/runner/target_validation.c',
+                   root / 'validation/bringup/protection_probe.c', root / 'validation/timing/timing_probe.c',
+                   root / 'validation/control/current_hold.c',
+                   Path(__file__).resolve().parents[4] / 'control/commissioning/voltage_open_loop.c',
+                   Path(__file__).resolve().parents[4] / 'control/current_controller.c',
+                   Path(__file__).resolve().parents[4] / 'control/electrical_angle.c',
+                   Path(__file__).resolve().parents[4] / 'control/position_estimator.c',
+                   Path(__file__).resolve().parents[4] / 'control/speed_controller.c',
+                   Path(__file__).resolve().parents[4] / 'control/foc_math.c']:
         obj = temp / (source.stem + ".o")
         options = ["-Otime"] if source.parent.name == "control" else []
         result = subprocess.run(command + options + ["-c", str(source), "-o", str(obj)],

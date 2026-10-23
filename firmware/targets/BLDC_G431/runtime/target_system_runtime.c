@@ -4,7 +4,7 @@
 #include "tim.h"
 #include "realtime_motor_io.h"
 #include "system_runtime.h"
-#include "target_communication.h"
+#include "../communication/target_communication.h"
 
 uint32_t system_runtime_target_hal_tick(void) { return HAL_GetTick(); }
 
@@ -45,15 +45,14 @@ bool system_runtime_target_bootstrap(void)
         || SysTick->LOAD != 169999U) { return false; }
     target_runtime_start();
     return target_runtime_read_snapshot(&snapshot) && snapshot.state == MOTOR_STATE_IDLE
-        && snapshot.faults == 0U && target_runtime_session_permitted()
+        && snapshot.faults == 0U && target_runtime_integrity_ok()
         && TIM6->ARR == 49U && (TIM6->CR1 & TIM_CR1_CEN) != 0U;
 }
 
-bool system_runtime_target_read_sample(SpeedCommissioningSample *sample)
+bool system_runtime_target_read_motor_telemetry(MotorTelemetrySample *sample)
 {
-    return target_runtime_read_commissioning(sample);
+    return target_runtime_read_motor_telemetry(sample);
 }
-uint32_t system_runtime_target_telemetry_epoch(void) { return target_communication_telemetry_epoch(); }
 
 bool system_runtime_target_start_transport(void)
 {

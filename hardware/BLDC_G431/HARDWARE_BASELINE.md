@@ -204,8 +204,7 @@ RDP      未修改
 | 结束后的软件/寄存器证据 | 共 14 次独立短脉冲；各次成功完成后核对 MOE=0、六路输入 LOW、测试计时停止、key 消费、保护无故障及无重放。计数不是 Gate 精确关断延迟测量 |
 | 采样与逻辑保护诊断 | 无功率连续采样、软件截止/ADC IRQ 丢失及 Trip 通知/恢复诊断有独立通过记录，不替代真实带功率保护验收 |
 
-原始阶段记录及每轮证据说明见 [首板实物调试记录](../../firmware/targets/BLDC_G431/COMMISSIONING.md)；
-当前操作步骤与状态表见 [台架验证](../../firmware/targets/BLDC_G431/VALIDATION.md)。
+以上为首板基础硬件检查的历史范围，后续固件能力与当前限制见 [台架验证](../../firmware/targets/BLDC_G431/validation/README.md)，阶段结论保存在 Git 检查点；原始逐轮资料只留本地。
 HARDWARE_BASELINE 保留长期事实与当前边界，不继续逐条堆积操作流水。
 
 以下能力仍未完成实机资格化：
@@ -215,7 +214,7 @@ HARDWARE_BASELINE 保留长期事实与当前边界，不继续逐条堆积操�
 - 电流采样 offset / gain / 温漂校准；已有零点候选和噪声统计不作为校准完成。
 - 实际 OCP / OVP 阈值、精确 Gate 关断延迟及独立 A/B OR 输入路由；OVP/BRK1、C 相和共享 A/B 的 BRK2 注入关断与恢复已有独立通过记录。
 - 保护候选首次连接未取得有效运行状态，软件复位后正常；本轮 12 V 上电直接读取正常，初始异常原因仍未确定。
-- MT6701 物理时序 / 位置精度、UART / USB / FDCAN、Motor operation 与 FOC。
+- MT6701 独立位置精度、USB、外部 CAN 物理总线及持续/带载控制能力；后续已有 UART 和有限 FOC 功能记录，不等于这些项目验收。
 
 ## 8. Source of Truth
 

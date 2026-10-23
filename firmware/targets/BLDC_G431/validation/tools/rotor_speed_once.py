@@ -89,8 +89,8 @@ def prepare(build,output,gdb,mapping):
         and all(layout['timing_field_'+n]==offset for n,(_,offset) in TIMING_FIELDS.items())
         and 0x20000000<=layout['timing_failure']<layout['timing_failure']+TIMING_SIZE<=0x20008000,'时序首故障ABI改变')
     report.update(rotor_speed_schema=2,rotor_speed_layout=layout,rotor_speed_limits=LIMITS,
-        bus_failure_schema=1,timing_failure_schema=1,rotor_speed_tool_sha256=loop.candidate.digest(Path(__file__)))
-    report['source_files']['validation/tools/rotor_speed_once.py']=loop.candidate.digest(Path(__file__))
+        bus_failure_schema=1,timing_failure_schema=1,rotor_speed_tool_sha256=loop.candidate.digest(Path(__file__).resolve().parent / 'rotor_speed_once.py'))
+    report['source_files']['validation/tools/rotor_speed_once.py']=loop.candidate.digest(Path(__file__).resolve().parent / 'rotor_speed_once.py')
     loop.common.save(output/'prepared.json',report)
     return report
 
@@ -104,7 +104,7 @@ class Session(rotor.Session):
         require(frozen.get('rotor_speed_schema')==2 and frozen.get('rotor_speed_limits')==LIMITS
             and frozen.get('bus_failure_schema')==1
             and frozen.get('timing_failure_schema')==1
-            and frozen.get('rotor_speed_tool_sha256')==loop.candidate.digest(Path(__file__)),
+            and frozen.get('rotor_speed_tool_sha256')==loop.candidate.digest(Path(__file__).resolve().parent / 'rotor_speed_once.py'),
             '不是本版有限速度候选，或工具/包络已改变')
         payload=parameters(rpm,frozen['mapping_candidate']['electrical_offset_turns'],kp,ki)
         super().__init__(output,prepared,cli,action,0.1)

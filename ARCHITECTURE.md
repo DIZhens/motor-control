@@ -1,14 +1,14 @@
 # 总体架构
 
-本文档是本仓库长期架构合同。它只记录需要长期遵守的职责、依赖方向、替换边界、状态所有权和安全语义；具体 API 以对应源码头文件和 `interface/` 合同为准。
+本文档是本仓库长期架构合同。它只记录需要长期遵守的职责、依赖方向、替换边界、状态所有权和安全语义；具体 API 以对应源码头文件和 `communication/spec/` 合同为准。
 
-文中的 `Single-Motor Encoder Phase-Current FOC Profile V1` 定义长期硬件与实时能力边界，不等于一次交付必须实现本文所有模块、控制模式和通信方式。展示目标包含 G431 单电机、MT6701、FOC 电流内环和速度外环、UART 自研协议及 FreeRTOS 后台集成；控制基线先使用现有 UART / VOFA。CAN 实物接入、Qt Host 与位置环后续再做。活动阶段的具体目标和验收边界以本地 Git 检查点正文为准，见 `DEVELOPMENT.md`。
+文中的 `Single-Motor Encoder Phase-Current FOC Profile V1` 定义长期硬件与实时能力边界。具体 Target 的已实现能力与限制见模块入口，活动阶段的目标和验收边界以本地 Git 检查点为准；事实管理规则见 `DEVELOPMENT.md`。
 
 ## 1. 项目定位
 
 本仓库实现一套可跨电机控制硬件复用的 BLDC/PMSM 控制系统。
 
-“通用”不表示提前支持所有硬件和协议，而表示**在明确 Control Profile 内把替换成本局部化**。第一版目标收敛为：
+“通用”不表示提前支持所有硬件和协议，而表示**在明确 Control Profile 内把替换成本局部化**。V1 的控制对象边界为：
 
 ```text
 Single-Motor Encoder Phase-Current FOC Profile V1
@@ -37,7 +37,7 @@ MCU
 当前明确保护两个变化轴：
 
 ```text
-Motor-control Target：
+Motor-firmware/control Target：
 Custom STM32G431
       ↕
 ODrive-compatible / other suitable controller hardware
@@ -65,7 +65,7 @@ Hardware Capability Contract
     ↓
 Firmware Motor / ControlRuntime
     ↓
-control
+firmware/control
     ↓
 Device Contract
     ↓
@@ -78,33 +78,25 @@ Host Device API
 Qt GUI
 ```
 
-顶层目录职责：
+顶层只有 `hardware/`、`firmware/`、`communication/` 三个业务目录：
 
 ```text
-control/
-    可移植算法，只回答“怎么算”。
-
-protocol/
-    可移植设备Profile、链路Frontend/事务/Codec与窄Transport Port；不依赖Firmware、HAL或RTOS。
-
-interface/
-    Firmware 与 Host 共同遵守的 Device / Protocol Contract。
-
-firmware/
-    MCU 上完整运行时，包括 Motor、ControlRuntime、Communication、
-    SystemRuntime、Platform contract 与具体 Target。
-
-host/
-    PC 设备应用。负责连接、控制、配置、状态、Fault、Telemetry、
-    曲线和数据保存，不建设通用上位机生态。
-
-hardware/
-    物理板卡事实，不保存软件业务规则。
+hardware/                         物理板卡、电机与测试器材事实
+firmware/control/                 可移植控制算法；commissioning/ 为独立试验算法
+firmware/motor/                   Motor 业务与正式 ControlRuntime
+firmware/platform/                跨 Target 硬件能力公共头文件
+firmware/targets/<target>/        MCU 工程、Platform 实现、运行装配与验证
+firmware/third_party/             原样供应源码与来源
+communication/spec/              Firmware / Host 共享设备与协议规范
+communication/protocol/          可移植设备 Profile、Codec/事务及 Transport Port
+communication/host/              PC 客户端、记录、分析和 VOFA 桥
 ```
 
-## 3. control
+G431 的 `runtime/` 保存正式 Run 的 SystemRuntime、交接、参数与装配；`communication/` 保存该 Target 的外设通信、Server 接入与设备绑定；`validation/` 保存 Observe、台架和诊断。CORDIC 属于 G431 `platform/`。F405 作为第二个真实 Target 实现同一公共 Platform API，按实际能力维护自己的验证入口，不预建没有实现的 Runtime/通信目录。
 
-`control/` 不依赖 STM32、HAL、CubeMX、Qt、通信协议或具体 PCB。
+## 3. firmware/control
+
+`firmware/control/` 不依赖 STM32、HAL、CubeMX、Qt、通信协议或具体 PCB。
 
 可以包含：
 
@@ -149,7 +141,7 @@ Platform
 
 Motor 是固件公共业务语义的唯一权威。
 
-公共生命周期第一版保持最小：
+V1 公共生命周期保持最小：
 
 ```text
 BOOT → IDLE → RUN
@@ -205,7 +197,7 @@ Reference / Feedback 实时真值
 
 引入 FreeRTOS 后，sample-ready、控制计算和 PWM 提交仍在同一硬件同步实时边界执行，慢环继续整数分频；不为电流环、速度环建立独立任务。该高优先级控制 ISR 不调用 RTOS API、不等待队列或互斥锁。后台任务处理通信、遥测及非实时维护，通过有界命令交接和一致性 Snapshot 与 Motor 协作，保持实时状态单写者。
 
-Target 负责 RTOS 移植、静态资源和中断优先级配置，`control/`、公共 Motor 语义及协议编解码不依赖 FreeRTOS。Cortex-M 上调用 `FromISR` 的通信中断必须满足内核系统调用优先级限制；具体优先级在集成时核对，依据 [FreeRTOS Cortex-M 官方说明](https://freertos.org/Documentation/02-Kernel/03-Supported-devices/04-Demos/ARM-Cortex/RTOS-Cortex-M3-M4)。控制时基、HAL 时基与 RTOS tick 分开核对，不能互相替代。
+Target 负责 RTOS 移植、静态资源和中断优先级配置，`firmware/control/`、公共 Motor 语义及协议编解码不依赖 FreeRTOS。Cortex-M 上调用 `FromISR` 的通信中断必须满足内核系统调用优先级限制；具体优先级在集成时核对，依据 [FreeRTOS Cortex-M 官方说明](https://freertos.org/Documentation/02-Kernel/03-Supported-devices/04-Demos/ARM-Cortex/RTOS-Cortex-M3-M4)。控制时基、HAL 时基与 RTOS tick 分开核对，不能互相替代。
 
 ### 4.3 Platform 与 Hardware Capability Contract
 
@@ -214,14 +206,14 @@ Target 负责 RTOS 移植、静态资源和中断优先级配置，`control/`、
 目录命名固定为：
 
 ```text
-firmware/platform_contract/
+firmware/platform/
     Hardware Capability Contract 的公共头文件，只定义跨 Target 稳定语义
 
 firmware/targets/<target>/platform/
     当前 Target 对上述合同的具体实现，可以依赖 MCU / HAL / Timer / ADC / SPI 等细节
 ```
 
-两者都属于 Platform 边界，但前者是 contract，后者是 implementation；不再使用同名顶层 `firmware/platform/` 目录，避免把公共合同与某个 Target 的实现混淆。
+两者都属于 Platform 边界：`firmware/platform/` 只保存公共合同，`targets/<target>/platform/` 保存具体实现。公共目录不包含 HAL，也不成为某块板实现的别名。
 
 V1 的最小能力集合收敛为：
 
@@ -269,7 +261,7 @@ V1 Target 至少需要满足：
 one MCU/Firmware Node controls exactly one Motor
 independent A/B/C phase-duty semantics
 at least two independent phase-current observations
-deterministic current-sampling / control timing
+deterministic current-sampling / firmware/control timing
 absolute or incremental encoder position source
 DC-bus voltage observation
 deterministic software safe-off
@@ -310,9 +302,9 @@ black-box smart servo drive
 
 #### 4.3.1 Realtime Motor I/O
 
-Realtime Motor I/O 是 V1 最核心的硬实时硬件边界。它把共享同一确定时序事务的 Drive Timing、Power Stage Actuation、同步相电流采集、Power Enable 和 software safe-off 收拢在一起；这不表示建立巨大 Platform 模块，而是承认这些能力必须共同满足同一个 PWM / sample / control 一致性边界。
+Realtime Motor I/O 是 V1 最核心的硬实时硬件边界。它把共享同一确定时序事务的 Drive Timing、Power Stage Actuation、同步相电流采集、Power Enable 和 software safe-off 收拢在一起；这不表示建立巨大 Platform 模块，而是承认这些能力必须共同满足同一个 PWM / sample / firmware/control 一致性边界。
 
-`control/` 负责 FOC、逆 Park 和 SVPWM，并向 Platform 提交归一化三相 `PhaseDutyRequest`。该请求表达“控制算法希望在 Target 声明的下一有效更新边界起实现的三相平均 duty”，不是 CCR、Timer count 或最终硬件波形。有效更新区间可以包含多个 PWM 载波周期；采样时刻、生效边界和保持时长必须由 Target 明确，并与 Runtime 的控制周期及角度预测参数一致。
+`firmware/control/` 负责 FOC、逆 Park 和 SVPWM，并向 Platform 提交归一化三相 `PhaseDutyRequest`。该请求表达“控制算法希望在 Target 声明的下一有效更新边界起实现的三相平均 duty”，不是 CCR、Timer count 或最终硬件波形。有效更新区间可以包含多个 PWM 载波周期；采样时刻、生效边界和保持时长必须由 Target 明确，并与 Runtime 的控制周期及角度预测参数一致。
 
 Platform 负责：
 
@@ -353,7 +345,7 @@ Actuation + Acquisition Plan
 
 V1 通过 Target 声明的有效 modulation envelope 保证可靠相电流采样，不要求为获取极限母线利用率而进行 sampling-aware PWM distortion。Single DC-link shunt 以及依赖采样窗口重塑的 overmodulation 不属于 V1。
 
-正常 control saturation 应发生在 portable control / modulator 内。Platform 的 safety clamp 只是硬件最后保护，不应成为正常工作时持续修改控制请求的机制；如果 Platform 经常修改请求，视为控制配置或 Target envelope 不匹配。
+正常 firmware/control saturation 应发生在 portable firmware/control / modulator 内。Platform 的 safety clamp 只是硬件最后保护，不应成为正常工作时持续修改控制请求的机制；如果 Platform 经常修改请求，视为控制配置或 Target envelope 不匹配。
 
 
 #### 4.3.2 Phase Current、Position 与 Bus Observation
@@ -423,7 +415,7 @@ electrical offset
 
 Motor / commissioning 参数把机械 Rotor State 转换为 electrical rotor state。Sensorless 如果未来加入，应在 RotorStateEstimate 层与 encoder path 汇合，不伪装成 Hardware PositionObservation。
 
-Position acquisition 不得要求在 fast-control ISR 中阻塞等待 SPI。Position 可以异步发布 latest observation，但不得异步修改 estimator 状态；ControlRuntime 在 fast tick 边界统一消费。
+Position acquisition 不得要求在 fast-firmware/control ISR 中阻塞等待 SPI。Position 可以异步发布 latest observation，但不得异步修改 estimator 状态；ControlRuntime 在 fast tick 边界统一消费。
 
 Bus Observation 单独发布物理母线电压 [V] 及 timing / validity。VBUS 是 V1 必选物理量，不因为它和 NTC 等都可能来自 regular ADC 就建立万能 Analog/Sensor API。Thermal、Gate Driver diagnostic、Brake 等在出现真实需求前不进入 V1 公共合同。
 
@@ -577,7 +569,7 @@ one Motor
 
 即使一块物理控制板具有多个功率轴，本项目的一个 Target Configuration 也只选择其中一个电机通道参与当前 Runtime；第一版不加入 `axis_id`、axis array、multi-axis context 或 shared-resource manager。多电机系统由多个 Controller Node 通过通信层协调。
 
-`control/` 中 PI、Estimator、FOC 等算法模块仍按正常方式保持可实例化，但 Firmware V1 不承诺在同一 MCU Runtime 同时运行多个 Motor。
+`firmware/control/` 中 PI、Estimator、FOC 等算法模块仍按正常方式保持可实例化，但 Firmware V1 不承诺在同一 MCU Runtime 同时运行多个 Motor。
 
 所有 Target 都必须把 software safe-off 最终落实到真实 Gate Driver / 功率桥的已定义安全状态，并通过对应硬件验证确认，不能只把 `MOE=0`、某个 GPIO 电平或某个 HAL 返回值当作安全证明。
 
@@ -653,9 +645,9 @@ Fault condition gone
 
 通信恢复也不得自动等价于电机 Restart。
 
-## 6. interface
+## 6. communication/spec
 
-`interface/` 是 Firmware 与 Host 之间的共享合同，不属于任一端内部实现。
+`communication/spec/` 是 Firmware 与 Host 之间的共享合同，不属于任一端内部实现。
 
 分两层：
 
@@ -679,27 +671,27 @@ Byte-stream Port 或 CAN-frame Port
 Target硬件实现
 ```
 
-`protocol/`拥有线格式和事务状态，Firmware Communication只负责共享设备值与
+`communication/protocol/`拥有线格式和事务状态，Firmware Communication只负责共享设备值与
 RuntimeRequest/ticket/Completion绑定；Target负责具体UART DMA或CAN控制器。
 Device Port不泄漏Firmware类型，Runtime交接不加入链路身份。一个镜像以构建期静态选择唯一
 Frontend和控制所有者，不建立运行时探测或Transport Registry。
 
 UART、USB CDC、TCP 可以自然复用字节流 framing；CAN 是帧式链路，允许使用自己的分包/映射方式，但不得因此重新定义设备业务语义。
 
-第一阶段不预设 CANopen Object Dictionary，也不让旧协议对象编号反向定义新 Motor API。
+V1 不采用 CANopen Object Dictionary，也不让旧协议对象编号反向定义新 Motor API。
 
 自研协议沿用上述边界，区分 Object、Command、Telemetry 和 Event。对象写入也要经过 Device / Motor 的权限、范围与状态判断；可写目标最终形成完整业务请求，不直接改 Runtime 目标、PI 状态或功率寄存器。请求关联与会话内重复检测属于通信事务语义，不改变 Motor 状态所有权，也不承诺跨复位恰好执行一次。
 
-共享业务编号、结果与能力子集以[Motor Node Profile](interface/MOTOR_NODE_PROFILE_V1.md)为准；
-UART精确表示与事务规则以[UART Mapping](interface/UART_MAPPING_V1.md)为准；
-[设计说明](interface/PROTOCOL_DESIGN.md)解释边界，不重复维护线格式。协议实现和实物范围分别验收，
+共享业务编号、结果与能力子集以[Motor Node Profile](communication/spec/MOTOR_NODE_PROFILE_V1.md)为准；
+UART精确表示与事务规则以[UART Mapping](communication/spec/UART_MAPPING_V1.md)为准；
+[设计说明](communication/spec/PROTOCOL_DESIGN.md)解释边界，不重复维护线格式。协议实现和实物范围分别验收，
 不能由合同冻结推断已接入串口或完成调度验证；Device Contract继续拥有设备业务语义。
 
 ## 7. Host
 
 Host 是第一方设备应用，不是通用上位机平台。
 
-以下是后续第一方 Qt Host 的技术基线与边界，不是展示版本的前置条件。控制基线使用现成 VOFA；自研协议阶段先提供最小 PC 协议客户端与记录工具，VOFA 适配按实际需要接入。配置、通道映射和操作说明由 `host/` 保存，设备语义仍由 `interface/` 定义。
+当前 Host 提供协议客户端、记录分析和 VOFA 数据桥；Qt GUI 尚未实现。以下技术基线约束实际 GUI 接入时的依赖方向，不要求预建空模块。配置、通道映射和操作入口由 `communication/host/` 保存，设备语义由 `communication/spec/` 定义。
 
 首选技术基线：
 
@@ -730,7 +722,7 @@ UART / USB / CAN / TCP
 - GUI 不直接拥有串口、CAN 或协议状态机；
 - Protocol Client 不依赖具体 Widget；
 - Transport 不理解 Start、Target、Fault 等 Motor 业务语义；
-- Host 与 Firmware 共同遵守 `interface/`；
+- Host 与 Firmware 共同遵守 `communication/spec/`；
 - Host 核心行为应可通过 mock / headless test 验证，不依赖人工点 GUI；
 - VOFA、Serial Studio、PlotJuggler、Jupyter 可以辅助观测和分析，但不是 Device Contract 权威；
 - 不预建插件系统、通用 Dashboard 编辑器、通用协议编辑器或多厂家设备平台。

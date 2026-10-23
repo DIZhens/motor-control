@@ -37,7 +37,7 @@
           <bCustSvd>0</bCustSvd>
           <UseEnv>0</UseEnv>
           <BinPath></BinPath>
-          <IncludePath></IncludePath>
+          <IncludePath>../platform;../runtime;../communication;../../../control/commissioning</IncludePath>
           <LibPath></LibPath>
           <RegisterFilePath></RegisterFilePath>
           <DBRegisterFilePath></DBRegisterFilePath>
@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G431xx,BLDC_G431_RUNTIME_ENTRY,BLDC_G431_FINITE_RUN,BLDC_G431_FREERTOS</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../runtime;../../../app/motor;../../../../protocol/uart_v1;../../../../protocol/can_v1;../../../../protocol/common;../../../app/communication;../../../../protocol/ports;../../../app/system_runtime;../../../../control;..\..\..\third_party\FreeRTOS\Source\include;..\..\..\third_party\FreeRTOS\Source\portable\RVDS\ARM_CM4F</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform;../runtime;../../../motor;../../../../communication/protocol/uart;../../../../communication/protocol/can;../../../../communication/protocol/device;../communication;../../../../communication/protocol/transport;../../../control;../../../third_party/FreeRTOS/Source/include;../../../third_party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../platform;../../../control/commissioning</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -354,7 +354,7 @@
               <MiscControls></MiscControls>
               <Define></Define>
               <Undefine></Undefine>
-              <IncludePath></IncludePath>
+              <IncludePath>../platform;../runtime;../communication;../../../control/commissioning</IncludePath>
             </VariousControls>
           </Aads>
           <LDads>
@@ -463,12 +463,12 @@
             <File>
               <FileName>dma.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Core\Src\dma.c</FilePath>
+              <FilePath>../Core/Src/dma.c</FilePath>
             </File>
             <File>
               <FileName>stm32g4xx_hal_timebase_tim.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Core\Src\stm32g4xx_hal_timebase_tim.c</FilePath>
+              <FilePath>../Core/Src/stm32g4xx_hal_timebase_tim.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -678,7 +678,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Runtime</GroupName>
+          <GroupName>Application/User/Target Integration</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -724,7 +724,7 @@
                   <MiscControls></MiscControls>
                   <Define></Define>
                   <Undefine></Undefine>
-                  <IncludePath></IncludePath>
+                  <IncludePath>../platform;../runtime;../communication;../../../control/commissioning</IncludePath>
                 </VariousControls>
               </Cads>
               <Aads>
@@ -742,7 +742,7 @@
                   <MiscControls></MiscControls>
                   <Define></Define>
                   <Undefine></Undefine>
-                  <IncludePath></IncludePath>
+                  <IncludePath>../platform;../runtime;../communication;../../../control/commissioning</IncludePath>
                 </VariousControls>
               </Aads>
             </GroupArmAds>
@@ -761,52 +761,52 @@
             <File>
               <FileName>cordic_math.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../runtime/cordic_math.c</FilePath>
+              <FilePath>../platform/cordic_math.c</FilePath>
             </File>
             <File>
               <FileName>target_communication.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../runtime/target_communication.c</FilePath>
+              <FilePath>../communication/target_communication.c</FilePath>
             </File>
             <File>
               <FileName>target_can_server.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../runtime/target_can_server.c</FilePath>
+              <FilePath>../communication/target_can_server.c</FilePath>
             </File>
             <File>
               <FileName>fdcan_frame_transport.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../runtime/fdcan_frame_transport.c</FilePath>
+              <FilePath>../communication/fdcan_frame_transport.c</FilePath>
             </File>
             <File>
               <FileName>target_system_runtime.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\runtime\target_system_runtime.c</FilePath>
+              <FilePath>../runtime/target_system_runtime.c</FilePath>
             </File>
             <File>
               <FileName>uart_dma_transport.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../runtime/uart_dma_transport.c</FilePath>
+              <FilePath>../communication/uart_dma_transport.c</FilePath>
             </File>
             <File>
               <FileName>target_motor_node_binding.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../runtime/target_motor_node_binding.c</FilePath>
+              <FilePath>../communication/target_motor_node_binding.c</FilePath>
             </File>
             <File>
               <FileName>target_core_server.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../runtime/target_core_server.c</FilePath>
+              <FilePath>../communication/target_core_server.c</FilePath>
             </File>
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Communication</GroupName>
+          <GroupName>Application/User/Device Binding</GroupName>
           <Files>
             <File>
               <FileName>motor_node_binding.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../app/communication/motor_node_binding.c</FilePath>
+              <FilePath>../communication/motor_node_binding.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -816,17 +816,17 @@
             <File>
               <FileName>core_protocol.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../../protocol/uart_v1/core_protocol.c</FilePath>
+              <FilePath>../../../../communication/protocol/uart/core_protocol.c</FilePath>
             </File>
             <File>
               <FileName>core_protocol_values.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../../protocol/uart_v1/core_protocol_values.c</FilePath>
+              <FilePath>../../../../communication/protocol/uart/core_protocol_values.c</FilePath>
             </File>
             <File>
               <FileName>core_server.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../../protocol/uart_v1/core_server.c</FilePath>
+              <FilePath>../../../../communication/protocol/uart/core_server.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -836,42 +836,42 @@
             <File>
               <FileName>can_codec.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../../protocol/can_v1/can_codec.c</FilePath>
+              <FilePath>../../../../communication/protocol/can/can_codec.c</FilePath>
             </File>
             <File>
               <FileName>can_server.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../../protocol/can_v1/can_server.c</FilePath>
+              <FilePath>../../../../communication/protocol/can/can_server.c</FilePath>
             </File>
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Validation</GroupName>
+          <GroupName>Validation/CAN Loopback</GroupName>
           <Files>
             <File>
               <FileName>can_loopback.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../validation/can_loopback.c</FilePath>
+              <FilePath>../validation/communication/can_loopback.c</FilePath>
             </File>
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/SystemRuntime</GroupName>
+          <GroupName>Application/User/System Runtime</GroupName>
           <Files>
             <File>
               <FileName>runtime_exchange.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../app/system_runtime/runtime_exchange.c</FilePath>
+              <FilePath>../runtime/runtime_exchange.c</FilePath>
             </File>
             <File>
               <FileName>runtime_parameters.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../app/system_runtime/runtime_parameters.c</FilePath>
+              <FilePath>../runtime/runtime_parameters.c</FilePath>
             </File>
             <File>
               <FileName>system_runtime.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\app\system_runtime\system_runtime.c</FilePath>
+              <FilePath>../runtime/system_runtime.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -922,7 +922,7 @@
                   <MiscControls></MiscControls>
                   <Define></Define>
                   <Undefine></Undefine>
-                  <IncludePath></IncludePath>
+                  <IncludePath>../platform;../runtime;../communication;../../../control/commissioning</IncludePath>
                 </VariousControls>
               </Cads>
               <Aads>
@@ -940,7 +940,7 @@
                   <MiscControls></MiscControls>
                   <Define></Define>
                   <Undefine></Undefine>
-                  <IncludePath></IncludePath>
+                  <IncludePath>../platform;../runtime;../communication;../../../control/commissioning</IncludePath>
                 </VariousControls>
               </Aads>
             </GroupArmAds>
@@ -949,22 +949,22 @@
             <File>
               <FileName>motor.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../app/motor/motor.c</FilePath>
+              <FilePath>../../../motor/motor.c</FilePath>
             </File>
             <File>
               <FileName>control_runtime.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../app/motor/control_runtime.c</FilePath>
+              <FilePath>../../../motor/control_runtime.c</FilePath>
             </File>
             <File>
               <FileName>rotor_alignment.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../app/motor/rotor_alignment.c</FilePath>
+              <FilePath>../../../control/commissioning/rotor_alignment.c</FilePath>
             </File>
           </Files>
         </Group>
         <Group>
-          <GroupName>Control</GroupName>
+          <GroupName>Application/User/Control</GroupName>
           <GroupOption>
             <CommonProperty>
               <UseCPPCompiler>0</UseCPPCompiler>
@@ -1010,7 +1010,7 @@
                   <MiscControls></MiscControls>
                   <Define></Define>
                   <Undefine></Undefine>
-                  <IncludePath></IncludePath>
+                  <IncludePath>../platform;../runtime;../communication;../../../control/commissioning</IncludePath>
                 </VariousControls>
               </Cads>
               <Aads>
@@ -1028,7 +1028,7 @@
                   <MiscControls></MiscControls>
                   <Define></Define>
                   <Undefine></Undefine>
-                  <IncludePath></IncludePath>
+                  <IncludePath>../platform;../runtime;../communication;../../../control/commissioning</IncludePath>
                 </VariousControls>
               </Aads>
             </GroupArmAds>
@@ -1037,32 +1037,32 @@
             <File>
               <FileName>position_estimator.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../../control/position_estimator.c</FilePath>
+              <FilePath>../../../control/position_estimator.c</FilePath>
             </File>
             <File>
               <FileName>current_measurement.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../../control/current_measurement.c</FilePath>
+              <FilePath>../../../control/current_measurement.c</FilePath>
             </File>
             <File>
               <FileName>foc_math.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../../control/foc_math.c</FilePath>
+              <FilePath>../../../control/foc_math.c</FilePath>
             </File>
             <File>
               <FileName>current_controller.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../../control/current_controller.c</FilePath>
+              <FilePath>../../../control/current_controller.c</FilePath>
             </File>
             <File>
               <FileName>electrical_angle.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../../control/electrical_angle.c</FilePath>
+              <FilePath>../../../control/electrical_angle.c</FilePath>
             </File>
             <File>
               <FileName>speed_controller.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../../control/speed_controller.c</FilePath>
+              <FilePath>../../../control/speed_controller.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -1072,22 +1072,22 @@
             <File>
               <FileName>tasks.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\third_party\FreeRTOS\Source\tasks.c</FilePath>
+              <FilePath>../../../third_party/FreeRTOS/Source/tasks.c</FilePath>
             </File>
             <File>
               <FileName>queue.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\third_party\FreeRTOS\Source\queue.c</FilePath>
+              <FilePath>../../../third_party/FreeRTOS/Source/queue.c</FilePath>
             </File>
             <File>
               <FileName>list.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\third_party\FreeRTOS\Source\list.c</FilePath>
+              <FilePath>../../../third_party/FreeRTOS/Source/list.c</FilePath>
             </File>
             <File>
               <FileName>port.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\..\third_party\FreeRTOS\Source\portable\RVDS\ARM_CM4F\port.c</FilePath>
+              <FilePath>../../../third_party/FreeRTOS/Source/portable/RVDS/ARM_CM4F/port.c</FilePath>
             </File>
           </Files>
         </Group>

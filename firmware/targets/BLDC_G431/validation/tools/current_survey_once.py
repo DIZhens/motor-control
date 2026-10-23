@@ -58,7 +58,7 @@ def prepare(build, output, gdb, expected=None):
         require(0x20000000 <= actual[name] < actual[name] + size <= 0x20008000, "电流往返地址越界")
         layout[name] = actual[name]
     report.update(current_survey_schema=2, current_survey_limits=LIMITS, current_survey_layout=layout,
-        current_survey_tool_sha256=loop.candidate.digest(Path(__file__)),
+        current_survey_tool_sha256=loop.candidate.digest(Path(__file__).resolve().parent / 'current_survey_once.py'),
         angle_survey_tool_sha256=loop.candidate.digest(Path(angle.__file__)))
     loop.common.save(output / "prepared.json", report)
     return report
@@ -72,7 +72,7 @@ class Session(loop.Session):
         frozen, _ = loop.load_prepared(prepared)
         require(frozen.get("current_survey_schema") == 2 and "current_survey_layout" in frozen,
             "旧候选没有本版定向包络，拒绝连接")
-        require(frozen["current_survey_tool_sha256"] == loop.candidate.digest(Path(__file__))
+        require(frozen["current_survey_tool_sha256"] == loop.candidate.digest(Path(__file__).resolve().parent / 'current_survey_once.py')
             and frozen["angle_survey_tool_sha256"] == loop.candidate.digest(Path(angle.__file__)),
             "电流往返工具已改变，请重新离线冻结")
         require(frozen.get("current_survey_limits") == LIMITS

@@ -121,7 +121,7 @@ main 使用 WFI 时，运行中 SWD 调试需按 RM0090 配置 DBGMCU_CR 的 DBG
 
 静态检查入口（从仓库根目录运行）：
 
-    python firmware/targets/ODRIVE_V36_405_M0/verify_target.py
+    python firmware/targets/ODRIVE_V36_405_M0/validation/tools/verify_target.py
 
 命令防护的 CPU 模型回归使用实际 ARMCC 编译的 validation 源码与 fake HCC/time。
 该检查只验证 mailbox、边界检查、单次使能和截止行为，不模拟 ADC/TIM/SPI 电气行为，

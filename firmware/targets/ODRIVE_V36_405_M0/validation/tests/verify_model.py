@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 tests = Path(__file__).resolve().parent
 workspace = tempfile.TemporaryDirectory(prefix="f405-validation-model-")
 temp = Path(workspace.name)
-shutil.copyfile(tests / "model.c", temp / "model.c")
+shutil.copyfile(tests / 'model.c', temp / "model.c")
 (temp / "model.sct").write_text(
     "LR_IROM1 0x08000000 0x00100000 {\n"
     " ER_IROM1 0x08000000 0x00100000 { .ANY (+RO) }\n"
@@ -22,7 +22,7 @@ from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS
 from unicorn.arm_const import UC_CPU_ARM_CORTEX_M4, UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_PC
 from elftools.elf.elffile import ELFFile
 
-root = tests.parent.parent
+root = Path(__file__).resolve().parents[2]
 bin_path = Path(os.environ.get("KEIL_ARMCC_BIN", r"D:\keil5\ARM\ARMCC\bin"))
 if not (bin_path / "armcc.exe").is_file():
     raise SystemExit("Set KEIL_ARMCC_BIN to the installed ARM Compiler 5 bin directory.")

@@ -1,3 +1,7 @@
+# 仅本地辅助文件
+/project_context.ps1
+/requirements-dev.txt
+
 # Python
 __pycache__/
 *.py[cod]
@@ -42,3 +46,13 @@ Thumbs.db
 *.tmp
 *.bak
 *~
+
+# G431 逐轮验证档案仅留本地；自动测试输入另存 tests/fixtures。
+/firmware/targets/BLDC_G431/validation/evidence/
+/firmware/targets/BLDC_G431/validation/history/
+/firmware/targets/BLDC_G431/validation/CURRENT_CHECK.md
+/firmware/targets/BLDC_G431/validation/CURRENT_HOLD.md
+/firmware/targets/BLDC_G431/validation/DUTY_CHECK.md
+/firmware/targets/BLDC_G431/validation/OPEN_LOOP.md
+/firmware/targets/BLDC_G431/validation/PROTECTION_PROBE.md
+/firmware/targets/BLDC_G431/validation/PWM_TIMING.md

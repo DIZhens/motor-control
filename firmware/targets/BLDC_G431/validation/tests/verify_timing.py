@@ -110,4 +110,4 @@ def run(image):
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="g431-timing-model-") as temp:
-        run(compile_image(Path(temp), [ROOT / "validation/timing_probe.c"], ["PLATFORM_MODEL_TIMING_PROBE"]))
+        run(compile_image(Path(temp), [ROOT / "validation/timing/timing_probe.c"], ["PLATFORM_MODEL_TIMING_PROBE"]))
