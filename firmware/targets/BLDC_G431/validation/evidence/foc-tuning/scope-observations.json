@@ -1,0 +1,107 @@
+{
+  "status": "STATIC_SCOPE_OBSERVATIONS_NOT_A_CAUSE_OR_PERFORMANCE_PASS",
+  "parent_checkpoint": "99ce627",
+  "setup": {
+    "scope": "正点原子 DS100，按前序指引电池供电、仅CHA",
+    "supply": "操作者确认原12.0 V / 0.20 A静态供电准备完成；ST-Link 3V3断开，三相及编码器保持，未发运动命令",
+    "ground": "按指引沿用同一板上GND，实际探头回路长度没有独立照片核对",
+    "screen_probe_factor": "X1",
+    "physical_probe_switch": "按指引X1，未由接线照片独立核对；VREF直流读数支持倍率数量级一致"
+  },
+  "observations": [
+    {
+      "point": "尖端与地夹接同一GND",
+      "source": "用户报告，无屏幕照片",
+      "time_scale_us_div": 2,
+      "vertical_scale_mV_div": 20,
+      "coupling": "按指引AC",
+      "Vmax_uV": 765,
+      "Vmin_uV": -757,
+      "Vamp_uV": 761,
+      "Vp_p_mV": 1.52
+    },
+    {
+      "point": "TP10 / VREF+",
+      "source": "scope-vref-fast.jpg",
+      "time_scale_us_div": 2,
+      "vertical_scale_mV_div": 20,
+      "coupling": "按指引AC",
+      "Vp_p_mV": 24.4,
+      "automatic_frequency_kHz": 121,
+      "additional_user_photo_limits_mV": {
+        "max": 14.5,
+        "min": -9.89
+      },
+      "note": "用户撤回先前的一摸一样描述，以下以更正后照片为准；Vmax/Vmin来自另一张本地留存照片"
+    },
+    {
+      "point": "TP10 / VREF+ DC",
+      "source": "用户报告，无屏幕照片",
+      "vertical_scale_V_div": 1,
+      "coupling": "按指引DC",
+      "reported_range_V": [
+        3.31,
+        3.32
+      ],
+      "note": "直流显示变化不作为纹波峰峰值"
+    },
+    {
+      "point": "TP10 / VREF+",
+      "source": "scope-vref-slow.jpg",
+      "time_scale_us_div": 200,
+      "vertical_scale_mV_div": 20,
+      "coupling": "AC菜单可见",
+      "Vp_p_mV": 30.4,
+      "automatic_frequency_kHz": 115,
+      "screen_status": "T'D"
+    },
+    {
+      "point": "TP12 / 3V3",
+      "source": "scope-3v3-slow.jpg",
+      "time_scale_us_div": 200,
+      "vertical_scale_mV_div": 20,
+      "coupling": "AC菜单可见",
+      "Vp_p_mV": 30.4,
+      "automatic_frequency_kHz": 118,
+      "screen_status": "STOP"
+    }
+  ],
+  "photos": [
+    {
+      "file": "scope-vref-fast.jpg",
+      "sha256": "7f47a6fa24dce0eb882ebe9212c8d7f8a690e2148114ef6ee8e3cfaf8c1c72e1"
+    },
+    {
+      "file": "scope-vref-slow.jpg",
+      "sha256": "533a6ad7014d29d129ed846add1aefd120484eeebf786c64045702d0a498d31e"
+    },
+    {
+      "file": "scope-3v3-slow.jpg",
+      "sha256": "3fe50f71a70d9fd6c3aa8e5c5747479f8923a59eeac02b1a4157c63cc92f5f99"
+    }
+  ],
+  "debug_readback": {
+    "result": "未完成",
+    "reason": "No debug probe detected",
+    "flash_writes": 0,
+    "resets": 0,
+    "motion_commands": 0,
+    "interpretation": "本轮不能声称已重新读回镜像或实时MOE/六路状态；示波器为人工静态测量"
+  },
+  "firmware_identity": {
+    "normal_source_build_id": "0x4b82ab7e16b61eed",
+    "last_installed_diagnostic_build_id": "0x5770b102921a0651",
+    "reflashed": false,
+    "production_source_changed": false
+  },
+  "interpretation": [
+    "VREF+直流约3.3 V；两点在同一慢时基下的屏幕峰峰值均约30.4 mV，未见VREF+显著高于3V3。",
+    "当前约2 ms显示窗口没有明显的大幅成簇包络，不排除更慢、更小或偶发变化。",
+    "两个测点先后测量，不能证明瞬时相关或共同源；峰峰值不能直接与ADC原码RMS互换。",
+    "快速窗和慢速窗的峰峰值可因窗口、采样及显示方式而不同，不能据24.4到30.4 mV宣布电源变差。",
+    "自动频率105至121 kHz不作为Buck开关频率或其工作模式的证明。",
+    "没有定位到具体PCB布局缺陷；既有Kelvin、地参考、keepout与去耦设计事实不因本次纹波观察而作废。",
+    "参考偏置与ADC参考同源，需结合频率与路径响应；本次未证明纹波造成ADC共同扰动或速度误差。"
+  ],
+  "next": "停止扩散静态测点，结合原码离线评估电流滤波、第三相路由和限幅数据。"
+}

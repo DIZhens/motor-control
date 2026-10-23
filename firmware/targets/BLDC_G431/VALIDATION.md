@@ -84,6 +84,24 @@ TP2/TP3 是放大前输入、零电流约 0.1014 V，内部放大后才约 1.623
 [模型曲线](validation/evidence/foc-tuning/frontend-noise-model.png)及 Python/MATLAB 复算
 均为离线分析，未修改固件或新增实测；具体模拟来源仍待有区分能力的定点测量。
 
+[静态电源波形](validation/evidence/foc-tuning/scope-observations.json)记录操作者在原 12 V
+静态供电下的 DS100 测量：短地底噪报告约 1.52 mVpp，VREF+ 直流报告 3.31～3.32 V；
+VREF+ 快窗约 24.4 mVpp，200 µs/格下 VREF+ 与 3V3 均约 30.4 mVpp，保留三张原始照片。
+两个测点先后测量，不证明瞬时相关；自动测频不用于认定 Buck 工作频率，纹波不等于布局
+缺陷、ADC 误差或速度误差根因。本轮只读镜像检查因未识别到探针而未完成，没有烧录、
+复位或发送采集/运动命令；板上身份仍按最后安装记录，不冒充新鲜 MOE/镜像读回。
+
+[电流低通与第三相路由评估](validation/evidence/foc-tuning/current-filter-evaluation.json)
+用两份保存原码各剔除相同前 128 点后比较 384 点。12 V 条件下，α 误差标准差从 7.229
+名义 mA 经 1 kHz 离散一阶低通降至 4.059 mA，低频群延迟约 119.35 µs，200 Hz 附加
+相位约 −8.43°；群延迟不是 CPU 执行时间。200/500/1000/2000 Hz 共八组序列与 32 个
+频响点经 Python/MATLAB 独立复算一致，[比较图](validation/evidence/foc-tuning/current-filter-evaluation.png)
+为离线回放，不证明闭环裕度或速度性能。G431 只有两个 ADC；A/OPAMP3 到 ADC2 CH18，
+与 B/OPAMP2 的 ADC2 CH16 共用 ADC，增加 rank 不等于三相同一采样孔径。A 的现有增益
+占位值也未作为方向确认。当前正式实现仍为 B/C 同步采样、无数字电流低通、5 ms 速度
+低通；本轮未修改固件、PI、限流或采样时序。下一增量拟单独评估可旁路的 1 kHz 电流
+控制反馈低通，保护继续使用原始校正相电流，第三相与增流另行对照；P6 性能尚未通过。
+
 | 能力 | 已有证据 | 当前限制 |
 | --- | --- | --- |
 | 默认关断与启动门控 | Run 逻辑供电校验；真实 ARM 装配模型覆盖反馈、校零及初始化失败 | 上电不自动启转；未就绪拒绝，校零失败不自动重采 |
