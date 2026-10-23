@@ -103,7 +103,7 @@ VREF+ 快窗约 24.4 mVpp，200 µs/格下 VREF+ 与 3V3 均约 30.4 mVpp，保�
 控制反馈低通，保护继续使用原始校正相电流，第三相与增流另行对照；P6 性能尚未通过。
 
 [1 kHz 控制反馈低通候选](validation/evidence/foc-tuning/current-filter-candidate.json)已完成
-离线实现与冻结，尚未安装到板上。算法位于 `control/current_feedback_filter.h`，Runtime
+离线实现、冻结、逻辑供电安装和一次有限运行。算法位于 `control/current_feedback_filter.h`，Runtime
 只在 RUN 控制输入支路更新 alpha/beta；0 旁路、1 直通，首有效样本初始化，Stop/故障
 清历史。原始校正相电流与快速过流、采样/提交时序、PI、限幅、保护及协议对象布局保持。
 RUN 发布 PI 实际采用的滤后 DQ，IDLE/Stop 观测仍用未滤波电流。
@@ -112,7 +112,26 @@ FOC ARM 模型 47 组覆盖旧/新节拍、原码回放、旁路逐位一致、�
 证明。四 Target Rebuild 全部零错误零警告；Run 实际 Flash 加载/RAM 为 67080/21104 B，较原正常
 构建增加 352/16 B，构建身份 `0x137624c44b3f866e`。228 项保守输入闭包仅算法新头、
 Runtime 源/头及 Profile 四项变化；独立离线 GDB 核对加载镜像系数、PI 和边界值一致。
-安装后先检查默认关断；有限运行及实际执行时序、滤波对速度性能的收益仍待同镜像实测。
+[安装与默认关断](validation/evidence/foc-tuning/current-filter-install.json)独立读回全部 67080 B
+匹配，4096 点校零 READY，UART 身份与推进时间正确，运动请求为零，前后 MOE0/六路 LOW。
+安装前探针连接失败和主机快照检查误判均保留原日志；未因此重复烧录或自动清故障。
+
+[同参数有限对照](validation/evidence/foc-tuning/current-filter-comparison.json)只执行一次
++40 rpm、约 1.2 秒 Stop；电流 PI 0.5/600、速度 PI 0.002/0.008 及全部原边界不变。
+250 Hz 同一域连续 480 帧无丢失，通信错误增量为零；停机时无故障、首因为空、六路关闭，
+前后完整 Flash 一致，操作者报告无异常。首次主机串口打开阻塞时尚未提交任何命令，
+只读证明 Start/电机命令均为零；操作者重接串口并确认曾复位/重开电源后，重新前检才执行。
+
+与原 Ki600/相同速度 PI 的历史单次记录相比，尾部 20% 速度峰峰值 21.75→17.64 rpm、
+标准差 4.844→4.711 rpm，仍未观察到持续进入 ±5% 误差带。RUN 的电流反馈口径由原始
+DQ 改为滤后 DQ，所见电流误差变小不能当成独立物理精度提升；±5% 仅沿用描述约定，
+不替换任务书验收门槛。单点电流跟踪误差峰值反而
+增大。不同启动及初始角度、仅一次有限窗口，不足以声明显著因果收益。对照曲线与导出
+样本见[图](validation/evidence/foc-tuning/current-filter-comparison.png)及
+[CSV](validation/evidence/foc-tuning/current-filter-comparison.csv)。相同 0.2～1.196 秒窗口按整数
+控制时间筛选，14 阶角度分量幅度约 4.167→4.179 rpm，未被低通消除；仍不能据此区分
+真实机械纹波与编码器周期误差。本次没有实际时序故障，
+但不代替完整 IRQ/WCET、长期稳定性和独立转速验证；P6 速度性能仍为 FAIL。
 
 | 能力 | 已有证据 | 当前限制 |
 | --- | --- | --- |

@@ -1,5 +1,5 @@
 {
-  "status": "OFFLINE_CANDIDATE_PASS_INSTALL_AND_POWERED_COMPARISON_PENDING",
+  "status": "INSTALLED_LOGIC_AND_FINITE_RUN_FUNCTIONAL_PASS_P6_PERFORMANCE_FAIL",
   "parent_checkpoint": "33b6e05",
   "purpose": "单独评估1kHz alpha/beta电流控制反馈低通，不同时增加第三相、扩大电流或重调PI。",
   "identity": {
@@ -662,18 +662,22 @@
     "firmware\\targets\\BLDC_G431\\MDK-ARM\\BLDC_control V1.uvoptx": "bb0411550fa2074e91479b0d3c73c9fe894a0a3b4b520566d9bc4bbb6cefbdef"
   },
   "hardware": {
-    "installed": false,
-    "board_last_installed_build": "0x5770b102921a0651",
-    "fresh_board_state_verified": false,
-    "usb_inventory": "本轮准备阶段未识别到ST-Link或USB串口，不据此假定现场供电或接线。",
-    "motion_commands": 0,
-    "resets": 0,
-    "flash_writes": 0
+    "installed": true,
+    "board_last_installed_build": "0x137624c44b3f866e",
+    "fresh_board_state_verified": true,
+    "install_evidence": "current-filter-install.json",
+    "finite_run_evidence": "current-filter-comparison.json",
+    "flash_writes": 1,
+    "installation_software_resets": 1,
+    "operator_reset_or_power_cycle": true,
+    "motion_commands": 2,
+    "start_commands": 1,
+    "state": "单次+40rpm已Stop，六路LOW，全部记录已读回；允许操作者关OUTPUT，不假定随后仍保持供电。"
   },
   "next": {
-    "first": "操作者完成退压后纯逻辑3V3与UART连接，再安装冻结镜像并只检查默认关断和通信身份。",
-    "powered_comparison": "安装与默认关断通过后，另行确认原12V/0.20A条件；拟单次+40rpm约1.2秒Stop，与已有Ki600/速度PI0.002及0.008记录比较；全部原边界不变，无自动重试。",
-    "measurement": "比较电流跟踪和速度误差，不仅看波形变平滑；性能不通过仍保留FAIL，第三相和增流另行评估。"
+    "first": "本候选已安装并完成一次+40rpm有限对照，不再安排安装/默认关断旧步骤。",
+    "measurement": "不继续盲目下调截止频率或扩大Iq。先用本轮与既有记录复核残余角度阶次和Iq请求关系，再选择能区分编码器周期误差、电角映射或真实转矩纹波的最小试验；独立实际转速未验证。",
+    "powered_comparison": "本轮已完成；未批准下一次自动Start或重试。"
   },
   "stage_boundary": "P6速度性能仍未通过；本轮不改写250Hz正式点或500Hz 1.92%原失败。未推送或合并。"
 }
