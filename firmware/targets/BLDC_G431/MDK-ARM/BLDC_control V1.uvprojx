@@ -754,6 +754,11 @@
               <FilePath>../runtime/target_runtime.c</FilePath>
             </File>
             <File>
+              <FileName>g431_control_profile.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../runtime/g431_control_profile.c</FilePath>
+            </File>
+            <File>
               <FileName>cordic_math.c</FileName>
               <FileType>1</FileType>
               <FilePath>../runtime/cordic_math.c</FilePath>

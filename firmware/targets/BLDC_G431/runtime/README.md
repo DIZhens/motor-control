@@ -55,6 +55,12 @@ Timing 使用 `BLDC_G431_TIMING_ENTRY`。`main()` 和 IRQ 的 USER CODE 选择�
 
 ## 有限运行入口
 
+正式 Run 的 `ControlRuntimeConfig` 位于 `g431_control_profile.c/.h`，集中持有采样节拍、
+零偏窗口、电角映射、默认电流/速度 PI 和数值限制。该 Target 装配还持有配置绑定的私有
+CORDIC 上下文；启动时初始化后端，运行期继续由原实时所有者串行使用。`target_runtime.c`
+仍负责硬件装配、交接、发布和独立守卫，从同一配置初始化 `RuntimeParameters` 的默认速度 PI。
+Observe 在入口内保留独立的关断配置，不链接 Run Profile，也不获得运行许可。
+
 Run 使用既有实物记录中的 7 极对、编码器正方向和 0.0244434178 圈电角度偏置，
 B/C 电流在本启动零偏校正后取反、重构 A 相。静态记录的约 1.236 V / 0.394 名义 A
 对应约 3.14 Ω，与独立绕组测得的每相约 3.1 Ω 相符，因此用于受限功能试验；
