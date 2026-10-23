@@ -16,6 +16,15 @@
 旧功率包与保护注入要求电机三相断开；有限开环仅按[专用流程](validation/OPEN_LOOP.md)接电机。
 本页是证据索引，不是待执行的带电操作队列。下方逐次记录中的“当前”“下一步”只指当时的镜像和阶段。
 
+## 协议拆分与CAN静态接入增量
+
+[P0基线](validation/evidence/protocol-can/p0.json)核对已合并UART源闭包、冻结镜像与旧模型来源。
+[P1迁移](validation/evidence/protocol-can/p1.json)将UART实现及字节流合同移入顶层`protocol/`；
+原七份生产源码/头内容不变，Codec 12组、Server/Client 34组、DMA 11组通过，四个Target
+全量构建均零错误零警告。三个Validation HEX与基线完全相同；Run的Flash 66648 B、静态RAM
+21184 B不变，可装载内容仅build ID的8字节常量改变，其余逐字节相同。
+本增量未连接设备或烧录，无新增UART实物、CAN或调优证据；旧实物记录仍绑定原镜像。
+
 ## 当前能力与证据矩阵
 
 | 能力 | 已有证据 | 当前限制 |

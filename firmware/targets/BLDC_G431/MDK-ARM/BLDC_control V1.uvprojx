@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G431xx,BLDC_G431_RUNTIME_ENTRY,BLDC_G431_FINITE_RUN,BLDC_G431_FREERTOS</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../runtime;../../../app/motor;../../../app/communication;../../../app/system_runtime;../../../../control;..\..\..\third_party\FreeRTOS\Source\include;..\..\..\third_party\FreeRTOS\Source\portable\RVDS\ARM_CM4F</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../../../platform_contract;../runtime;../../../app/motor;../../../../protocol/uart_v1;../../../../protocol/ports;../../../app/system_runtime;../../../../control;..\..\..\third_party\FreeRTOS\Source\include;..\..\..\third_party\FreeRTOS\Source\portable\RVDS\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -776,22 +776,22 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Communication</GroupName>
+          <GroupName>Protocol/UART V1</GroupName>
           <Files>
             <File>
               <FileName>core_protocol.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../app/communication/core_protocol.c</FilePath>
+              <FilePath>../../../../protocol/uart_v1/core_protocol.c</FilePath>
             </File>
             <File>
               <FileName>core_protocol_values.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../app/communication/core_protocol_values.c</FilePath>
+              <FilePath>../../../../protocol/uart_v1/core_protocol_values.c</FilePath>
             </File>
             <File>
               <FileName>core_server.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../../../app/communication/core_server.c</FilePath>
+              <FilePath>../../../../protocol/uart_v1/core_server.c</FilePath>
             </File>
           </Files>
         </Group>

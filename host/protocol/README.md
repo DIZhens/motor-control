@@ -66,7 +66,7 @@ Host先排出串口驱动已有字节，不能以Python调度/日志延迟推断
 ## 离线验证
 
 ```powershell
-.\.venv\Scripts\python.exe -X utf8 firmware/app/communication/tests/verify_core_server.py
+.\.venv\Scripts\python.exe -X utf8 protocol/tests/uart_v1/verify_core_server.py
 ```
 
 同一测试在真实ARM Server/Codec、Runtime交接和参数模型上运行Python Client，覆盖应答丢失

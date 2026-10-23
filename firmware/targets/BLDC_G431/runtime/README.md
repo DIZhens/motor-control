@@ -114,7 +114,7 @@ Run已装配[SystemRuntime交接](../../../app/system_runtime/README.md)：非�
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_runtime.py --finite-run --exchange
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_system_runtime.py
 .\.venv\Scripts\python.exe -X utf8 firmware/targets/BLDC_G431/runtime/tests/verify_uart_dma.py
-.\.venv\Scripts\python.exe -X utf8 firmware/app/communication/tests/verify_core_server.py
+.\.venv\Scripts\python.exe -X utf8 protocol/tests/uart_v1/verify_core_server.py
 ```
 
 任务职责、栈预算、四个独立时间域及异常归属见[RTOS集成合同](RTOS_INTEGRATION.md)。

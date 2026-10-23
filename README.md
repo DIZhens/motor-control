@@ -13,6 +13,7 @@
 
 ```text
 control/      可移植电机控制算法
+protocol/     可移植协议实现与链路端口合同
 interface/    Firmware / Host 共享的设备与协议合同
 firmware/     MCU 固件、Hardware Capability Contract 与各板 Target
 host/         Python 协议客户端、记录工具和验证用 VOFA 资料

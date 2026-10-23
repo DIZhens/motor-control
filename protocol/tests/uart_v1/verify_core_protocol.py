@@ -18,8 +18,9 @@ from unicorn import Uc, UC_ARCH_ARM, UC_MODE_MCLASS, UC_MODE_THUMB, __version__ 
 from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_SP, UC_CPU_ARM_CORTEX_M4
 
 
-COMM = Path(__file__).resolve().parents[1]
-REPO = COMM.parents[2]
+TESTS = Path(__file__).resolve().parent
+REPO = TESTS.parents[2]
+COMM = REPO / 'protocol/uart_v1'
 sys.path.insert(0, str(REPO))
 from host.protocol import codec as py
 
@@ -87,7 +88,7 @@ def run_tests(temporary):
     scatter.write_text('LR_IROM1 0x08000000 0x00040000 {\n'
                        ' ER_IROM1 0x08000000 0x00040000 { .ANY (+RO) }\n'
                        ' RW_IRAM1 0x20000000 0x00008000 { .ANY (+RW +ZI) }\n}\n')
-    sources = [COMM / 'core_protocol.c', COMM / 'core_protocol_values.c', COMM / 'tests/core_protocol_model.c']
+    sources = [COMM / 'core_protocol.c', COMM / 'core_protocol_values.c', TESTS / 'core_protocol_model.c']
     objects = []
     for source in sources:
         obj = temporary / (source.stem + '.o')

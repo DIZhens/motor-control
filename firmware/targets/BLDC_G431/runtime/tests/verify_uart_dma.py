@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix='g431-uart-dma-') as directory:
     scatter.write_text('LR 0x08000000 0x40000 { ER 0x08000000 0x40000 { .ANY (+RO) } '
                        'RW 0x20000000 0x8000 { .ANY (+RW +ZI) } }')
     command = [COMPILER/'armcc.exe', '--cpu=Cortex-M4.fp', '--c99', '-O2', '--split_sections', '-g', '-DSTM32G431xx', '-DUSE_HAL_DRIVER']
-    for include in [TARGET/'runtime', TARGET/'Core/Inc', ROOT/'firmware/app/communication',
+    for include in [TARGET/'runtime', TARGET/'Core/Inc', ROOT/'protocol/ports',
                     TARGET/'Drivers/STM32G4xx_HAL_Driver/Inc', TARGET/'Drivers/CMSIS/Include',
                     TARGET/'Drivers/CMSIS/Device/ST/STM32G4xx/Include']:
         command += ['-I', include]

@@ -13,8 +13,9 @@ from elftools.elf.elffile import ELFFile
 from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE
 from unicorn.arm_const import UC_CPU_ARM_CORTEX_M4, UC_ARM_REG_R0, UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_PC
 
-COMM=Path(__file__).resolve().parents[1]
-ROOT=COMM.parents[2]
+ROOT=Path(__file__).resolve().parents[3]
+COMM=ROOT/'protocol/uart_v1'
+PORTS=ROOT/'protocol/ports'
 sys.path.insert(0,str(ROOT))
 from host.protocol import codec as py
 ARM=Path(os.environ.get('KEIL_ARMCC_BIN',r'D:\keil5\ARM\ARMCC\bin'))
@@ -426,7 +427,7 @@ def main():
         for source in sources:
             obj=temp/(source.stem+'.o');objects.append(obj)
             command=[ARM/'armcc.exe','--cpu=Cortex-M4.fp','--c99','-O3','-Otime','--split_sections','-g']
-            for include in [COMM,ROOT/'firmware/app/motor',ROOT/'firmware/app/system_runtime']:command+=['-I',include]
+            for include in [COMM,PORTS,ROOT/'firmware/app/motor',ROOT/'firmware/app/system_runtime']:command+=['-I',include]
             if source.name in ('target_core_server.c','target_core_mapping_model.c'):
                 command+=['-DBLDC_G431_FINITE_RUN','-DSTM32G431xx','-DUSE_HAL_DRIVER']
                 for include in [target/'runtime',target/'Core/Inc',ROOT/'firmware/platform_contract',

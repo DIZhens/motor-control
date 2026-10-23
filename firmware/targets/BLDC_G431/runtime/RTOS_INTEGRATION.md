@@ -90,7 +90,7 @@ PWM/ADC，HAL/RTOS tick不参与FOC dt，后台1ms睡眠上限不是调度延迟
 
 ## 字节流与后台边界
 
-[Byte-stream合同](../../../app/communication/byte_stream_transport.h)不含HAL/RTOS/Motor类型，
+[Byte-stream合同](../../../../protocol/ports/byte_stream_transport.h)不含HAL/RTOS/Motor类型，
 由Target链接期静态实现。事件Sink仅作对应上下文的有界通知；事件可重复/合并/延迟。
 权威事实为DMA生产位置、后台消费位置、连续性epoch和实际TX所有权。
 
