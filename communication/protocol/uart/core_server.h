@@ -25,14 +25,14 @@ typedef struct {
     uint32_t session, highest_sequence, now_ms, response_count, cache_next;
     uint32_t response_high_water, message_errors;
     bool failed;
-    volatile uint32_t active_epoch;
-    uint32_t epoch_counter, event_count, event_sequence, event_drop_count, event_high_water;
+    uint32_t subscription_id; /* 通用订阅身份；仅本Server持有与Session的关联。 */
+    uint32_t event_count, event_sequence, event_drop_count, event_high_water;
     uint32_t previous_state, previous_faults;
     bool snapshot_valid, telemetry_domain_valid, telemetry_exhausted;
     uint32_t telemetry_first, telemetry_sequence;
     /* 复用下方既有wire工作区；Mailbox仍是唯一待发真值，不缓存第二份样本。 */
     bool telemetry_wire_valid;
-    uint32_t telemetry_wire_epoch, telemetry_wire_produced, telemetry_wire_generation;
+    uint32_t telemetry_wire_subscription, telemetry_wire_produced, telemetry_wire_generation;
     size_t telemetry_wire_length;
     CoreQueuedEvent events[CORE_EVENT_CAPACITY];
     CorePendingRequest ordinary, stop;

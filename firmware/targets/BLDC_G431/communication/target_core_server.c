@@ -8,8 +8,6 @@
 #include "main.h"
 
 static CoreServer s_server;
-uint32_t target_core_server_telemetry_epoch(void)
-{ return target_runtime_session_permitted() ? s_server.active_epoch : 0U; }
 void target_core_server_start(void) { core_server_init(&s_server); }
 void target_core_server_service(void)
 {

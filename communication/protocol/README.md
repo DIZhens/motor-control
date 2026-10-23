@@ -121,11 +121,13 @@ Header序号、运行时ticket与Motor状态各自独立。Server从有效快照
 丢最旧并计数，不替代实时故障路径；新会话建立观察基准，不凭初次读取虚构变化。
 
 TX依次选择关键终态、普通终态、Event、最新Telemetry。Telemetry只peek原单槽Mailbox，
-串口接受后才退休；BUSY不取走，不在Server另建待发遥测槽。Telemetry任务独占产生计数，
-值携epoch及该epoch首个产生计数；Communication独占Session与线上序号映射基准。
+串口接受后才退休；BUSY不取走，不在Server另建待发遥测槽。SystemRuntime分配协议无关的
+subscription身份，Telemetry任务独占全局产生计数；值携subscription及其首个产生计数。
+Server经Device Port建立/替换/结束订阅，独占Session与线上序号映射；幂等OPEN不重建订阅。
+新订阅清旧槽，Producer在复制后复核身份，迟到旧值不发布；无订阅不生产。
 既有130 B wire工作区保留上次编码的身份和长度；同一Mailbox值在BUSY期间不重复编码，
 覆盖、换会话/配置或响应/Event/IN_PROGRESS改写工作区后立即失效，不能发送已被覆盖的旧值。
-配置切换保持同会话序号单调，旧epoch/旧generation值包括抢占后迟到的值均丢弃；Host按
+配置切换保持同会话序号单调，旧subscription/旧generation值均丢弃；Host按
 Session/config域核对缺口。Event/Telemetry各自耗尽时停止该类发送，新会话才重置，不改Motor。
 
 一次Target服务先用`core_server_poll`检查截止/完成并处理RX，再排空本轮新增Completion，

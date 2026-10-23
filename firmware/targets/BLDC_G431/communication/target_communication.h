@@ -7,5 +7,4 @@
 void target_communication_hardware_init(void);
 bool target_communication_start(void);
 void target_communication_service(void);
-uint32_t target_communication_telemetry_epoch(void);
 #endif

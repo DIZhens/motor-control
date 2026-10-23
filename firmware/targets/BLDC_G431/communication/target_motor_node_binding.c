@@ -17,9 +17,11 @@ RuntimeExchangeResult motor_node_binding_target_submit(const RuntimeRequest *req
 { return target_runtime_submit_request(request, ticket, cancelled); }
 bool motor_node_binding_target_completion(RuntimeCommandCompletion *value)
 { return target_runtime_pop_completion(value); }
-bool motor_node_binding_target_permitted(void) { return target_runtime_session_permitted(); }
+bool motor_node_binding_target_permitted(void) { return target_runtime_integrity_ok(); }
 void motor_node_binding_target_fail_closed(RuntimeInternalFaultReason reason)
 { target_runtime_fail_closed(reason); }
+uint32_t motor_node_binding_target_telemetry_begin(void) { return system_runtime_telemetry_begin(); }
+void motor_node_binding_target_telemetry_end(void) { system_runtime_telemetry_end(); }
 bool motor_node_binding_target_telemetry_peek(RuntimeTelemetryValue *value)
 { return system_runtime_telemetry_peek(value); }
 void motor_node_binding_target_telemetry_retire(void) { system_runtime_telemetry_retire(); }

@@ -17,6 +17,9 @@ static StaticQueue_t s_telemetry_queue;
 static uint8_t s_telemetry_storage[sizeof(RuntimeTelemetryValue)];
 static QueueHandle_t s_mailbox;
 static TaskHandle_t s_communication, s_telemetry, s_idle;
+/* 单消费者的订阅身份由本模块分配；生产计数跨订阅连续，身份本启动不重用。 */
+static volatile uint32_t s_active_subscription;
+static uint32_t s_subscription_counter, s_subscription_first;
 /* 未测量与实测耗尽的0分开；各所有者测量后原样覆盖，不在协议映射时猜测。 */
 volatile SystemRuntimeStatus g_system_runtime_status = {
     .bootstrap_stack_free = UINT32_MAX, .communication_stack_free = UINT32_MAX,
@@ -72,8 +75,35 @@ static void communication_task(void *argument)
     }
 }
 
+uint32_t system_runtime_telemetry_begin(void)
+{
+    uint32_t subscription;
+    if (s_mailbox == NULL) { return 0U; }
+    taskENTER_CRITICAL();
+    s_active_subscription = 0U;
+    (void)xQueueReset(s_mailbox);
+    if (s_subscription_counter != UINT32_MAX) {
+        s_subscription_first = g_system_runtime_status.telemetry_publications + 1U;
+        s_active_subscription = ++s_subscription_counter;
+    }
+    subscription = s_active_subscription;
+    taskEXIT_CRITICAL();
+    return subscription;
+}
+
+void system_runtime_telemetry_end(void)
+{
+    taskENTER_CRITICAL();
+    s_active_subscription = 0U;
+    if (s_mailbox != NULL) { (void)xQueueReset(s_mailbox); }
+    taskEXIT_CRITICAL();
+}
+
 bool system_runtime_telemetry_peek(RuntimeTelemetryValue *value)
-{ return xQueuePeek(s_mailbox, value, 0U) == pdPASS; }
+{
+    return value != NULL && s_active_subscription != 0U
+        && xQueuePeek(s_mailbox, value, 0U) == pdPASS;
+}
 
 void system_runtime_telemetry_retire(void)
 {
@@ -89,34 +119,38 @@ static void telemetry_task(void *argument)
     TickType_t wake = xTaskGetTickCount();
     RuntimeTelemetryConfig config;
     RuntimeTelemetryValue value, old;
-    uint32_t epoch = 0U, first = 0U;
     TickType_t period;
+    bool published;
     (void)argument;
     for (;;) {
         period = 4U;
+        published = false;
         if (system_runtime_target_read_telemetry(&config)) {
             if (config.rate_hz != 50U && config.rate_hz != 250U && config.rate_hz != 500U) {
                 fatal(RUNTIME_INTERNAL_TRANSACTION_CORRUPT);
             }
             period = 1000U / config.rate_hz;
-            value.epoch = system_runtime_target_telemetry_epoch();
-            if (config.enabled && value.epoch != 0U && system_runtime_target_read_sample(&value.sample)) {
-                value.produced = g_system_runtime_status.telemetry_publications + 1U;
-                if (epoch != value.epoch) {
-                    epoch = value.epoch; first = value.produced;
-                }
-                value.epoch_first = first;
+            value.subscription_id = s_active_subscription;
+            if (config.enabled && value.subscription_id != 0U
+                && system_runtime_target_read_motor_telemetry(&value.sample)) {
                 value.sample.telemetry_config_generation = config.generation;
                 /* 短后台临界区使“检查旧槽+覆盖”不可被消费者穿插；高优先级控制不受屏蔽。 */
                 taskENTER_CRITICAL();
-                if (xQueuePeek(s_mailbox, &old, 0U) == pdPASS && old.epoch == value.epoch
-                    && old.sample.telemetry_config_generation == config.generation) {
-                    g_system_runtime_status.telemetry_overwrites++;
+                /* 复制期间允许消费者替换/结束订阅；迟到旧样本不占槽、不推进产生计数。 */
+                if (value.subscription_id == s_active_subscription) {
+                    value.produced = g_system_runtime_status.telemetry_publications + 1U;
+                    value.subscription_first = s_subscription_first;
+                    if (xQueuePeek(s_mailbox, &old, 0U) == pdPASS
+                        && old.subscription_id == value.subscription_id
+                        && old.sample.telemetry_config_generation == config.generation) {
+                        g_system_runtime_status.telemetry_overwrites++;
+                    }
+                    if (xQueueOverwrite(s_mailbox, &value) != pdPASS) { fatal(RUNTIME_INTERNAL_RTOS); }
+                    g_system_runtime_status.telemetry_publications++;
+                    published = true;
                 }
-                if (xQueueOverwrite(s_mailbox, &value) != pdPASS) { fatal(RUNTIME_INTERNAL_RTOS); }
-                g_system_runtime_status.telemetry_publications++;
                 taskEXIT_CRITICAL();
-                xTaskNotifyGive(s_communication);
+                if (published) { xTaskNotifyGive(s_communication); }
             }
         }
         vTaskDelayUntil(&wake, period);

@@ -23,21 +23,43 @@ uint32_t model_tx_bytes, model_tx_error, model_submit_override;
 uint32_t model_binding_output_ticket;
 RuntimeTelemetryValue model_telemetry;
 uint32_t model_telemetry_pending;
+uint32_t model_subscription, model_subscription_counter, model_subscription_first;
+uint32_t model_produced, model_begin_calls, model_end_calls;
+uint32_t motor_node_binding_target_telemetry_begin(void)
+{
+    model_begin_calls++; model_telemetry_pending = 0U; model_subscription = 0U;
+    if (model_subscription_counter != UINT32_MAX) {
+        model_subscription = ++model_subscription_counter;
+        model_subscription_first = model_produced + 1U;
+    }
+    return model_subscription;
+}
+void motor_node_binding_target_telemetry_end(void)
+{ model_end_calls++; model_subscription = model_telemetry_pending = 0U; }
 bool motor_node_binding_target_telemetry_peek(RuntimeTelemetryValue *value)
 { if (!model_telemetry_pending) { return false; } *value = model_telemetry; return true; }
 void motor_node_binding_target_telemetry_retire(void) { model_telemetry_pending = 0U; }
 void model_produce(uint32_t produced)
 {
+    if (model_subscription == 0U) { return; }
     model_telemetry = (RuntimeTelemetryValue){0};
-    model_telemetry.epoch = model_server.active_epoch;
-    model_telemetry.produced = produced; model_telemetry.epoch_first = 1U;
+    model_telemetry.subscription_id = model_subscription;
+    model_produced = model_subscription_first + produced - 1U;
+    model_telemetry.produced = model_produced; model_telemetry.subscription_first = model_subscription_first;
     model_telemetry.sample.sample_sequence = produced * 4U;
     model_telemetry.sample.telemetry_config_generation = model_parameters.telemetry.generation;
     model_telemetry.sample.valid_flags = 0x301U;
     model_telemetry_pending = 1U;
 }
 void model_event_state(uint32_t state) { model_motor.state = (MotorState)state; model_motor.faults = state == 3U ? 5U : 0U; }
-void model_old_epoch(void) { model_telemetry.epoch--; }
+void model_old_subscription(void) { model_telemetry.subscription_id--; }
+void model_bad_subscription(void) { model_server.subscription_id = 0U; }
+uint32_t model_binding_bad_telemetry(void)
+{
+    ProtocolTelemetryValue value;
+    model_telemetry_pending = 1U; model_telemetry.subscription_id = 0U;
+    return protocol_device_telemetry_peek(&value) ? 1U : 0U;
+}
 void model_exhaust_sequences(void)
 { model_server.event_sequence = 0xFFFFFFFDU; }
 void runtime_exchange_barrier(void) { __asm { DMB } }

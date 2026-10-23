@@ -39,10 +39,10 @@ static ControlRuntime s_control_runtime;
 static RuntimeExchange s_exchange;
 static RuntimeParameters s_parameters;
 static volatile RuntimeInternalFaultStatus s_internal_fault;
-static volatile SpeedCommissioningSample s_commissioning;
-static volatile uint32_t s_commissioning_version;
-static volatile bool s_commissioning_available;
-static uint32_t s_commissioning_count, s_commissioning_divider;
+static volatile MotorTelemetrySample s_motor_telemetry;
+static volatile uint32_t s_motor_telemetry_version;
+static volatile bool s_motor_telemetry_available;
+static uint32_t s_motor_telemetry_count, s_motor_telemetry_divider;
 
 void runtime_exchange_barrier(void) { __DMB(); }
 
@@ -61,7 +61,7 @@ void target_runtime_fail_closed(RuntimeInternalFaultReason reason)
     if (primask == 0U) { __enable_irq(); }
 }
 
-bool target_runtime_session_permitted(void)
+bool target_runtime_integrity_ok(void)
 {
     return s_internal_fault.first_reason == RUNTIME_INTERNAL_NONE;
 }
@@ -159,7 +159,7 @@ bool target_runtime_read_snapshot(MotorSnapshot *snapshot)
         return false;
     }
     faults = g_target_runtime_guard_faults;
-    if (!target_runtime_session_permitted()) { faults |= TARGET_RUNTIME_FAULT_INTERNAL; }
+    if (!target_runtime_integrity_ok()) { faults |= TARGET_RUNTIME_FAULT_INTERNAL; }
     last_sample_cycles = s_last_sample_cycles;
     now_cycles = DWT->CYCCNT;
     /* 完整旧快照不等于当前健康；统一在交接边界收紧所有后台消费者的资格。 */
@@ -177,7 +177,7 @@ bool target_runtime_read_parameters(RuntimeParameters *parameters)
 {
     RuntimePublication publication;
     if (parameters == NULL || !read_publication(&publication)) { return false; }
-    if (!target_runtime_session_permitted()
+    if (!target_runtime_integrity_ok()
         || g_target_runtime_guard_faults != 0U
         || (uint32_t)(DWT->CYCCNT - s_last_sample_cycles) > SAMPLE_MAX_US * CYCLES_PER_US) {
         publication.parameters.speed_active.in_use = false;
@@ -186,17 +186,17 @@ bool target_runtime_read_parameters(RuntimeParameters *parameters)
     return true;
 }
 
-bool target_runtime_read_commissioning(SpeedCommissioningSample *sample)
+bool target_runtime_read_motor_telemetry(MotorTelemetrySample *sample)
 {
-    SpeedCommissioningSample next;
+    MotorTelemetrySample next;
     uint32_t attempt, version;
-    if (sample == NULL || !s_commissioning_available) { return false; }
+    if (sample == NULL || !s_motor_telemetry_available) { return false; }
     for (attempt = 0U; attempt < 3U; ++attempt) {
-        version = s_commissioning_version;
+        version = s_motor_telemetry_version;
         if ((version & 1U) != 0U) { continue; }
-        __DMB(); next = s_commissioning; __DMB();
-        if (version != s_commissioning_version) { continue; }
-        if (!target_runtime_session_permitted() || g_target_runtime_guard_faults != 0U
+        __DMB(); next = s_motor_telemetry; __DMB();
+        if (version != s_motor_telemetry_version) { continue; }
+        if (!target_runtime_integrity_ok() || g_target_runtime_guard_faults != 0U
             || (uint32_t)(DWT->CYCCNT - s_last_sample_cycles) > SAMPLE_MAX_US * CYCLES_PER_US) {
             next.valid_flags = 0U;
             next.limit_flags = 0U;
@@ -209,16 +209,16 @@ bool target_runtime_read_commissioning(SpeedCommissioningSample *sample)
 /* 仅复制已有状态，不调用控制计算、格式编码或内核。RUN按实际速度更新边界发布，
  * OFF/启动过程按10个fast tick发布；序号在此推进，不取决于后台是否读取或发送。
  */
-static void publish_commissioning(ControlTime now)
+static void publish_motor_telemetry(ControlTime now)
 {
     MotorSnapshot snapshot;
-    SpeedCommissioningSample next;
+    MotorTelemetrySample next;
     uint32_t valid = 0U;
     bool control_valid = s_motor.state == MOTOR_STATE_RUN && s_motor.faults == 0U
-        && s_control_runtime.phase == CONTROL_RUNTIME_RUNNING && target_runtime_session_permitted();
+        && s_control_runtime.phase == CONTROL_RUNTIME_RUNNING && target_runtime_integrity_ok();
     memset(&next, 0, sizeof(next));
     control_runtime_snapshot(&s_control_runtime, now, true, &snapshot);
-    next.sample_sequence = ++s_commissioning_count;
+    next.sample_sequence = ++s_motor_telemetry_count;
     next.control_time_ticks = now;
     if (snapshot.control_time_valid) { valid |= 1U; }
     if (s_control_runtime.position_time_available && now >= s_control_runtime.last_position_time
@@ -249,8 +249,8 @@ static void publish_commissioning(ControlTime now)
     next.active_profile_generation = s_parameters.speed_active.generation;
     next.telemetry_config_generation = s_parameters.telemetry.generation;
     next.valid_flags = valid | 512U;
-    s_commissioning_version++; __DMB(); s_commissioning = next; __DMB(); s_commissioning_version++;
-    s_commissioning_available = true;
+    s_motor_telemetry_version++; __DMB(); s_motor_telemetry = next; __DMB(); s_motor_telemetry_version++;
+    s_motor_telemetry_available = true;
 }
 
 static void complete_request(const RuntimeCommandCompletion *completion)
@@ -342,7 +342,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
         || s_motor.state != MOTOR_STATE_RUN || s_motor.faults != 0U)) {
         faults |= TARGET_RUNTIME_FAULT_UNEXPECTED_POWER;
     }
-    if (!target_runtime_session_permitted()) { faults |= TARGET_RUNTIME_FAULT_INTERNAL; }
+    if (!target_runtime_integrity_ok()) { faults |= TARGET_RUNTIME_FAULT_INTERNAL; }
     /* 外部请求与内部守卫Stop只从同一交接消费；外部ticket由Exchange保留。 */
     has_envelope = runtime_exchange_take(&s_exchange, &envelope, &cancelled_ticket);
     if (has_envelope && ((unsigned int)envelope.request.kind > RUNTIME_REQUEST_TELEMETRY
@@ -391,7 +391,7 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
     }
     monitor_finite_run(command_available ? &command : NULL, command_available);
     if (s_control_runtime.phase == CONTROL_RUNTIME_OFF || s_motor.faults != 0U
-        || !target_runtime_session_permitted()) { runtime_parameters_deactivate(&s_parameters); }
+        || !target_runtime_integrity_ok()) { runtime_parameters_deactivate(&s_parameters); }
     if (cancelled_ticket != 0U) {
         RuntimeCommandCompletion cancelled;
         memset(&cancelled, 0, sizeof(cancelled));
@@ -403,12 +403,12 @@ static void sample_ready(void *context, const PhaseCurrentObservation *current)
         complete_request(&completion);
         business_changed = true;
     }
-    s_commissioning_divider++;
+    s_motor_telemetry_divider++;
     if ((s_control_runtime.phase == CONTROL_RUNTIME_RUNNING && previous_control_phase == CONTROL_RUNTIME_RUNNING
             && s_control_runtime.last_speed_time != previous_speed_time)
-        || (s_control_runtime.phase != CONTROL_RUNTIME_RUNNING && s_commissioning_divider >= 10U)) {
-        s_commissioning_divider = 0U;
-        publish_commissioning(current->observation_time);
+        || (s_control_runtime.phase != CONTROL_RUNTIME_RUNNING && s_motor_telemetry_divider >= 10U)) {
+        s_motor_telemetry_divider = 0U;
+        publish_motor_telemetry(current->observation_time);
     }
     s_publication_divider++;
     if (business_changed || (s_publication_divider >= PUBLICATION_DIVIDER)) {
@@ -483,11 +483,11 @@ void target_runtime_start(void)
     if (!control_runtime_init(&s_control_runtime, &s_motor, &g431_control_config)
         || (g431_control_config.control.enabled && !s_cordic_ready)) {
         motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_STARTUP);
-        if (!target_runtime_session_permitted()) { motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_INTERNAL); }
+        if (!target_runtime_integrity_ok()) { motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_INTERNAL); }
         publish(0U, false);
         return;
     }
-    if (!target_runtime_session_permitted()) {
+    if (!target_runtime_integrity_ok()) {
         realtime_motor_io_safe_off(); motor_latch_fault(&s_motor, TARGET_RUNTIME_FAULT_INTERNAL);
         publish(0U, false); return;
     }
@@ -542,7 +542,7 @@ RuntimeExchangeResult target_runtime_submit_request(const RuntimeRequest *reques
     RuntimeExchangeResult result;
     if (request == NULL || ticket == NULL || cancelled_ticket == NULL) { return RUNTIME_EXCHANGE_BAD_REQUEST; }
     primask = __get_PRIMASK(); __disable_irq();
-    if (!target_runtime_session_permitted() && (request->kind != RUNTIME_REQUEST_MOTOR
+    if (!target_runtime_integrity_ok() && (request->kind != RUNTIME_REQUEST_MOTOR
         || request->value.motor.type == MOTOR_COMMAND_START_VELOCITY
         || request->value.motor.type == MOTOR_COMMAND_UPDATE_VELOCITY)) {
         restore_interrupts(primask); return RUNTIME_EXCHANGE_FAILED;

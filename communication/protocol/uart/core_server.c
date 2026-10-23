@@ -52,8 +52,9 @@ static void abandon(CoreServer *s)
     CorePendingRequest *p;
     uint32_t index;
     if (s->failed) { return; }
+    protocol_device_telemetry_end();
     s->failed = true; s->session = 0U; s->highest_sequence = 0U;
-    s->active_epoch = 0U; s->event_count = 0U;
+    s->subscription_id = 0U; s->event_count = 0U;
     s->telemetry_wire_valid = false;
     s->response_count = 0U; s->cache_next = 0U; memset(s->cache, 0, sizeof(s->cache));
     for (index = 0U; index < 2U; ++index) {
@@ -75,7 +76,8 @@ static bool state_valid(CoreServer *s)
         || (s->telemetry_wire_valid && (s->telemetry_wire_length == 0U || s->telemetry_wire_length > CORE_WIRE_MAX))
         || (s->ordinary.active && s->ordinary.ticket == 0U) || (s->stop.active && s->stop.ticket == 0U)
         || (s->ordinary.active && s->stop.active && s->ordinary.ticket == s->stop.ticket)
-        || s->highest_sequence == 0xFFFFFFFFU || (s->session == 0U && s->highest_sequence != 0U)) {
+        || s->highest_sequence == 0xFFFFFFFFU || (s->session == 0U && s->highest_sequence != 0U)
+        || ((s->session == 0U) != (s->subscription_id == 0U))) {
         fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return false;
     }
     return true;
@@ -228,12 +230,12 @@ static void received(void *context, CoreStatus status, const CoreFrame *f)
         if (s->ordinary.active) { error_answer(s, f, CORE_SESSION_BUSY, false, false); return; }
         proposed = s->decoded.proposed_session_id;
         if (proposed != s->session) {
-            if (s->epoch_counter == 0xFFFFFFFFU) { fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return; }
+            s->subscription_id = protocol_device_telemetry_begin();
+            if (s->subscription_id == 0U) { fail(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return; }
             s->session = proposed; s->highest_sequence = 0U; s->cache_next = 0U;
             s->response_count = 0U; memset(s->cache, 0, sizeof(s->cache));
             s->event_count = 0U; s->event_sequence = 0U; s->snapshot_valid = false;
             s->telemetry_domain_valid = false; s->telemetry_exhausted = false; s->telemetry_sequence = 0U;
-            s->active_epoch = ++s->epoch_counter;
             /* 已排队Stop保留原ticket/请求身份；旧会话完成不进入新缓存。 */
         }
         build_answer(s, f, CORE_RESULT_OK, 0U); s->answer.accepted_session_id = proposed;
@@ -351,14 +353,14 @@ static bool telemetry_frame(CoreServer *s)
     uint32_t offset, sequence;
     size_t length;
     if (!protocol_device_telemetry_peek(&value)) { s->telemetry_wire_valid = false; return false; }
-    if (s->session == 0U || s->failed || s->telemetry_exhausted || value.epoch != s->active_epoch
+    if (s->session == 0U || s->failed || s->telemetry_exhausted || value.subscription_id != s->subscription_id
         || core_server_port_read_object(CORE_TELEMETRY_CONFIG, &s->answer.value) != CORE_RESULT_OK
         || !s->answer.value.telemetry_config.enabled
         || value.sample.telemetry_config_generation != s->answer.value.telemetry_config.generation) {
         s->telemetry_wire_valid = false; protocol_device_telemetry_retire(); return false;
     }
     if (!s->telemetry_domain_valid) {
-        s->telemetry_domain_valid = true; s->telemetry_first = value.epoch_first;
+        s->telemetry_domain_valid = true; s->telemetry_first = value.subscription_first;
     }
     offset = value.produced - s->telemetry_first;
     if (offset >= 0xFFFFFFFEU) {
@@ -367,12 +369,12 @@ static bool telemetry_frame(CoreServer *s)
     }
     sequence = offset + 1U;
     s->telemetry_sequence = sequence; /* 生成值决定序号，BUSY不重新分配或成功后才编号。 */
-    if (s->telemetry_wire_valid && s->telemetry_wire_epoch == value.epoch
+    if (s->telemetry_wire_valid && s->telemetry_wire_subscription == value.subscription_id
         && s->telemetry_wire_produced == value.produced
         && s->telemetry_wire_generation == value.sample.telemetry_config_generation) { return true; }
     /* 前一帧DMA仍在途时预先编码；只要Mailbox被覆盖就必须重新编码最新值。 */
     s->telemetry_wire_valid = false;
-    s->telemetry_wire_epoch = value.epoch; s->telemetry_wire_produced = value.produced;
+    s->telemetry_wire_subscription = value.subscription_id; s->telemetry_wire_produced = value.produced;
     s->telemetry_wire_generation = value.sample.telemetry_config_generation;
 #define COPY_FIELD(name) sample.name = value.sample.name
     COPY_FIELD(sample_sequence); COPY_FIELD(control_time_ticks); COPY_FIELD(position_observation_time);

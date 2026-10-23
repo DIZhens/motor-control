@@ -1,5 +1,5 @@
-#ifndef SPEED_COMMISSIONING_H
-#define SPEED_COMMISSIONING_H
+#ifndef MOTOR_TELEMETRY_H
+#define MOTOR_TELEMETRY_H
 
 #include <stdint.h>
 
@@ -14,6 +14,6 @@ typedef struct {
     uint32_t motor_state, fault_flags, valid_flags;
     uint16_t limit_flags;
     uint32_t active_profile_generation, telemetry_config_generation;
-} SpeedCommissioningSample;
+} MotorTelemetrySample;
 
 #endif

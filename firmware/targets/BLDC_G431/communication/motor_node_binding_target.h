@@ -15,6 +15,8 @@ RuntimeExchangeResult motor_node_binding_target_submit(const RuntimeRequest *req
 bool motor_node_binding_target_completion(RuntimeCommandCompletion *completion);
 bool motor_node_binding_target_permitted(void);
 void motor_node_binding_target_fail_closed(RuntimeInternalFaultReason reason);
+uint32_t motor_node_binding_target_telemetry_begin(void);
+void motor_node_binding_target_telemetry_end(void);
 bool motor_node_binding_target_telemetry_peek(RuntimeTelemetryValue *value);
 void motor_node_binding_target_telemetry_retire(void);
 

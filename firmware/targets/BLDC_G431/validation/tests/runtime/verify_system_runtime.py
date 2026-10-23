@@ -219,6 +219,7 @@ with tempfile.TemporaryDirectory(prefix='g431-system-runtime-') as directory:
     assert m_transport.stop=='fatal' and m_transport.read('model_boot_count')==1
     assert m_transport.read('model_transport_count')==1
     passed('Motor与任务装配后才开放Transport；失败保持内部关断')
+    assert m.call("system_runtime_telemetry_begin") == 1
     for rate in [50, 250, 500]:
         m.write('model_rate_hz', rate)
         m.write('model_sample_sequence', rate)
@@ -231,26 +232,82 @@ with tempfile.TemporaryDirectory(prefix='g431-system-runtime-') as directory:
     passed('真实Queue覆盖保留最新样本；Communication最长等待1ms，Telemetry周期20/4/2ms')
     assert m.read(symbols['g_system_runtime_status']+48)==2
     produced=m.read(symbols['g_system_runtime_status']+20)
-    # 换会话/配置不重写生产计数，也不把旧域替换算成域内覆盖。
-    for epoch,generation in [(2,1),(2,2)]:
-        m.write('model_epoch',epoch);m.write('model_generation',generation)
-        m.mode='telemetry';m.current(m.read('s_telemetry'));m.call('telemetry_task',0)
-    assert m.read(symbols['g_system_runtime_status']+20)==produced+2
-    assert m.read(symbols['g_system_runtime_status']+48)==2
-    passed('真实Mailbox覆盖精确计数；epoch/generation切换不算域内覆盖、不重置单写生产计数')
-    late=Model();late.start();late.bootstrap();late.write('model_change_epoch_during_copy',1)
-    late.mode='telemetry';late.current(late.read('s_telemetry'));late.call('telemetry_task',0)
-    assert late.read('model_epoch')==2 and late.call('model_mailbox_epoch')==1
-    late.call('telemetry_task',0)
-    assert late.call('model_mailbox_epoch')==2
-    assert late.read(symbols['g_system_runtime_status']+20)==2
-    assert late.read(symbols['g_system_runtime_status']+48)==0
-    passed('在复制窗口模拟Communication抢占换Session；迟到值仍携旧epoch，下次生产才进入新域')
-    for available_name in ['model_sample_available', 'model_config_available', 'model_enabled','model_epoch']:
-        m = Model(); m.start(); m.bootstrap(); m.write(available_name, 0)
-        m.mode = 'telemetry'; m.current(m.read('s_telemetry')); m.call('telemetry_task', 0)
-        assert m.stop == 'telemetry-block'
-        assert m.read(symbols['g_system_runtime_status'] + 5 * 4) == 0
+    def telemetry(model):
+        model.mode = 'telemetry'
+        model.current(model.read('s_telemetry'))
+        model.call('telemetry_task', 0)
+        assert model.stop == 'telemetry-block'
+
+    def counters(model):
+        base = symbols['g_system_runtime_status']
+        return model.read(base + 20), model.read(base + 48)
+
+    def mailbox(model):
+        if not model.call('model_mailbox_peek'):
+            return None
+        # 样本尾后的三个u32；正式MotorTelemetrySample布局也由Runtime模型独立验证。
+        base = symbols['model_mailbox_value'] + 80
+        return tuple(model.read(base + 4*i) for i in range(3))
+
+    # replacement及generation都不重写全局产生计数，也不把切换算成覆盖。
+    assert m.call('system_runtime_telemetry_begin') == 2
+    assert mailbox(m) is None
+    telemetry(m)
+    assert mailbox(m) == (2, produced + 1, produced + 1)
+    m.write('model_generation', 2); telemetry(m)
+    assert counters(m) == (produced + 2, 2)
+    assert mailbox(m) == (2, produced + 2, produced + 1)
+    telemetry(m)
+    assert counters(m) == (produced + 3, 3)
+    m.call('system_runtime_telemetry_retire')
+    assert mailbox(m) is None and counters(m) == (produced + 3, 3)
+    telemetry(m)
+    assert counters(m) == (produced + 4, 3)
+    m.call('system_runtime_telemetry_end'); m.call('system_runtime_telemetry_end')
+    telemetry(m)
+    assert mailbox(m) is None and counters(m) == (produced + 4, 3)
+    passed('begin/replace清槽建新域；同域同generation才计覆盖，generation/退休/end均不多计')
+
+    for switch in [1, 2]:
+        late = Model(); late.start(); late.bootstrap()
+        assert late.call('system_runtime_telemetry_begin') == 1
+        telemetry(late)
+        assert mailbox(late) == (1, 1, 1)
+        late.write('model_change_subscription_during_copy', switch)
+        telemetry(late)
+        assert mailbox(late) is None and counters(late) == (1, 0)
+        if switch == 2:
+            telemetry(late)
+            assert mailbox(late) is None and counters(late) == (1, 0)
+            assert late.call('system_runtime_telemetry_begin') == 2
+        telemetry(late)
+        assert mailbox(late) == (2, 2, 2) and counters(late) == (2, 0)
+    passed('复制期间模拟消费者replace/end：旧副本不发布、不覆盖，新域首份身份准确')
+
+    empty = Model(); empty.start(); empty.bootstrap()
+    for rate in [50, 250, 500]:
+        empty.write('model_rate_hz', rate); telemetry(empty)
+    assert counters(empty) == (0, 0) and mailbox(empty) is None
+    assert empty.call('system_runtime_telemetry_begin') == 1
+    empty.write('s_subscription_counter', 0xFFFFFFFF)
+    assert empty.call('system_runtime_telemetry_begin') == 0
+    telemetry(empty)
+    assert mailbox(empty) is None and counters(empty) == (0, 0)
+    assert empty.call('system_runtime_telemetry_begin') == 0
+    passed('无订阅各周期不生产/不计覆盖；身份用尽关闭旧域并返回0，不回绕重用')
+
+    wrap = Model(); wrap.start(); wrap.bootstrap()
+    wrap.write(symbols['g_system_runtime_status'] + 20, 0xFFFFFFFE)
+    assert wrap.call('system_runtime_telemetry_begin') == 1
+    telemetry(wrap); assert mailbox(wrap) == (1, 0xFFFFFFFF, 0xFFFFFFFF)
+    telemetry(wrap); assert mailbox(wrap) == (1, 0, 0xFFFFFFFF)
+    assert counters(wrap) == (0, 1)
+    passed('全局publication计数自然回绕；subscription_first保留域起点')
+
+    for available_name in ['model_sample_available', 'model_config_available', 'model_enabled']:
+        m = Model(); m.start(); m.bootstrap(); m.call('system_runtime_telemetry_begin')
+        m.write(available_name, 0); telemetry(m)
+        assert counters(m) == (0, 0)
     passed('无一致样本、无配置或遥测关闭时不伪造样本且仍阻塞')
     for variable, value in [('model_pre_ok', 0), ('model_boot_ok', 0), ('model_rate_hz', 123)]:
         m = Model(); m.write(variable, value)

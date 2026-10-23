@@ -241,6 +241,34 @@ def tests():
     assert status['message_errors']==3 and status['version_errors']==1
     passed('TX BUSY保留完整终态；未知消息/版本/flags明确拒绝，错误kind不执行')
 
+    m=Model();m.call('model_produce',1)
+    assert m.get('model_telemetry_pending')==0 and m.get('model_begin_calls')==0
+    m.open();assert m.get('model_begin_calls')==1 and m.get('model_subscription')!=0
+    m.call('model_produce',3)
+    assert m.take()[0].sequence==3
+    m.call('model_produce',4);subscription=m.get('model_subscription');m.open(seq=2)
+    assert m.get('model_begin_calls')==1 and m.get('model_subscription')==subscription
+    assert m.take()[0].sequence==4
+    m.open(2);assert m.get('model_begin_calls')==2
+    m.call('model_produce',2);f,v=m.take()
+    assert f.session_id==2 and f.sequence==2
+    passed('无Session不生产；首发前覆盖准确保留缺口；幂等OPEN保留订阅/待发值/序号，新Session独立域')
+
+    m=Model().open();m.call('model_produce',1);m.put('model_permitted',0);m.poll()
+    assert m.call('model_current_session')==0 and m.get('model_subscription')==0
+    assert m.get('model_telemetry_pending')==0 and m.get('model_end_calls')==1
+    m.poll();assert m.get('model_end_calls')==1
+    m=Model();m.put('model_subscription_counter',0xFFFFFFFF)
+    m.feed(wire(1,0,1,struct.pack('<I',7)));m.poll()
+    assert m.get('model_failure')==6 and m.call('model_current_session')==0
+    assert m.get('model_subscription')==0
+    m=Model().open();m.call('model_bad_subscription');m.poll()
+    assert m.get('model_failure')==6 and m.get('model_subscription')==0
+    m=Model().open();assert m.call('model_binding_bad_telemetry')==0
+    assert m.get('model_failure')==6
+    m.poll();assert m.get('model_subscription')==0 and m.get('model_telemetry_pending')==0
+    passed('内部故障结束订阅/清槽；订阅耗尽、Session关联损坏、Device Port零身份均Fail-closed')
+
     m=Model().open();m.call('model_produce',1)
     f,v=m.take();assert f.kind==3 and f.sequence==1 and v['sample_sequence']==4
     m.call('model_produce',2);m.put('model_tx_busy',1);m.call('model_flush')
@@ -283,13 +311,13 @@ def tests():
 
     m=Model().open();m.call('model_produce',1);m.open(2)
     assert m.take() is None and m.get('model_telemetry_pending')==0
-    m.call('model_produce',2);m.call('model_old_epoch');assert m.take() is None
+    m.call('model_produce',2);m.call('model_old_subscription');assert m.take() is None
     m.call('model_produce',1);assert m.take()[0].sequence==1
     m.call('model_produce',2)
     assert m.response(req(3,0x201,session=2,seq=1,value=dict(enabled=1,rate_hz=50)),True)[1]['result_code']==0
     assert m.take() is None
     m.call('model_produce',3);assert m.take()[0].sequence==3
-    passed('新Session清序号且丢弃队列旧epoch和迟到旧值；配置切换丢旧generation并保持线上单调')
+    passed('新Session清序号且丢弃队列旧subscription和迟到旧值；配置切换丢旧generation并保持线上单调')
 
     m=Model().open();m.call('model_produce',1)
     m.call('model_event_state',2);m.poll()

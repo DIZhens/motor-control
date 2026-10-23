@@ -11,16 +11,19 @@ static bool same_content(const CanRequest *a, const CanRequest *b)
 }
 static void invalidate_session(CanServer *s)
 {
-    s->session = 0U; s->highest_sequence = 0U; s->active_epoch = 0U;
+    protocol_device_telemetry_end();
+    s->session = 0U; s->highest_sequence = 0U; s->subscription_id = 0U;
     s->cache_next = 0U; memset(s->cache, 0, sizeof(s->cache));
 }
 static void failed(CanServer *s, ProtocolDeviceFault reason)
 {
     if (s->failed) { return; }
-    s->failed = true; invalidate_session(s);
+    s->failed = true;
+    /* 先兑现既有独立关断；订阅清理可能调用后台内核，不能排在关断之前。 */
+    protocol_device_fail_closed(reason);
+    invalidate_session(s);
     s->response_count = s->event_count = 0U; s->heartbeat_pending = false;
     s->ordinary.active = s->stop.active = false;
-    protocol_device_fail_closed(reason);
 }
 static bool valid_state(CanServer *s)
 {
@@ -28,7 +31,8 @@ static bool valid_state(CanServer *s)
         || s->cache_next >= CAN_V1_CACHE_CAPACITY || s->event_count > CAN_V1_EVENT_CAPACITY
         || (s->ordinary.active && s->ordinary.ticket == 0U) || (s->stop.active && s->stop.ticket == 0U)
         || (s->ordinary.active && s->stop.active && s->ordinary.ticket == s->stop.ticket)
-        || s->highest_sequence == 0xFFFFU || (s->session == 0U && s->highest_sequence != 0U)) {
+        || s->highest_sequence == 0xFFFFU || (s->session == 0U && s->highest_sequence != 0U)
+        || ((s->session == 0U) != (s->subscription_id == 0U))) {
         failed(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return false;
     }
     if (!protocol_device_permitted()) {
@@ -145,8 +149,10 @@ void can_server_feed(CanServer *s, const CanFrame *frame, uint32_t now_ms)
         if (decoded != CORE_RESULT_OK) { reject(s, &request, decoded, false); return; }
         if (s->ordinary.active) { reject(s, &request, CORE_SESSION_BUSY, false); return; }
         if (request.session != s->session) {
-            if (s->epoch_counter == 0xFFFFFFFFU) { failed(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return; }
-            invalidate_session(s); s->session = request.session; s->active_epoch = ++s->epoch_counter;
+            invalidate_session(s);
+            s->subscription_id = protocol_device_telemetry_begin();
+            if (s->subscription_id == 0U) { failed(s, PROTOCOL_FAULT_TRANSACTION_CORRUPT); return; }
+            s->session = request.session;
             s->response_count = s->event_count = 0U; s->snapshot_valid = false;
         }
         reject(s, &request, CORE_RESULT_OK, false); return;
@@ -276,7 +282,7 @@ void can_server_flush(CanServer *s)
     } else {
         source = 3U;
         if (!protocol_device_telemetry_peek(&telemetry)) { return; }
-        if (s->session == 0U || telemetry.epoch != s->active_epoch) { protocol_device_telemetry_retire(); return; }
+        if (s->session == 0U || telemetry.subscription_id != s->subscription_id) { protocol_device_telemetry_retire(); return; }
         can_v1_motion(s->node, (uint16_t)telemetry.sample.sample_sequence, &telemetry.sample, &frame);
     }
     result = can_frame_try_send(&frame);

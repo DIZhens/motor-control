@@ -31,10 +31,36 @@ def verify():
     assert not re.search(r'\b(?:core_frame_|core_cobs_|core_parser_|CAN_ID|FDCAN|HAL_|xTask|xQueue)', text)
     assert re.findall(r'^#include "([^"]+)"', text, re.M) == [
         'protocol_device_port.h', 'motor_node_binding_target.h']
+    runtime = ROOT / 'firmware/targets/BLDC_G431/runtime'
+    producer = (runtime / 'system_runtime.c').read_text(encoding='utf-8')
+    producer_code = re.sub(r'/\*.*?\*/|//[^\n]*', '', producer, flags=re.S)
+    assert not re.search(r'\b(?:Session|session_id|active_epoch|epoch_counter|UART|CAN)\b', producer_code)
+    assert 'system_runtime_target_telemetry_epoch' not in producer
+    task = producer[producer.index('static void telemetry_task('):producer.index('static void bootstrap_task(')]
+    assert 'target_communication' not in task and 'server' not in task
+    port = (PROTOCOL / 'device/protocol_device_port.h').read_text(encoding='utf-8')
+    port_code = re.sub(r'/\*.*?\*/|//[^\n]*', '', port, flags=re.S)
+    assert not re.search(r'\b(?:session_id|sequence|Session|TaskHandle_t|QueueHandle_t)\b', port_code)
+    for operation in ('begin', 'end', 'peek', 'retire'):
+        assert f'protocol_device_telemetry_{operation}' in port
+        assert f'motor_node_binding_target_telemetry_{operation}' in text
+    target_binding = ROOT / 'firmware/targets/BLDC_G431/communication/target_motor_node_binding.c'
+    target_code = target_binding.read_text(encoding='utf-8')
+    for operation in ('begin', 'end', 'peek', 'retire'):
+        assert f'system_runtime_telemetry_{operation}' in target_code
+    for directory in (runtime, target_binding.parent, PROTOCOL / 'uart', PROTOCOL / 'can'):
+        for path in directory.glob('*'):
+            if path.suffix not in ('.c', '.h'):
+                continue
+            code = path.read_text(encoding='utf-8-sig')
+            assert not re.search(r'SpeedCommissioningSample|target_runtime_read_commissioning|'
+                                 r'target_runtime_session_permitted|\w+_telemetry_epoch|'
+                                 r'\b(?:active_epoch|epoch_counter|epoch_first)\b', code), path
     return dict(status='PASS', hardware_access=False, production_files=len(paths), dependencies=edges,
-                binding='no UART framing/CAN identifier/HAL/RTOS; fixed Device Port -> Runtime mapping',
+                binding='no UART framing/CAN identifier/HAL/RTOS; generic subscription through retained Target seam',
+                telemetry='SystemRuntime owns subscription; producer never queries Communication; Server owns wire identity',
                 source_sha256={p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-                               for p in [*paths, binding]})
+                               for p in [*paths, binding, target_binding, runtime / 'system_runtime.c']})
 
 
 if __name__ == '__main__':

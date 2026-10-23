@@ -54,11 +54,13 @@ void can_model_link_flags(uint32_t flags)
 uint32_t can_model_recover(void) { can_model_status.bus_off = false; return can_server_recovered(&can_model_server); }
 void can_model_produce(uint32_t count)
 {
-    model_produce(count); model_telemetry.epoch = can_model_server.active_epoch;
+    model_produce(count);
     model_telemetry.sample.valid_flags = 12U;
     model_telemetry.sample.target_velocity_rpm = 40.0F;
     model_telemetry.sample.velocity_rpm = 39.995F;
 }
+void can_model_bad_subscription(void) { can_model_server.subscription_id = 0U; }
+void can_model_old_subscription(void) { model_telemetry.subscription_id--; }
 void can_model_corrupt(uint32_t mode)
 {
     if (mode == 0U) { can_model_server.response_count = CAN_V1_RESPONSE_CAPACITY + 1U; }

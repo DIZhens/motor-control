@@ -258,12 +258,20 @@ valid_flags：bit0时间、1位置时间及机械坐标、2目标、3速度、4 
 实时侧在RUN的1 kHz速度更新边界复制已有状态；OFF/启动期间按相同1 kHz节拍发布。
 sample_sequence自然u32回绕，不因后台读取或发送才推进；实时侧不计算
 协议、统计或调用RTOS。Telemetry Task按50/250/500 Hz读取最新完整publication并以
-xQueueOverwrite写深度1 Mailbox。线上Telemetry sequence在生成Mailbox值时分配，
-覆盖旧值计telemetry_overwrites，故Host序号缺口可与覆盖数量对应；不在成功TX后才编号。
-会话/配置切换期间的序号域分别核对，不将重建Session计成丢帧。仅有效Session发送。
-内部由Telemetry Task唯一推进产生计数，Communication唯一拥有Session及其序号映射基准；
-Mailbox值带会话epoch/配置generation供核对，不从另一任务直接重写产生计数。
-新会话丢弃旧epoch值，避免清队列后迟到的旧值混入新会话。
+xQueueOverwrite写深度1 Mailbox。Mailbox产生身份决定线上Telemetry sequence，Server映射为
+`produced - subscription_first + 1`；正常首份为1，首发前发生覆盖时准确保留缺口。
+BUSY既不退休也不重新编号，Transport接受后才退休。配置generation切换丢弃旧配置值，
+同Session的Telemetry Sequence继续单调；会话/配置域分别核对，不将重建Session计成丢帧。
+
+SystemRuntime分配非零通用subscription并持有单槽，Telemetry Task唯一推进全局产生计数。
+新Session由Server经Device Port建立/替换订阅并保存内部身份，清旧槽并建立新publication域；
+同Session幂等OPEN保留订阅及序号。Session失效或内部Fail-closed结束订阅，无订阅不生产。
+复制期间更换/结束订阅，Producer在发布前复核并丢弃旧副本；Server仍核对订阅和generation，
+旧值不能进入新Session。内部subscription不含Session、链路或线上Sequence，不进入Wire。
+
+`telemetry_overwrites`为本启动累计：同active subscription且同config generation内，单槽
+latest-value覆盖丢失的值数。无订阅、订阅边界、Session失效、generation切换及正常retire均不计入。
+Communication独占Session和线上发送资格，Telemetry Task不读取任何Server状态。
 
 STATE_CHANGED body= u32 old_state + u32 new_state + u64 control_time_ticks（16 B）。
 FAULT_LATCHED body= u32 newly_latched_faults + u32 all_faults + u64 control_time_ticks（16 B）。

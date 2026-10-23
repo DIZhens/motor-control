@@ -6,7 +6,7 @@
 #include "motor_snapshot.h"
 #if defined(BLDC_G431_FINITE_RUN)
 #include "runtime_parameters.h"
-#include "speed_commissioning.h"
+#include "motor_telemetry.h"
 #endif
 
 
@@ -51,10 +51,11 @@ RuntimeExchangeResult target_runtime_submit_request(const RuntimeRequest *reques
 bool target_runtime_pop_completion(RuntimeCommandCompletion *completion);
 /* 三次有界一致读取；失败不改输出。内部故障/过期观测时收紧使用资格。 */
 bool target_runtime_read_parameters(RuntimeParameters *parameters);
-bool target_runtime_read_commissioning(SpeedCommissioningSample *sample);
-/* 幂等关断，无内核/等待；立即撤销逻辑Session资格，下一采样合并fault bit7。 */
+bool target_runtime_read_motor_telemetry(MotorTelemetrySample *sample);
+/* 幂等关断，无内核/等待；立即锁内部故障，下一采样合并fault bit7。 */
 void target_runtime_fail_closed(RuntimeInternalFaultReason reason);
-bool target_runtime_session_permitted(void);
+/* 仅表示未锁内部故障；不代表已建会话、可Start、无Motor/Guard故障或已订阅。 */
+bool target_runtime_integrity_ok(void);
 bool target_runtime_read_internal_fault(RuntimeInternalFaultStatus *status);
 uint32_t target_runtime_completion_high_water(void);
 #endif

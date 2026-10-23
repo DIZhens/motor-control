@@ -14,7 +14,7 @@ uint32_t exchange_result[16], exchange_reason;
 RuntimeRequest exchange_source;
 RuntimeCommandCompletion exchange_completion;
 RuntimeParameters exchange_parameters;
-SpeedCommissioningSample exchange_sample;
+MotorTelemetrySample exchange_sample;
 RuntimeExchange exchange_unit;
 RuntimeCommandEnvelope exchange_envelope;
 RuntimeInternalFaultStatus exchange_fault;
@@ -25,11 +25,11 @@ const uint32_t exchange_layout[] = {
     sizeof(RuntimeParameters), offsetof(RuntimeParameters, speed_staged) + offsetof(RuntimeSpeedProfile, generation),
     offsetof(RuntimeExchange, head), offsetof(RuntimeExchange, tail), offsetof(RuntimeExchange, last_ticket),
     offsetof(RuntimeExchange, completions), sizeof(RuntimeCommandCompletion),
-    sizeof(SpeedCommissioningSample), offsetof(SpeedCommissioningSample, sample_sequence),
-    offsetof(SpeedCommissioningSample, control_time_ticks), offsetof(SpeedCommissioningSample, position_observation_time),
-    offsetof(SpeedCommissioningSample, target_velocity_rpm), offsetof(SpeedCommissioningSample, valid_flags),
-    offsetof(SpeedCommissioningSample, active_profile_generation), offsetof(SpeedCommissioningSample, telemetry_config_generation),
-    offsetof(SpeedCommissioningSample, limit_flags),
+    sizeof(MotorTelemetrySample), offsetof(MotorTelemetrySample, sample_sequence),
+    offsetof(MotorTelemetrySample, control_time_ticks), offsetof(MotorTelemetrySample, position_observation_time),
+    offsetof(MotorTelemetrySample, target_velocity_rpm), offsetof(MotorTelemetrySample, valid_flags),
+    offsetof(MotorTelemetrySample, active_profile_generation), offsetof(MotorTelemetrySample, telemetry_config_generation),
+    offsetof(MotorTelemetrySample, limit_flags),
     offsetof(ControlRuntime, speed_controller) + offsetof(SpeedController, config)
         + offsetof(SpeedControllerConfig, kp_a_per_rpm),
     offsetof(RuntimeInternalFaultStatus, count), offsetof(RuntimeExchange, internal_stop)
@@ -77,9 +77,9 @@ void exchange_pop(void)
 void exchange_read(void)
 {
     exchange_result[12] = target_runtime_read_parameters(&exchange_parameters);
-    exchange_result[13] = target_runtime_read_commissioning(&exchange_sample);
+    exchange_result[13] = target_runtime_read_motor_telemetry(&exchange_sample);
     exchange_result[14] = target_runtime_read_internal_fault(&exchange_fault);
-    exchange_result[15] = target_runtime_session_permitted();
+    exchange_result[15] = target_runtime_integrity_ok();
     if (exchange_result[12]) {
         exchange_profile_values[0] = exchange_parameters.speed_default.kp;
         exchange_profile_values[1] = exchange_parameters.speed_default.ki;
@@ -130,7 +130,7 @@ void exchange_nulls(void)
         && !runtime_exchange_take(NULL, &exchange_envelope, &cancelled)
         && !runtime_exchange_complete(NULL, &exchange_completion)
         && !runtime_exchange_pop(NULL, &exchange_completion)
-        && !target_runtime_read_parameters(NULL) && !target_runtime_read_commissioning(NULL)
+        && !target_runtime_read_parameters(NULL) && !target_runtime_read_motor_telemetry(NULL)
         && !target_runtime_read_internal_fault(NULL));
     runtime_exchange_init(NULL); runtime_exchange_request_internal_stop(NULL);
 }

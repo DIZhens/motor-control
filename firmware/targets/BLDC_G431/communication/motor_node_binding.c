@@ -145,10 +145,25 @@ corrupt:
     return false;
 }
 
+uint32_t protocol_device_telemetry_begin(void)
+{
+    uint32_t subscription = motor_node_binding_target_telemetry_begin();
+    if (subscription == 0U) {
+        motor_node_binding_target_fail_closed(RUNTIME_INTERNAL_TRANSACTION_CORRUPT);
+    }
+    return subscription;
+}
+
+void protocol_device_telemetry_end(void) { motor_node_binding_target_telemetry_end(); }
+
 bool protocol_device_telemetry_peek(ProtocolTelemetryValue *value)
 {
     RuntimeTelemetryValue raw;
     if (value == NULL || !motor_node_binding_target_telemetry_peek(&raw)) { return false; }
+    if (raw.subscription_id == 0U) {
+        motor_node_binding_target_fail_closed(RUNTIME_INTERNAL_TRANSACTION_CORRUPT);
+        return false;
+    }
 #define COPY_FIELD(name) value->sample.name = raw.sample.name
     COPY_FIELD(sample_sequence); COPY_FIELD(control_time_ticks); COPY_FIELD(position_observation_time);
     COPY_FIELD(target_velocity_rpm); COPY_FIELD(velocity_rpm); COPY_FIELD(mechanical_position_turns);
@@ -156,7 +171,7 @@ bool protocol_device_telemetry_peek(ProtocolTelemetryValue *value)
     COPY_FIELD(motor_state); COPY_FIELD(fault_flags); COPY_FIELD(valid_flags); COPY_FIELD(limit_flags);
     COPY_FIELD(active_profile_generation); COPY_FIELD(telemetry_config_generation);
 #undef COPY_FIELD
-    value->epoch = raw.epoch; value->produced = raw.produced; value->epoch_first = raw.epoch_first;
+    value->subscription_id = raw.subscription_id; value->produced = raw.produced; value->subscription_first = raw.subscription_first;
     return true;
 }
 

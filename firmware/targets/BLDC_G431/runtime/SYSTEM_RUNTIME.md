@@ -18,9 +18,16 @@ assert或栈溢出直接调用Target的协议无关关断，不等待ADC或队�
 Communication等待通知或1ms超时，唯一持有UART DMA、Parser/Session/事务Server；有界读取
 字节、消费准确ticket Completion并按终态/Event/最新Telemetry优先级发送。
 Mailbox是唯一的待发遥测槽；Communication只peek，TX接受或域失效后才退休。
-Telemetry独占产生计数和覆盖计数，不从Communication重写。后台短临界区将检查旧槽与覆盖
-组成原子操作，高优先级控制ISR保持可执行。值携会话epoch、epoch首个产生计数及配置generation；
-Communication只发布原子epoch，旧epoch迟到值不能混入新会话。
+SystemRuntime拥有协议无关的单消费者订阅；唯一Communication消费者通过Device Port调用
+`system_runtime_telemetry_begin/end`，begin分配本启动不重用的非零身份、清旧槽，并以全局产生
+计数的下一值建立新域起点；end幂等撤销并清槽。身份耗尽返回0，由绑定与Server Fail-closed。
+Telemetry独占全局产生和覆盖计数，不读Communication、Session或线上Sequence。
+无订阅不生产。复制在临界区外，发布前在后台短临界区复核订阅身份，替换/end期间迟到的副本
+直接丢弃，不占槽、不推进产生计数。该临界区还覆盖检查旧槽与写入，高优先级控制ISR保持可执行。
+Mailbox携`subscription_id / produced / subscription_first`及配置generation；只有同订阅、
+同generation的未消费值被覆盖才增加本启动累计overwrite。换域、换配置、end及正常retire不计入。
+Server把内部订阅与自己的Session关联；UART从产生计数相对订阅起点映射线上序号，CAN仍取实时
+sample_sequence低16位。SystemRuntime不拥有这些线上规则，也不提供第二个待发槽。
 高水位每秒保存，静态容量和离线模型都不代替实机任务栈余量或调度延迟验收。
 
 ## 请求与完成
@@ -58,12 +65,13 @@ Active及generation。Default静态配置、其他控制参数和数值公式保
 没有RUN在线改PI、Flash保存或自动恢复。
 
 遥测配置默认enabled、250Hz、generation1，只在相同健康IDLE边界写入；500Hz仅用于IDLE压力，
-G431提交和实时消费两处都阻止Start进入Motor。配置驱动Telemetry周期，只有有效会话且
-enabled时产生Mailbox值；配置替换不会重置产生计数或控制侧sample_sequence。
+G431提交和实时消费两处都阻止Start进入Motor。配置驱动Telemetry周期，只有有效订阅且
+enabled时产生Mailbox值；配置替换不会重置产生计数、订阅起点或控制侧sample_sequence。
 
 ## 发布与内部故障
 
-[speed_commissioning.h](speed_commissioning.h)是固定观测值，不是线上帧；不依赖C结构padding。
+[motor_telemetry.h](motor_telemetry.h)是固定观测值，不是线上帧；不依赖C结构padding。
+类型为`MotorTelemetrySample`，读取入口为`target_runtime_read_motor_telemetry()`。
 Target在RUN实际速度环更新边界、OFF/启动期间每10个fast tick复制已有状态及有效位。
 采样序号在实时侧自然递增，与后台是否读取或发送无关；位置时间仍是实际编码器采集时间。
 位置是编码器原点的单圈坐标，正方向与速度一致，跨圈允许跳变，不是累计圈数或定位零点。
@@ -74,7 +82,9 @@ G431的`target_runtime_fail_closed`在短临界区经原HCC立即safe-off、锁�
 不等待ADC、不调用内核或动态分配；后续Start/Update/参数写被拒绝，Session逻辑资格立即失效。
 ADC下一边界把bit7合入Motor；先前的其他故障和Profile历史保留，Clear仍不恢复。
 队列满、身份/计数不变量损坏、静态装配/调度内部失败属于此路径；外部坏帧、串口断续或
-Telemetry覆盖不属于内部故障。Session与事务由后台Server响应锁存状态清理，不从ADC访问协议对象。
+Telemetry覆盖不属于内部故障。Session与事务由后台Server响应锁存状态清理，并结束订阅，不从ADC访问协议对象。
+`target_runtime_integrity_ok()`只表示内部首因尚为NONE，不代表存在Session、可Start、
+没有Motor/Guard故障或已有遥测订阅。故障锁存立即撤销线上资格，订阅清理由Communication完成。
 
 ## 当前装配与验证
 

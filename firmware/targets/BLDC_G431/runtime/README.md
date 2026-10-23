@@ -19,7 +19,8 @@
 2. `target_runtime.c` 先 safe-off，绑定 sample/trip、位置/母线及实时 I/O，最后启动驱动时序。启动时序不等于使能功率。
 3. ADC sample-ready 调用 `control_runtime_step()`，处理反馈、Stop/请求和控制计算；该边界独占 Motor、估计器及 PI 状态。
 4. Communication 经 `target_runtime_submit_request()` 提交完整请求，`runtime_exchange` 是唯一命令/参数/Stop 交接；ADC 消费并产生准确 ticket 的 Completion。Telemetry 只读发布值，后台不直接写实时历史。
-5. TIM6 独立检查心跳和有限运行边界。时限到达先 safe-off，再调用 `runtime_exchange_request_internal_stop()`；由下个 fast tick 消费 Stop 和完成旧请求取消。内部 Stop 不分配外部 ticket，已排队的外部 Stop 仍保留自身身份，不等待任务关断。
+5. SystemRuntime 拥有协议无关的遥测订阅与单槽 Mailbox；Telemetry 只读 Runtime 配置、`MotorTelemetrySample` 和内部订阅，Server 经 Device Port 建立/结束订阅并独占 Session 与线上序号。
+6. TIM6 独立检查心跳和有限运行边界。时限到达先 safe-off，再调用 `runtime_exchange_request_internal_stop()`；由下个 fast tick 消费 Stop 和完成旧请求取消。内部 Stop 不分配外部 ticket，已排队的外部 Stop 仍保留自身身份，不等待任务关断。
 
 | 文件 | 职责 |
 | --- | --- |
@@ -28,7 +29,7 @@
 | `runtime_exchange.*` | 普通/Stop 请求槽、ticket 和 SPSC Completion |
 | `runtime_parameters.*` | Default / Staged / Active 与遥测配置值生命周期 |
 | `system_runtime.*`、`target_system_runtime.c` | 静态任务、后台调度和 Target 接入 |
-| `telemetry_mailbox.h`、`speed_commissioning.h` | 一致发布的内部值及后台待发 Mailbox |
+| `telemetry_mailbox.h`、`motor_telemetry.h` | Motor Telemetry 内部值、通用订阅生命周期及单槽 Mailbox |
 | `FreeRTOSConfig.h` | 项目内核配置；Kernel/Port 供应源码保持原样 |
 
 交接和参数的详细语义见 [SystemRuntime](SYSTEM_RUNTIME.md)，任务栈、中断优先级、时基及 UART/CAN 静态选择见 [RTOS 集成合同](RTOS_INTEGRATION.md)。控制 ISR 不调用 RTOS API。

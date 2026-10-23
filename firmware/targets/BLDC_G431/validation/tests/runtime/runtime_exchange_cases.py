@@ -220,9 +220,9 @@ def verify(Model, symbols, passed):
     assert b['valid'] & 0x3EF == 0x3EF and not b['valid'] & 16
     assert b['active_generation'] == 0 and b['telemetry_generation'] == 1
     assert b['position_time'] <= b['time'] and b['floats'][6] == 12.
-    m.write('s_commissioning_count', 0xFFFFFFFF); m.write('s_commissioning_version', 0xFFFFFFFE)
+    m.write('s_motor_telemetry_count', 0xFFFFFFFF); m.write('s_motor_telemetry_version', 0xFFFFFFFE)
     tick(m, 10)
-    assert sample(m)['sequence'] == 0 and m.word('s_commissioning_version') == 0
+    assert sample(m)['sequence'] == 0 and m.word('s_motor_telemetry_version') == 0
     submit(m, kind=1, kp=.005, ki=.004); tick(m); pop(m)
     accepted_start(m); tick(m, 20); c = sample(m)
     assert c['valid'] == 1023 and c['floats'][0] == 60. and abs(c['floats'][3]) <= .100001
@@ -230,9 +230,9 @@ def verify(Model, symbols, passed):
     old = c; sample(m); sample(m); assert sample(m) == old
     # 一致性竞争失败保留输出；心跳过期不得把旧publication当成健康数据。
     old_bytes = bytes(m.cpu.mem_read(symbols['exchange_sample'], layout[7]))
-    version = m.word('s_commissioning_version'); m.write('s_commissioning_version', version | 1)
+    version = m.word('s_motor_telemetry_version'); m.write('s_motor_telemetry_version', version | 1)
     assert sample(m) is None and bytes(m.cpu.mem_read(symbols['exchange_sample'], layout[7])) == old_bytes
-    m.write('s_commissioning_version', version)
+    m.write('s_motor_telemetry_version', version)
     m.memory_write(0xE0001004, m.memory_word(0xE0001004) + 126 * 170)
     assert sample(m)['valid'] == 0 and sample(m)['limits'] == 0
     assert not m.fast_uart_accesses

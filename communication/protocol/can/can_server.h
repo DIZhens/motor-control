@@ -23,8 +23,8 @@ typedef struct { CanFrame frame; bool critical; } CanResponse;
 typedef struct {
     uint8_t node;
     uint16_t session, highest_sequence, heartbeat_counter;
-    uint32_t now_ms, last_heartbeat_ms, epoch_counter;
-    volatile uint32_t active_epoch;
+    uint32_t now_ms, last_heartbeat_ms;
+    uint32_t subscription_id; /* 内部订阅身份，不作为线上Motion序号。 */
     uint32_t response_count, cache_next, event_count;
     uint32_t rejected_frames, response_high_water, event_drop_count, rx_lost_seen;
     bool failed, suspended, snapshot_valid, heartbeat_pending;

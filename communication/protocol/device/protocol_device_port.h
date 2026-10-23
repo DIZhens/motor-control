@@ -45,7 +45,7 @@ typedef enum {
 
 typedef struct {
     CoreSpeedSample sample;
-    uint32_t epoch, produced, epoch_first; /* Mailbox产生域；只有后台读取，不由协议生产样本。 */
+    uint32_t subscription_id, produced, subscription_first; /* Mailbox产生域；只有后台读取，不由协议生产样本。 */
 } ProtocolTelemetryValue;
 
 /* 链接期固定绑定；读取完整副本，提交完整意图，不暴露Motor/ControlRuntime实例。 */
@@ -55,6 +55,10 @@ ProtocolSubmitResult protocol_device_submit(const ProtocolDeviceRequest *request
 bool protocol_device_completion(ProtocolDeviceCompletion *completion);
 bool protocol_device_permitted(void);
 void protocol_device_fail_closed(ProtocolDeviceFault reason);
+/* 单消费者内部订阅，不携带Session/Sequence。begin替换旧域，返回非零身份；
+ * 0表示未能建立可信订阅，不能继续开放会话。end撤销旧域并清槽。 */
+uint32_t protocol_device_telemetry_begin(void);
+void protocol_device_telemetry_end(void);
 bool protocol_device_telemetry_peek(ProtocolTelemetryValue *value);
 void protocol_device_telemetry_retire(void);
 

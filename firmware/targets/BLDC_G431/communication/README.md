@@ -15,6 +15,12 @@
 
 Communication 是 Parser、Session/Sequence、事务和发送状态的后台唯一所有者。普通请求、Stop、去重、超时及应答由 [可移植 Server](../../../../communication/protocol/README.md)管理。Binding 只转换完整设备意图，不操作 PWM/MOE 或 PI 历史；实际执行经过 [Runtime ticket/Completion](../runtime/SYSTEM_RUNTIME.md)。
 
+新Session经Device Port → `motor_node_binding` → Target Port开始/替换SystemRuntime订阅，
+Server保存内部非零身份；同Session幂等OPEN保留订阅、待发值及序号。Session失效、内部
+Fail-closed及CAN Bus-off结束订阅并清旧槽；恢复链路仍须显式OPEN。Telemetry任务不反查Server。
+UART按publication产生域映射线上序号、保留覆盖缺口和BUSY编码身份；CAN Motion仍使用实时
+sample_sequence低16位。Binding的Target测试缝保留，Server继续直接调用Transport Port。
+
 共享对象与线格式分别由 [Motor Node Profile](../../../../communication/spec/MOTOR_NODE_PROFILE_V1.md)、[UART](../../../../communication/spec/UART_MAPPING_V1.md)和 [CAN](../../../../communication/spec/CAN_MAPPING_V1.md)规范定义。Target 不复制协议源码。
 
 旧裸机 `vofa`、`motor_vofa`、`target_vofa`、`target_uart` 位于 [validation/communication](../validation/communication)，不进入正式 Run。PC 的 [VOFA UDP 桥](../../../../communication/host/vofa/README.md)属于 Host。

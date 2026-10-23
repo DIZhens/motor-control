@@ -23,6 +23,38 @@
 [合并前离线检查](evidence/protocol-can/merge-preparation.json)复核 UART 黄金字节、
 UART/CAN 事务及 Host 模型，并以干净源码副本补全最新 CAN Normal 构建；未新增硬件动作。
 
+## Showcase Stage 2B：Telemetry 所有权离线收敛
+
+以 `0079cef` 为基线，SystemRuntime拥有协议无关的单消费者订阅及原单槽Mailbox。
+Telemetry只读Runtime配置、MotorTelemetrySample和内部订阅，不再查询Communication epoch。
+Server经Device Port及保留的Target测试缝begin/replace/end订阅，独占Session和线上序号。
+复制期间发生替换或end时，Producer在发布前丢弃旧副本，不推进产生计数、不计覆盖。
+同Session幂等OPEN保留订阅与序号；失效/内部Fail-closed/CAN Bus-off结束订阅并清旧槽。
+
+UART保留首次发送前的覆盖缺口、同值BUSY只编码一次、TX接受才退休、终态/Event优先级、
+generation切换后的序号单调及耗尽规则。overwrite仅计同订阅同generation内的覆盖。
+CAN Motion仍取实时sample_sequence低16位并自然回绕；恢复后无Session且不重发旧Motion。
+正式名称收敛为`motor_telemetry.h / MotorTelemetrySample / target_runtime_read_motor_telemetry()`；
+`target_runtime_integrity_ok()`只表示内部首因为NONE，不是Session、Start、Motor故障或订阅许可。
+
+修改前及纯改名后各8个入口通过，最终60个离线入口全通过；其中SystemRuntime 17组、
+UART Server/Client 38组、CAN 22组，覆盖订阅切换窗口、首发缺口、BUSY、配置修订、
+Bus-off/恢复、内部身份耗尽及不一致Fail-closed，并断言CAN先进入原关断端口再清理订阅。G431四Target与独立CAN Normal副本
+均真实Rebuild，0 error / 0 warning。资源按同一基线源码及链接配置比较：
+
+| Run构建 | Flash 基线→本次 | 静态RAM 基线→本次 |
+| --- | --- | --- |
+| UART | 66896→67016 B（+120） | 21088→21104 B（+16） |
+| CAN Normal | 60736→60872 B（+136） | 17792→17800 B（+8） |
+
+已知任务调用深度保持：Bootstrap304 B、Telemetry408 B、Idle40 B，Communication为
+UART1224 B／CAN504 B。静态报告仍有汇编/间接调用未知量，不代替真实任务栈余量验收。
+
+[本轮离线证据](evidence/showcase-v1/stage2b.json)与[UART/CAN源码身份](evidence/showcase-v1/stage2b-identity.json)
+记录最终构建、资源和已知静态调用深度；最终HEAD通过包含证据的Git检查点定位。
+未连接硬件、未烧录、未运动，不产生新实物证据。原P6未通过、500Hz损失1.92%的原失败、
+外部CAN物理总线及实机调度/WCET未证明范围保持；旧HIL仍绑定原镜像。
+
 ## Showcase Stage 2A：Runtime 单路径离线收敛通过
 
 以 `a0537f0` 为基线，正式 `target_runtime.c/.h` 已删除旧 pending command/reject/stop 状态、

@@ -50,7 +50,7 @@ IN_PROGRESS与取消。请求外壳ID/DLC/标准数据帧不可信时不提取�
 BAD_VALUE或BAD_PAYLOAD；OPEN组合非法用BAD_REQUEST。Codec校验表示，Server校验会话和序号。
 
 OPEN在没有普通事务在途时接受/替换，普通在途则SESSION_BUSY。同tag幂等，不重置水位或缓存；
-新tag清旧完成缓存、未发送普通响应与Event，重置接收水位和后台epoch。保留已排队Stop的原身份。
+新tag清旧完成缓存、未发送普通响应与Event，重置接收水位并替换内部Telemetry订阅。保留已排队Stop的原身份。
 任何OPEN不改变Motor、目标、Fault、Active/Staged或运行期限，不重放运动；复位使会话消失。
 
 同tag/sequence、完整ID与8 B内容相同：在途仅返回最佳努力IN_PROGRESS，完成缓存内重放原终态，
@@ -90,7 +90,11 @@ Bus-off/内部Fail-closed可能令链路无法继续发送，不能以未收到b
 
 Motion的0/2/4/6字节为u16 sample_sequence、i16 target_velocity_rpm_x100、
 i16 velocity_rpm_x100、u16 valid_limit_flags。sample_sequence取实时publication序号低16位，
-自然回绕；不因成功发送才编号，不分片完整Commissioning Sample。仅有效会话发送。
+自然回绕；不因成功发送才编号，不分片完整Motor Telemetry。仅有效会话发送。
+Server经Device Port取得SystemRuntime分配的非零subscription；新Session替换订阅并清旧槽，
+同tag幂等OPEN不重建。仅发送与当前订阅匹配的值，复制期间迟到旧值不进入新域。
+Bus-off/内部Fail-closed撤Session并结束订阅；恢复后仍无订阅，不发送旧Motion，显式新OPEN后
+才恢复Motion。subscription与publication产生计数只用于内部资格，不替代实时sample_sequence。
 
 valid_limit_flags bit0为目标有效、bit1为实际速度有效；bit8/9/10/11分别为速度PI输出限幅、
 d轴积分限幅、q轴积分限幅、电压矢量/调制限幅。其他位0。

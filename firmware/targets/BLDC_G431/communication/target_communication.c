@@ -82,12 +82,3 @@ void target_communication_service(void)
     target_can_server_service();
 #endif
 }
-
-uint32_t target_communication_telemetry_epoch(void)
-{
-#if BLDC_G431_COMMUNICATION == BLDC_G431_COMMUNICATION_UART_V1
-    return target_core_server_telemetry_epoch();
-#else
-    return target_can_server_telemetry_epoch();
-#endif
-}

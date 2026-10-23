@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 from elftools.elf.elffile import ELFFile
-from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS
+from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE
 from unicorn.arm_const import UC_CPU_ARM_CORTEX_M4, UC_ARM_REG_R0, UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_PC
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -322,6 +322,47 @@ def server_tests():
         m.call('can_model_event_state', state); m.call('can_model_observe')
     assert m.get('model_failure') == 0 and m.call('can_model_event_drops') == 1
     passed('Warning/Passive只发布状态；Mailbox覆盖取最新实时序号，Fault事件有界且不派生Motor故障')
+    m = Model(); m.call('can_model_produce', 1)
+    assert m.get('model_telemetry_pending') == 0
+    m.open(); subscription = m.get('model_subscription')
+    assert subscription != 0 and m.get('model_begin_calls') == 1
+    m.call('can_model_produce', 16383); m.open()
+    assert m.get('model_subscription') == subscription and m.get('model_begin_calls') == 1
+    assert m.take()['sequence'] == 65532
+    m.call('can_model_produce', 16384); assert m.take()['sequence'] == 0
+    m.call('can_model_produce', 16385); m.open(99)
+    assert m.get('model_telemetry_pending') == 0 and m.get('model_begin_calls') == 2
+    m.call('can_model_produce', 1); m.call('can_model_old_subscription')
+    assert m.take() is None and m.get('model_telemetry_pending') == 0
+    m.call('can_model_produce', 2); assert m.take()['sequence'] == 8
+    passed('CAN新Session清旧槽、拒绝迟到旧订阅；幂等OPEN保留待发值，Motion实时序号低16位自然回绕')
+
+    m = Model().open(); m.call('can_model_produce', 1)
+    m.call('can_model_link_flags', 16); m.poll()
+    assert m.get('model_subscription') == 0 and m.get('model_telemetry_pending') == 0
+    m.call('can_model_step'); m.poll(); assert m.call('can_model_recover') == 1
+    assert m.call('can_model_session') == 0 and m.take() is None
+    m.call('can_model_produce', 2); assert m.take() is None
+    m.open(99); m.call('can_model_produce', 3)
+    assert m.take()['kind'] == 'motion'
+    m.put('model_permitted', 0); m.poll()
+    assert m.get('model_subscription') == 0 and m.call('can_model_session') == 0
+    m = Model().open(); m.call('can_model_bad_subscription'); m.poll()
+    assert m.get('model_failure') == 6 and m.get('model_subscription') == 0
+    m = Model(); m.put('model_subscription_counter', 0xFFFFFFFF)
+    m.feed(py.request(1, 99, 0, 0)); m.poll()
+    assert m.get('model_failure') == 6 and m.call('can_model_session') == 0
+    passed('CAN Bus-off/内部故障结束订阅；Recovery无Session不重放，新OPEN恢复Motion，关联损坏/耗尽Fail-closed')
+    m = Model().open(); fault_before_end = []
+    address = m.symbols['motor_node_binding_target_telemetry_end'] & ~1
+    m.cpu.hook_add(UC_HOOK_CODE, lambda cpu, pc, size, user:
+                   fault_before_end.append(m.get('model_permitted')) if pc == address else None)
+    m.cpu.ctl_flush_tb()
+    m.call('can_model_corrupt', 0); m.poll()
+    assert fault_before_end == [0] and m.get('model_failure') == 6
+    passed('CAN内部不变量失败先到原Fail-closed关断端口，之后才结束RTOS订阅')
+
+
     m = Model().open(); m.feed(start()); m.call('can_model_link_flags', 16); m.poll()
     assert m.call('can_model_session') == 0 and m.get('model_submit_count') == 2
     m.feed(start(seq=2)); assert m.get('model_submit_count') == 2

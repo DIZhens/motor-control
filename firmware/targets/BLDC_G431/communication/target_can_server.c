@@ -10,8 +10,6 @@
 
 static CanServer s_can_server;
 void target_can_server_start(void) { can_server_init(&s_can_server, BLDC_G431_CAN_NODE_ID); }
-uint32_t target_can_server_telemetry_epoch(void)
-{ return target_runtime_session_permitted() ? s_can_server.active_epoch : 0U; }
 
 void target_can_server_service(void)
 {

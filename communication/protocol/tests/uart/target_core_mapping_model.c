@@ -24,7 +24,7 @@ void target_runtime_fail_closed(RuntimeInternalFaultReason reason)
 { (void)reason; model_mapping_unexpected_calls++; }
 bool target_runtime_pop_completion(RuntimeCommandCompletion *value)
 { (void)value; model_mapping_unexpected_calls++; return false; }
-bool target_runtime_session_permitted(void) { model_mapping_unexpected_calls++; return false; }
+bool target_runtime_integrity_ok(void) { model_mapping_unexpected_calls++; return false; }
 RuntimeExchangeResult target_runtime_submit_request(const RuntimeRequest *value,
     uint32_t *ticket, uint32_t *cancelled)
 {
